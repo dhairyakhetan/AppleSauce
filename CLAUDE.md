@@ -249,6 +249,42 @@ status.
   forwards a curated allowlist to GA4 and Clarity. It sends facets and a slug,
   never query text, names or paths.
 
+## The games team (`/games`)
+
+A staff team like the papers and teachers teams, for the revision games: people
+on it write short questions and answers, HoDs approve them, and the games
+(crossword, word search, matching, fill in the blank) are made from the approved
+ones on the device, with no AI. Brought in from the games site (`main` of
+`dhairyakhetan/AppleSauce`, shikshaq-games.vercel.app).
+
+- **One route, four parts:** `/games` Write questions (everyone on the team),
+  `/games/approve` Approve questions (HoDs, admins), `/games/play` Try the games
+  (everyone on the team), `/games/team` Team (admins). `pages/Games.tsx` picks
+  the part; `RouteTransition` in `App.tsx` keeps `/games/*` mounted, so the text
+  being written survives moving between parts. Footerless, like `/hod`.
+- **Who gets in:** only emails on the games team's own list, in its own
+  `games` schema. Being a Shikshaq admin, HOD or checker doesn't put anyone on
+  it, and nothing reads Shikshaq's own tables. The account menu's "Games team"
+  links come from `useGamesRoleBadge` (`games.my_role()`); any failure means no
+  link, which is also what happens until the schema is installed.
+- **Not installed yet:** the `games` schema. `lib/games/api.ts` (`realGamesApi`)
+  calls its functions; until it exists every call fails and the pages say so.
+- **Dummy mode works now:** `?dummy=1` on any `/games` page, or the preview
+  toggle's "Games team" buttons, runs the real pages against
+  `dummy/games-fake-api.ts`, which keeps the database's rules. Its banner
+  switches between admin, HoD, member and not on the team.
+- **Files:** `lib/games/` (rows and exports, `format.ts` the formatter,
+  `details.ts` boards, subjects and IDs, `prompt.ts` what "Copy chatbot prompt"
+  copies, `engine/` the games: each has a maker and a separate checker, and a
+  puzzle is only shown after its checker passes it), `components/games/` (the
+  four parts, the playable games, the preview, the guide; `games.css` is only
+  what utility classes can't say, in Shikshaq's colour variables).
+- **Questions and answers are never reworded.** Only numbering, labels,
+  bullets, Markdown and spaces are removed.
+- **The chatbot prompt and the code agree:** `lib/games/prompt.test.ts` fails if
+  the columns, IDs, boards, subjects, limits, template or worked example drift.
+  Change `prompt.ts` with the rule.
+
 ## Testing and CI
 
 ```bash

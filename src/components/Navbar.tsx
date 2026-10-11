@@ -16,6 +16,7 @@ import { useIsAdminBadge } from '@/hooks/useIsAdminBadge';
 import { useIsCheckerBadge } from '@/hooks/useIsCheckerBadge';
 import { useIsHodBadge } from '@/hooks/useIsHodBadge';
 import { useIsTeacherReviewerBadge } from '@/hooks/useIsTeacherReviewerBadge';
+import { useGamesRoleBadge } from '@/hooks/useGamesRoleBadge';
 import { useSiteCounts } from '@/hooks/useSiteCounts';
 import {
   Sheet, SheetClose, SheetContent, SheetGrabHandle, SheetTitle,
@@ -144,7 +145,8 @@ export function Navbar() {
   const isChecker = useIsCheckerBadge();
   const isHod = useIsHodBadge();
   const isTeacherReviewer = useIsTeacherReviewerBadge();
-  const staffGroups = roleGroups({ isAdmin, isHod, isChecker, isTeacherReviewer });
+  const gamesRole = useGamesRoleBadge();
+  const staffGroups = roleGroups({ isAdmin, isHod, isChecker, isTeacherReviewer, gamesRole });
   const userRole = (profile?.role as UserRole) || null;
   const dashboardLink = getDashboardLink(userRole);
   const { teachersCount, papersCount, papersReadCount } = useNavMenuCounts(menuOpen, user?.id);

@@ -6,7 +6,8 @@
  *
  * Since 8 Oct 2026 the staff links are grouped by team, each team with its own
  * section in the menu: the papers team (verify papers, HOD desk), the teachers
- * team (review teachers) and admin. More teams will follow the same shape: add
+ * team (review teachers), the games team (write and approve questions for the
+ * revision games) and admin. More teams will follow the same shape: add
  * a team key, its links and its look in team-style.ts.
  *
  * is_paper_checker(), is_hod() and is_teacher_reviewer() are all true for an
@@ -19,12 +20,17 @@ export interface Roles {
   isHod: boolean;
   isChecker: boolean;
   isTeacherReviewer: boolean;
+  /** The person's role on the games team (games.my_role()), or null/absent when they aren't on it. Separate from
+   *  the roles above: being a Shikshaq admin doesn't put anyone on the games team. */
+  gamesRole?: 'admin' | 'hod' | 'member' | null;
 }
 
 export const ADMIN_HOME = '/admin';
 export const HOD_HOME = '/hod';
 export const CHECKER_HOME = '/checker';
 export const TEACHER_REVIEW_HOME = '/teacher-review';
+export const GAMES_HOME = '/games';
+export const GAMES_APPROVE = '/games/approve';
 
 /** Where this person starts, or null when they hold no staff role (the ordinary site home). */
 export function homeFor(r: Roles): string | null {
@@ -35,10 +41,10 @@ export function homeFor(r: Roles): string | null {
   return null;
 }
 
-export type TeamKey = 'papers' | 'teachers' | 'admin';
+export type TeamKey = 'papers' | 'teachers' | 'games' | 'admin';
 
 export interface RoleLink {
-  key: 'verify' | 'hod' | 'review-teachers' | 'admin';
+  key: 'verify' | 'hod' | 'review-teachers' | 'games-write' | 'games-approve' | 'admin';
   to: string;
   label: string;
   team: TeamKey;
@@ -55,6 +61,7 @@ export interface RoleGroup {
 export const TEAMS: { team: TeamKey; label: string }[] = [
   { team: 'papers', label: 'Papers team' },
   { team: 'teachers', label: 'Teachers team' },
+  { team: 'games', label: 'Games team' },
   { team: 'admin', label: 'Admin team' },
 ];
 
@@ -64,6 +71,8 @@ export function roleLinks(r: Roles): RoleLink[] {
   if (r.isChecker) out.push({ key: 'verify', to: CHECKER_HOME, label: 'Verify papers', team: 'papers' });
   if (r.isHod) out.push({ key: 'hod', to: HOD_HOME, label: 'HOD desk', team: 'papers' });
   if (r.isTeacherReviewer) out.push({ key: 'review-teachers', to: TEACHER_REVIEW_HOME, label: 'Review teachers', team: 'teachers' });
+  if (r.gamesRole) out.push({ key: 'games-write', to: GAMES_HOME, label: 'Write questions', team: 'games' });
+  if (r.gamesRole === 'hod' || r.gamesRole === 'admin') out.push({ key: 'games-approve', to: GAMES_APPROVE, label: 'Approve questions', team: 'games' });
   if (r.isAdmin) out.push({ key: 'admin', to: ADMIN_HOME, label: 'Admin', team: 'admin' });
   return out;
 }

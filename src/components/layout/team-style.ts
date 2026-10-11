@@ -1,4 +1,4 @@
-import { CheckSquare, ClipboardList, Shield, UserCheck, type LucideIcon } from 'lucide-react';
+import { CheckSquare, ClipboardList, ListChecks, Puzzle, Shield, UserCheck, type LucideIcon } from 'lucide-react';
 
 import type { RoleLink, TeamKey } from '@/lib/role-home';
 
@@ -9,6 +9,7 @@ import type { RoleLink, TeamKey } from '@/lib/role-home';
  *
  *   papers    brand-blue (indigo tint, deep indigo text)
  *   teachers  success    (green tint, deep green text)
+ *   games     panel      (near-black, light text)
  *   admin     brand      (orange tint, deep orange text)
  *
  * Adding a team: a key in role-home.ts, a link there, and an entry here.
@@ -18,11 +19,14 @@ export const LINK_ICON: Record<RoleLink['key'], LucideIcon> = {
   verify: CheckSquare,
   hod: ClipboardList,
   'review-teachers': UserCheck,
+  'games-write': Puzzle,
+  'games-approve': ListChecks,
   admin: Shield,
 };
 
 export const TEAM_STYLE: Record<TeamKey, { chip: string; label: string }> = {
   papers: { chip: 'bg-brand-blue-subtle text-brand-blue-deep', label: 'text-brand-blue-deep' },
   teachers: { chip: 'bg-success-subtle-bg text-success-subtle-text', label: 'text-success-subtle-text' },
+  games: { chip: 'bg-panel text-background', label: 'text-foreground' },
   admin: { chip: 'bg-brand-subtle text-brand-deep', label: 'text-brand-deep' },
 };

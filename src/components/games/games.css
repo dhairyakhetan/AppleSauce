@@ -1,0 +1,137 @@
+/* The games team's pages: only what utility classes can't say. Colours are Shikshaq's own variables from
+   src/index.css, never new values. Loaded with the games pages only (they are a separate download). */
+
+/* ---------------------------------------------------------------- the Questions box
+   A textarea can't style parts of its text, so a copy of the text sits behind it with the same font, padding and
+   width: the copy is invisible except for the underlines on lines with a problem. The two scroll together. */
+.games-editor { position: relative; }
+.games-editor textarea,
+.games-editor .games-backdrop-in {
+  font: 400 15px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  tab-size: 4;
+  letter-spacing: 0;
+}
+.games-editor textarea {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 380px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  background: transparent;
+  color: hsl(var(--foreground));
+  resize: vertical;
+  outline: none;
+}
+.games-editor textarea:focus-visible { box-shadow: 0 0 0 2px hsl(var(--brand)); }
+.games-editor textarea::placeholder { color: var(--text-quaternary); }
+.games-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: hsl(var(--card));
+  pointer-events: none;
+}
+.games-backdrop-in { color: transparent; }
+.games-mark {
+  border-radius: 3px;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+}
+.games-mark.error { text-decoration-color: hsl(var(--destructive)); background: hsl(var(--destructive) / 0.12); }
+.games-mark.warn { text-decoration-color: hsl(var(--brand-hover)); background: hsl(var(--brand-subtle)); }
+@media (max-width: 640px) {
+  .games-editor textarea { height: 300px; }
+  .games-editor textarea,
+  .games-editor .games-backdrop-in { font-size: 14px; }
+}
+
+/* ---------------------------------------------------------------- the games
+   Each solved pair or word gets one of six colours, all Shikshaq's. */
+.games-c0 { --pair: var(--success); }
+.games-c1 { --pair: hsl(var(--brand-blue)); }
+.games-c2 { --pair: hsl(var(--mosaic-purple-text)); }
+.games-c3 { --pair: hsl(var(--brand-deep)); }
+.games-c4 { --pair: hsl(var(--mosaic-blue-text)); }
+.games-c5 { --pair: hsl(var(--mosaic-mint-text)); }
+.games-matched { background: var(--pair); color: hsl(var(--card)); }
+
+/* Word search: one square per letter, as big as fits (smaller in the preview). */
+.games-ws-grid {
+  --cell: min(36px, calc((100vw - 72px) / var(--n)));
+  display: grid;
+  grid-template-columns: repeat(var(--n), var(--cell));
+  width: max-content;
+  border-radius: 16px;
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-card-bone);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.games-compact .games-ws-grid { --cell: min(24px, calc((100vw - 96px) / var(--n))); }
+.games-ws-cell {
+  display: grid;
+  place-items: center;
+  width: var(--cell);
+  height: var(--cell);
+  font: 600 calc(var(--cell) * 0.48) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.games-ws-cell.found { background: color-mix(in srgb, var(--pair) 16%, hsl(var(--card))); color: var(--pair); }
+.games-ws-cell.on,
+.games-ws-cell.anchor { background: hsl(var(--brand-blue)); color: hsl(var(--brand-blue-foreground)); }
+
+/* Crossword: squares share their borders. */
+.games-cw-grid {
+  --cell: min(38px, calc((100vw - 72px) / var(--cols)));
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  width: max-content;
+  padding: 1px 0 0 1px;
+}
+.games-compact .games-cw-grid { --cell: min(26px, calc((100vw - 96px) / var(--cols))); }
+.games-cw-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--cell);
+  height: var(--cell);
+  margin: -1px 0 0 -1px;
+  padding: 0;
+  border: 1px solid hsl(var(--foreground));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font: 600 calc(var(--cell) * 0.52) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.games-cw-cell.is-block { border-color: transparent; background: transparent; }
+.games-cw-cell.word { background: hsl(var(--brand-blue-subtle)); }
+.games-cw-cell.cur { background: hsl(var(--brand-blue)); color: hsl(var(--brand-blue-foreground)); }
+.games-cw-cell.cur .games-cw-n { color: hsl(var(--brand-blue-foreground) / 0.8); }
+.games-cw-cell.bad .games-cw-l { color: hsl(var(--destructive)); text-decoration: line-through; }
+.games-cw-cell.done { background: var(--mint); color: hsl(var(--foreground)); }
+.games-cw-n {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font: 500 calc(var(--cell) * 0.27) / 1 Geist, system-ui, sans-serif;
+  color: hsl(var(--muted-foreground));
+}
+.games-cw-input { position: absolute; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; pointer-events: none; }
+
+@media (hover: hover) {
+  .games-ws-cell:not(.found):not(.on):not(.anchor):hover { background: hsl(var(--muted)); }
+}

@@ -18,6 +18,7 @@ import { useIsAdminBadge } from "@/hooks/useIsAdminBadge";
 import { useIsCheckerBadge } from "@/hooks/useIsCheckerBadge";
 import { useIsHodBadge } from "@/hooks/useIsHodBadge";
 import { useIsTeacherReviewerBadge } from "@/hooks/useIsTeacherReviewerBadge";
+import { useGamesRoleBadge } from "@/hooks/useGamesRoleBadge";
 import { roleGroups } from "@/lib/role-home";
 import { LINK_ICON, TEAM_STYLE } from "@/components/layout/team-style";
 import {
@@ -75,7 +76,8 @@ export function TopBar({ className }: { className?: string }) {
   const isHod = useIsHodBadge();
   const isTeacherReviewer = useIsTeacherReviewerBadge();
   // One section per team the person belongs to, one link per role in it (not a list of admin pages: the admin menu itself holds those).
-  const staffGroups = roleGroups({ isAdmin, isHod, isChecker, isTeacherReviewer });
+  const gamesRole = useGamesRoleBadge();
+  const staffGroups = roleGroups({ isAdmin, isHod, isChecker, isTeacherReviewer, gamesRole });
   const [menuOpen, setMenuOpen] = useState(false);
   const menuPresence = useExitPresence(menuOpen);
   const initial = (user?.email?.charAt(0) || "?").toUpperCase();

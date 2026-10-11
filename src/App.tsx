@@ -100,6 +100,8 @@ const CheckerHelp = lazy(() => import("./pages/CheckerHelp"));
 const Hod = lazy(() => import("./pages/Hod"));
 /* Teacher review (teachers team): approve, reject and edit teachers without admin. */
 const TeacherReview = lazy(() => import("./pages/TeacherReview"));
+/* The games team: write, approve and try questions for the revision games. */
+const Games = lazy(() => import("./pages/Games"));
 /* LikedTeachers / MyTeachers are NOT lazy-imported here any more. Their two
    routes redirect into /account (see the O-05 note below) and neither
    component was rendered, but the `lazy()` calls still made Vite emit a chunk
@@ -172,7 +174,10 @@ const LegacyPaperReviewRedirect = () => {
 // BottomNavSpacer already handles every breakpoint that needs clearance.
 const RouteTransition = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
-  return <div key={location.pathname}>{children}</div>;
+  /* The games team's pages (/games/*) are one page with parts: moving between
+     them keeps it mounted, so the questions being written aren't lost. */
+  const key = /^\/games(\/|$)/.test(location.pathname) ? "/games" : location.pathname;
+  return <div key={key}>{children}</div>;
 };
 
 /* Warms a route's chunk when the pointer reaches a link to it — see
@@ -359,6 +364,9 @@ const App = () => (
               <Route path="/checker/help" element={<CheckerHelp />} />
               <Route path="/hod" element={<Hod />} />
               <Route path="/teacher-review" element={<TeacherReview />} />
+              {/* One route for every games page, so a part's work (the text in Write questions) survives moving
+                  between them. Pages/Games.tsx picks the part from the address. */}
+              <Route path="/games/*" element={<Games />} />
               {/* Legacy admin URLs redirect into the console (pages.md §15). */}
               <Route path="/admin/applications" element={<Navigate to="/admin/approvals" replace />} />
               <Route path="/admin/recommendations" element={<Navigate to="/admin/reviews" replace />} />

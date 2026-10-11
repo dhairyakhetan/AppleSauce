@@ -59,6 +59,10 @@ const ALL_DUMMY_PAGES: DummyPageEntry[] = [
   { path: '/admin/pipeline', label: 'Admin: pipeline and paper list (dummy)' },
   { path: '/admin/paper-approvals', label: 'Admin: ready to go live (dummy)' },
   { path: '/admin/checker-log', label: 'Admin: checker log (dummy)' },
+  { path: '/games', label: 'Games team: write questions (dummy)' },
+  { path: '/games/approve', label: 'Games team: approve questions (dummy)' },
+  { path: '/games/play', label: 'Games team: try the games (dummy)' },
+  { path: '/games/team', label: 'Games team: team (dummy)' },
 ];
 
 /** Pages that have a dummy mode, for the preview toggle. */

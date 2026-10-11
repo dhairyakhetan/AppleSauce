@@ -98,6 +98,21 @@ describe('account menu by team', () => {
   });
 });
 
+describe('the games team in the account menu', () => {
+  it('shows its links only to people on the games team, and Approve only to its HoDs and admins', () => {
+    expect(roleGroups(admin).map((g) => g.label)).not.toContain('Games team'); // a Shikshaq admin isn't on it by being admin
+    expect(roleLinks(only({ gamesRole: 'member' })).map((l) => l.label)).toEqual(['Write questions']);
+    expect(roleLinks(only({ gamesRole: 'hod' })).map((l) => l.label)).toEqual(['Write questions', 'Approve questions']);
+    expect(roleGroups({ ...admin, gamesRole: 'admin' }).map((g) => g.label)).toEqual(['Papers team', 'Teachers team', 'Games team', 'Admin team']);
+    expect(homeFor(only({ gamesRole: 'admin' }))).toBeNull(); // where people land after signing in doesn't change
+  });
+
+  it('its links go to the games pages, which App.tsx serves under one route', () => {
+    expect(routes).toContain('/games/*');
+    for (const l of roleLinks(only({ gamesRole: 'admin' }))) expect(l.to, l.key).toMatch(/^\/games(\/[a-z]+)?$/);
+  });
+});
+
 describe('admin menu after the clean-up', () => {
   const nav = buildAdminNav('library');
 
