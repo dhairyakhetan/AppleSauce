@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "about": "Every flag reason the pipeline can put on a question, and the lane that settles it. Written for the website (student checker and admin queue) to read. Plain English, no dashes. Counts are a snapshot of open kid and admin questions; python -m pipeline.lanes --census rewrites them.",
+  "rule": "A student only checks a question with a page picture in front of them: a crop around the question first, a tap to see the whole page. No picture: the question goes to an admin with a plain reason. Every move is written to the review log.",
+  "owners": {
+    "student_with_picture": "A student settles it, looking at the page picture. Without a picture it goes to an admin instead.",
+    "admin": "An admin settles it. A student is never asked.",
+    "ai_then_admin": "The AI settles it on its own; whatever it cannot settle waits for an admin. A student is never asked."
+  },
+  "lanes": {
+    "read_words": {
+      "name": "Read the words against the page",
+      "owner": "student_with_picture",
+      "what_to_do": "Compare the question with the printed page. Fix any word, number or symbol that differs. If the page itself has a mistake, say so, do not correct it."
+    },
+    "joined_or_split": {
+      "name": "Joined or split questions",
+      "owner": "student_with_picture",
+      "what_to_do": "Two questions may be stuck together, or one question may be cut in two. Split or join them so each question stands on its own."
+    },
+    "page_clutter": {
+      "name": "Page clutter in the question",
+      "owner": "student_with_picture",
+      "what_to_do": "Remove text that belongs to the page, such as a page number or a header, and leave only the question."
+    },
+    "options": {
+      "name": "Answer options",
+      "owner": "student_with_picture",
+      "what_to_do": "Check that every option is there, in order, and matches the page."
+    },
+    "marks": {
+      "name": "Marks",
+      "owner": "student_with_picture",
+      "what_to_do": "Check the marks against the page. If the page prints no marks for this question, leave the marks empty."
+    },
+    "number": {
+      "name": "Question number",
+      "owner": "student_with_picture",
+      "what_to_do": "Fill in the number printed beside the question. If none is printed, leave it empty."
+    },
+    "figure": {
+      "name": "Picture or diagram not attached",
+      "owner": "student_with_picture",
+      "what_to_do": "The question mentions a picture or diagram that is not attached. Check that the words read right. The figure itself is attached separately."
+    },
+    "empty_question": {
+      "name": "Question with no words yet",
+      "owner": "ai_then_admin",
+      "what_to_do": "The words were lost, for example because an answer was printed inside the question. The AI transcribes them from the page, then a student checks the result."
+    },
+    "label": {
+      "name": "Label tidy-up",
+      "owner": "ai_then_admin",
+      "what_to_do": "The chapter or kind of question is missing or unsure. The AI fills it from the paper; an admin settles what is left. Nothing is asked of a student."
+    },
+    "find_on_page": {
+      "name": "Question not found on the page",
+      "owner": "admin",
+      "what_to_do": "The computer could not find this question on the page picture. An admin finds it, or sets the question aside."
+    },
+    "duplicate": {
+      "name": "Possible duplicate",
+      "owner": "admin",
+      "what_to_do": "This question may already be on the site. An admin compares the two and keeps one."
+    },
+    "personal_data": {
+      "name": "Possible personal details",
+      "owner": "admin",
+      "what_to_do": "The question may hold a real name, roll number or phone number. An admin checks and removes it."
+    },
+    "board_class": {
+      "name": "Board or class may be wrong",
+      "owner": "admin",
+      "what_to_do": "The paper may be filed under the wrong board or class. An admin checks the paper's heading."
+    },
+    "rescan": {
+      "name": "Needs a rescan",
+      "owner": "admin",
+      "what_to_do": "A page came back unreadable. The paper has to be scanned again, so no one can check it yet."
+    },
+    "other_script": {
+      "name": "Needs a different reader",
+      "owner": "admin",
+      "what_to_do": "The page is in a script the reading software cannot handle. It needs a different reader."
+    },
+    "english_release": {
+      "name": "English release check",
+      "owner": "ai_then_admin",
+      "what_to_do": "English questions are checked by the AI first and never reach students. An admin sees only what the AI could not settle."
+    }
+  },
+  "flags": {
+    "ocr_disagreement": {
+      "lane": "read_words"
+    },
+    "low_ocr_confidence": {
+      "lane": "read_words"
+    },
+    "incomplete_text": {
+      "lane": "read_words"
+    },
+    "short_body": {
+      "lane": "read_words"
+    },
+    "ocr_junk": {
+      "lane": "read_words"
+    },
+    "answer_in_question": {
+      "lane": "read_words"
+    },
+    "unbalanced_math_delim": {
+      "lane": "read_words"
+    },
+    "figure_text_mixed": {
+      "lane": "read_words"
+    },
+    "snippet_ocr_mismatch": {
+      "lane": "read_words"
+    },
+    "other": {
+      "lane": "read_words"
+    },
+    "ocr_fused": {
+      "lane": "joined_or_split"
+    },
+    "merged_subparts": {
+      "lane": "joined_or_split"
+    },
+    "page_furniture": {
+      "lane": "page_clutter"
+    },
+    "mcq_malformed": {
+      "lane": "options"
+    },
+    "marks_mismatch": {
+      "lane": "marks"
+    },
+    "missing_marks": {
+      "lane": "marks"
+    },
+    "display_number_missing": {
+      "lane": "number"
+    },
+    "numbering_gap": {
+      "lane": "number"
+    },
+    "cross_question_numbering_gap": {
+      "lane": "number"
+    },
+    "figure_missing": {
+      "lane": "figure"
+    },
+    "figure_ambiguous": {
+      "lane": "figure"
+    },
+    "empty_body": {
+      "lane": "empty_question"
+    },
+    "or_only_body": {
+      "lane": "joined_or_split"
+    },
+    "chapter_unresolved": {
+      "lane": "label"
+    },
+    "type_mismatch": {
+      "lane": "label"
+    },
+    "snippet_unaligned": {
+      "lane": "find_on_page"
+    },
+    "possible_duplicate": {
+      "lane": "duplicate"
+    },
+    "personal_data_suspected": {
+      "lane": "personal_data"
+    },
+    "board_class_mismatch": {
+      "lane": "board_class"
+    },
+    "ocr_dropout": {
+      "lane": "rescan"
+    },
+    "script_unsupported": {
+      "lane": "other_script"
+    },
+    "hidden_on_site": {
+      "lane": "english_release"
+    },
+    "rescue_ai_doubt": {
+      "lane": "english_release"
+    }
+  },
+  "prefixes": {
+    "split_from_": {
+      "lane": "joined_or_split"
+    },
+    "gate_": {
+      "lane": "english_release"
+    }
+  },
+  "counts": {
+    "kid": {
+      "other": 419,
+      "marks_mismatch": 48,
+      "ocr_disagreement": 14,
+      "ocr_fused": 12,
+      "type_mismatch": 1,
+      "incomplete_text": 4,
+      "figure_missing": 13,
+      "chapter_unresolved": 22,
+      "page_furniture": 5,
+      "short_body": 1,
+      "figure_text_mixed": 10,
+      "missing_marks": 2,
+      "snippet_unaligned": 4,
+      "numbering_gap": 1,
+      "display_number_missing": 1
+    },
+    "admin": {
+      "chapter_unresolved": 484,
+      "display_number_missing": 556,
+      "snippet_unaligned": 566,
+      "missing_marks": 160,
+      "ocr_fused": 41,
+      "short_body": 39,
+      "other": 10,
+      "marks_mismatch": 35,
+      "page_furniture": 8,
+      "mcq_malformed": 11,
+      "numbering_gap": 8,
+      "figure_missing": 44,
+      "possible_duplicate": 9,
+      "empty_body": 2,
+      "ocr_dropout": 9,
+      "type_mismatch": 1,
+      "script_unsupported": 13,
+      "board_class_mismatch": 1,
+      "figure_text_mixed": 1
+    },
+    "by_lane": {
+      "read_words": {
+        "kid": 448,
+        "admin": 50
+      },
+      "marks": {
+        "kid": 50,
+        "admin": 195
+      },
+      "joined_or_split": {
+        "kid": 12,
+        "admin": 41
+      },
+      "label": {
+        "kid": 23,
+        "admin": 485
+      },
+      "figure": {
+        "kid": 13,
+        "admin": 44
+      },
+      "page_clutter": {
+        "kid": 5,
+        "admin": 8
+      },
+      "find_on_page": {
+        "kid": 4,
+        "admin": 566
+      },
+      "number": {
+        "kid": 2,
+        "admin": 564
+      },
+      "options": {
+        "admin": 11
+      },
+      "duplicate": {
+        "admin": 9
+      },
+      "empty_question": {
+        "admin": 2
+      },
+      "rescan": {
+        "admin": 9
+      },
+      "other_script": {
+        "admin": 13
+      },
+      "board_class": {
+        "admin": 1
+      }
+    }
+  }
+}

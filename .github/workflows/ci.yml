@@ -1,0 +1,67 @@
+name: CI
+
+# Until now nothing checked anything. Every regression this session was caught
+# by hand, which does not scale and does not survive anyone being busy.
+#
+# WHAT IT GATES ON: typecheck, tests and lint, all three blocking.
+#
+# Lint became gateable rather than being declared so. The backlog looked like
+# 855 errors; eslint was linting .claude/worktrees -- seven stale copies of this
+# codebase -- and the real number was 108. Of those, 103 were no-explicit-any,
+# which is now a warning because tsconfig already sets strict:false and
+# noImplicitAny:false and erroring on the honest annotation while permitting the
+# silent one is incoherent. The remaining five were fixed. Zero errors, so the
+# gate is real rather than decorative.
+#
+# WHY NO BUILD STEP. `npm run build` runs prebuild (sitemap generation) and
+# postbuild (prerendering 1,700 routes), both of which need live Supabase
+# credentials. Those are deliberately not in this repo, and the sitemap
+# generator now exits non-zero when they are missing -- correctly, because a
+# silently truncated sitemap is the bug it was written to prevent. Putting a
+# read key into CI to work around that trades a real secret for a weaker check
+# than the tests already give.
+
+on:
+  push:
+    branches: [main, shikshaq-2.0]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Not `tsc --noEmit`. The root tsconfig is `"files": []` with project
+      # references, so --noEmit checks nothing at all and passes on a codebase
+      # that does not compile. This has already cost time once.
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Tests
+        run: npm test
+
+      # Errors block. Warnings do not, and there are ~153 of them (mostly
+      # no-explicit-any) -- visible in the log, not a wall.
+      - name: Lint
+        run: npx eslint .

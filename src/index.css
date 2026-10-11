@@ -1,0 +1,1402 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ---- Warm neutral ground (VISUAL_LANGUAGE.md §2.1) --------------------
+       Every neutral is warm. Pure white appears ONLY as text on saturated
+       fills. These HSL triples are tuned so they round-trip to the exact
+       hexes the handoff specifies — the fractional components are load
+       bearing, do not "tidy" them to whole numbers.
+         --background #F9F5F1   --card/--popover #FCFAF7
+         --muted      #F0EAE2   --border/--input #E7DFD5
+         --foreground #1F1F1F                                              */
+    --background: 30 40% 96.1%;
+    --foreground: 0 0% 12.2%;
+
+    --card: 36 45.5% 97.8%;
+    --card-foreground: 0 0% 12.2%;
+
+    --popover: 36 45.5% 97.8%;
+    --popover-foreground: 0 0% 12.2%;
+
+    --primary: 0 0% 12.2%;
+    --primary-foreground: 30 40% 96.1%;
+
+    --secondary: 35 30% 90%;
+    --secondary-foreground: 30 10% 20%;
+
+    --muted: 34.3 31.8% 91.4%;
+    /* #7B736B — VISUAL_LANGUAGE.md §2.1 "text secondary".
+       ⚠ DELIBERATE, OWNER-APPROVED ACCESSIBILITY EXCEPTION. This measures
+       4.34:1 on the #F9F5F1 page ground and therefore fails the 4.5:1 floor in
+       DESIGN_SYSTEM.md §1.5. The owner ruled in favour of handoff fidelity
+       over the contrast bar with full knowledge of the trade-off. The same
+       ruling covers --text-tertiary and --text-quaternary below.
+       DO NOT "fix" this by darkening it. If you think it is a bug, it is not —
+       it is a recorded decision. Raise it with the owner, don't change it. */
+    --muted-foreground: 30 7% 45.1%;
+
+    --accent: 35 40% 88%;
+    --accent-foreground: 0 0% 12.2%;
+
+    /* Darkened from `0 84% 60%`, which was too light for BOTH of its jobs.
+       Measured against the live tokens at 60%: white on it (button.tsx:47,
+       badge.tsx:13) was 3.78:1, and it as TEXT (TopBar's "Sign out",
+       BankPaper's send-failure line) was 3.63:1 on card, 3.49:1 on background,
+       3.17:1 on muted. Floor is 4.5:1. This is the error colour, so it is the
+       one hue a reader cannot afford to miss. Darkening the token fixes every
+       site at once rather than patching four call sites. */
+    --destructive: 0 72% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 33.3 27.3% 87.1%;
+    --input: 33.3 27.3% 87.1%;
+    --ring: 30 10% 25%;
+
+    /* ---- Extended warm scale (VISUAL_LANGUAGE.md §2.1) --------------------
+       Roles the semantic tokens above don't cover. Held as literal hex (not
+       HSL triples) so they are exact; consumed by tailwind.config.ts as
+       `warm-*` / `panel` / `mint` classes. No alpha modifier support. */
+    --warm-page: #F9F5F1;          /* == --background */
+    --warm-card: #FCFAF7;          /* == --card; the "bone" stat card fill */
+    --warm-muted: #F0EAE2;         /* == --muted */
+    --warm-band: #F2ECE4;          /* stripe-placeholder dark band */
+    --warm-hairline: #E7DFD5;      /* == --border */
+    --warm-hairline-raised: #E4DCD2;
+    --warm-hairline-strong: #D8CFC4;
+    --on-brand-hairline: rgba(255,255,255,0.14); /* decorative hairline/overlay on saturated brand fills — not text */
+    --panel-dark: #1B1A18;         /* footer / near-black slab */
+
+    /* ---- Warm text scale (VISUAL_LANGUAGE.md §2.1) ------------------------
+       The full secondary → quaternary ramp, shipped at the handoff's exact
+       values.
+
+       ⚠ DELIBERATE, OWNER-APPROVED ACCESSIBILITY EXCEPTION. Measured against
+       the #F9F5F1 page ground:
+           --text-prose       #4A443E   8.9:1   passes AA
+           --text-secondary   #7B736B   4.34:1  FAILS the 4.5:1 floor
+           --text-tertiary    #8B837A   3.5:1   FAILS
+           --text-quaternary  #A39A90   2.6:1   FAILS
+       DESIGN_SYSTEM.md §1.5 sets that floor. The owner reviewed the exact
+       numbers above and ruled for handoff fidelity over the contrast bar.
+       This is a recorded decision, not an oversight.
+
+       DO NOT darken these values. Do not "correct" them in a lint pass, a
+       cleanup commit, or an accessibility sweep. If you believe this is wrong,
+       take it to the owner — do not change the tokens.
+
+       --text-secondary is also wired into --muted-foreground above, so
+       `text-muted-foreground` and `text-warm-secondary` are the same colour. */
+    --text-prose: #4A443E;         /* long-form body copy */
+    --text-secondary: #7B736B;     /* secondary text */
+    --text-tertiary: #8B837A;      /* card meta */
+    --text-quaternary: #A39A90;    /* uppercase labels */
+    --mint: #E3F7EC;               /* subject-Science tint, reused by §8 */
+    --mint-solid: #34B268;         /* AU-004a variant E's hero fill — the
+                                      saturated partner to --mint, which is a
+                                      tint and cannot carry a whole panel */
+    --peach-tint: #FCECDE;         /* ProductTour card-1 art-well decorative blob */
+
+    --radius: 0.75rem;
+
+    /* Layered shadow used in place of borders for depth — adapts to any
+       background since it's transparent. See make-interfaces-feel-better. */
+    --shadow-border:
+      0px 0px 0px 1px rgba(0, 0, 0, 0.06),
+      0px 1px 2px -1px rgba(0, 0, 0, 0.06),
+      0px 2px 4px 0px rgba(0, 0, 0, 0.04);
+    --shadow-border-hover:
+      0px 0px 0px 1px rgba(0, 0, 0, 0.08),
+      0px 1px 2px -1px rgba(0, 0, 0, 0.08),
+      0px 2px 4px 0px rgba(0, 0, 0, 0.06);
+
+    /* ---- Brand accent tokens (DESIGN_SYSTEM.md §2) ----------------------
+       Accents, never surfaces. Max two accented elements per viewport.
+       --brand      = #FF8000   --brand-blue = #4351FF                     */
+    --brand: 30.1 100% 50%;
+    /* Ink on brand-orange fills. Was white, which measures 2.52:1 on #FF8000
+       against WCAG AA's 4.5:1 — a failure repeated across ~52 bg-brand call
+       sites including every primary CTA, and worse on the opacity variants
+       (text-brand-foreground/75 measured 1.56:1).
+
+       #FF8000 is a bright, high-luminance orange; it cannot carry white text
+       at any size the site actually uses. The options were to darken the
+       brand colour itself or to darken the ink on it. This darkens the ink,
+       because it keeps #FF8000 exactly as it is — the orange still reads as
+       the brand, only the text on top changes. Measured 6.46:1.
+
+       One token, so it is a single line to revert if the look is wrong. */
+    --brand-foreground: 0 0% 12.2%;
+    --brand-hover: 30 100% 44%;
+    --brand-subtle: 31.3 100% 95.5%; /* the §2.2 orange tint, #FFF4E8 */
+
+    --brand-blue: 235.5 100% 63.1%;
+    --brand-blue-foreground: 0 0% 100%;
+    --brand-blue-hover: 235 85% 56%;
+    --brand-blue-subtle: 236.7 100% 96.5%; /* the §2.2 indigo tint, #EDEEFF */
+
+    /* ---- Mode "deep" pair (VISUAL_LANGUAGE.md §2.2) -----------------------
+       Teachers = orange, Papers = indigo. "Deep" is the text-on-tint colour,
+       dark enough to read on its matching `*-subtle` tint. The `*-subtle`
+       tokens above ARE the §2.2 tint row — they were already present and have
+       been nudged to the handoff's exact hexes (#FFF2E5 → #FFF4E8,
+       #EBECFF → #EDEEFF); every existing consumer keeps working.           */
+    /* 32%, not 35%. At #B35900 this measured 4.45:1 on its own --brand-subtle
+       tint — 0.05 short of the floor, which is exactly the kind of miss that
+       survives review because it looks fine. It is the text-on-tint ink for
+       every brandTint panel and pre-footer eyebrow, so a 3% lightness change
+       clears all of those pairs at once. --brand-blue-deep needs no equivalent
+       change; it already measures 6.79:1 on its tint. */
+    --brand-deep: 30 100% 32%;        /* #A35100 */
+    --brand-blue-deep: 235.7 67.2% 51%; /* #2E3AD6 */
+
+    /* ---- Colored glow shadows (VISUAL_LANGUAGE.md §2.2, §8) -------------- */
+    --shadow-glow-brand: 0 14px 34px rgba(255, 128, 0, 0.28);
+    --shadow-glow-brand-blue: 0 14px 34px rgba(67, 81, 255, 0.28);
+    --shadow-glow-brand-tight: 0 0 20px -2px rgba(255, 128, 0, 0.55);
+    --shadow-glow-brand-blue-tight: 0 0 20px -2px rgba(67, 81, 255, 0.55);
+    --shadow-card-bone: 0 0 0 1px #E7DFD5, 0 10px 26px rgba(0, 0, 0, 0.07);
+    --shadow-card-mint: 0 10px 26px rgba(0, 0, 0, 0.06);
+    --shadow-pill: 0 8px 28px -6px rgba(0, 0, 0, 0.45);
+
+    /* ---- Facet/status accent tokens ---------------------------------------
+       Promoted from src/utils/searchFacets.ts's old ACCENT_TOKENS/SURFACE_TOKENS
+       object, which re-declared these as raw JS hex with no link back to a CSS
+       variable. searchFacets.ts now reads these vars instead of owning the
+       literals; the exported object shapes/keys there are unchanged so no
+       consumer broke.
+
+       Two collisions were resolved while promoting:
+       - `destructive`: searchFacets had its own #E5484D, distinct from the
+         site-wide --destructive (#EF4444-ish, HSL 0 84% 60%) used by
+         bg-destructive/text-destructive everywhere else. They render visually
+         different reds. Since no visual change is in scope, both are kept as
+         separate tokens rather than merged — --destructive stays the sitewide
+         one, --facet-destructive is the narrower admin/search-facet one.
+       - `panel`: searchFacets had #F4EEE7 (a light warm panel fill), which
+         collided in NAME ONLY with --panel-dark (#1B1A18, the near-black
+         footer slab already exposed as the `panel` Tailwind color). These are
+         two unrelated colors that happened to share a short name. Kept both:
+         --panel-dark is unchanged, the light one is now --surface-panel-light. */
+    /* ---- Auth proof-mosaic subject tints (Auth.tsx, changelog C-032) ------
+       The mosaic stands in for many subjects, not a single mode, so it is the
+       one facet allowed to escape the orange/indigo mode-accent budget. These
+       are the literal spec hues from "Redesign Account screens.dc.html",
+       promoted from inline style={{...}} literals into tokens. */
+    --mosaic-blue-bg: 210 62% 93%;
+    --mosaic-blue-text: 210 45% 26%;
+    --mosaic-mint-bg: 168 45% 93%;
+    --mosaic-mint-text: 168 45% 26%;
+    --mosaic-purple-bg: 262 52% 93%;
+    --mosaic-purple-text: 262 45% 26%;
+
+    --success: #228B22;
+    --success-subtle-bg: #E6F4E6;   /* "settled" badge background */
+    --success-subtle-text: #1B5E20; /* "settled" badge text */
+    --error-secondary-text: #5A524A; /* secondary text in error UI (ErrorBoundary) */
+    --whatsapp: #25D366;            /* WhatsApp brand green */
+    --whatsapp-text: #0B3D1F;       /* text/icon color on the WhatsApp CTA */
+    --indigo-link-on-dark: #8B93FF; /* Papers-mode link color on dark surfaces */
+    --facet-destructive: #E5484D;   /* admin/search-facet error red — see note above, NOT the same as --destructive */
+    --surface-panel-light: #F4EEE7; /* light warm panel fill — see note above, NOT the same as --panel-dark */
+
+    /* Fonts */
+    --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+    --font-serif: 'Geist', system-ui, -apple-system, sans-serif;
+
+    /* ---- Motion tokens (character-layer task #4) --------------------------
+       Same numbers as tailwind.config.ts's transitionDuration/transitionTimingFunction
+       extensions, exposed as CSS custom properties so they're usable outside a
+       `duration-*`/`ease-*` utility class — e.g. inside a hand-written
+       @keyframes percentage step, or a JS spring/animation config that reads
+       computed style. Keep these two definitions in sync by hand; there is no
+       build-time link between a Tailwind theme value and a CSS var. */
+    --duration-tap: 150ms;
+    --duration-hover: 200ms;
+    --duration-lift: 300ms;
+    --duration-pop: 400ms;
+    --duration-entrance: 500ms;
+    --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    --sidebar-background: 40 33% 96%;
+    --sidebar-foreground: 30 10% 25%;
+    --sidebar-primary: 30 10% 15%;
+    --sidebar-primary-foreground: 40 33% 96%;
+    --sidebar-accent: 35 30% 90%;
+    --sidebar-accent-foreground: 30 10% 15%;
+    --sidebar-border: 35 20% 88%;
+    --sidebar-ring: 30 10% 25%;
+  }
+
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* Global keyboard focus indicator — nothing else in the app provides one.
+
+     The outline alone was invisible on every dark slab: --ring is
+     hsl(30 10% 25%) = rgb(70,64,57) against --panel-dark #1B1A18, which
+     measures 1.70:1 where WCAG 1.4.11 requires 3:1. That covered the whole
+     footer nav, the home hero block and the dark CTA slabs — text on those
+     surfaces is 16:1, so only the focus indicator failed.
+
+     The paired outline + white halo fixes it without needing every dark
+     surface to opt in: on light grounds the dark outline carries (9.47:1) and
+     the halo is barely visible; on dark grounds the halo carries (15.8:1
+     against #1B1A18) and the outline recedes. One rule, both directions —
+     which matters because focusable elements move between grounds and a
+     scoped override would need maintaining forever.
+
+     Scoped with :not() rather than by overriding box-shadow afterwards.
+     Tailwind's ring-* utilities are themselves box-shadow, so a trailing
+     `box-shadow: none` would have silently erased every custom focus ring in
+     the app instead of just skipping the halo. */
+  :focus-visible:not([class*="focus-visible:ring-"]):not([class*="focus-visible:outline-"]) {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgb(255 255 255 / 0.9);
+  }
+
+  /* Elements that opt into their own ring keep the plain outline rule. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  html {
+    overflow-x: hidden;
+    width: 100%;
+    /* Pull-to-refresh (use-pull-to-refresh.ts) drives its own touch handling
+       from scrollY 0. Without this, Chrome mobile's native overscroll-refresh
+       (and an installed PWA's) fires at the same time as ours on the exact
+       same gesture — two refresh UIs stacked on one pull. `contain` stops the
+       browser's own refresh/navigation gesture from triggering while leaving
+       normal scrolling everywhere else untouched. */
+    overscroll-behavior-y: contain;
+    /* This app ships one warm-light theme only — darkMode:["class"] in
+       tailwind.config.ts is wired but nothing ever toggles a `.dark` class,
+       and :root never defines a dark palette. Without `color-scheme: light`,
+       a phone set to system dark mode still gets the UA's own dark default
+       for chrome the app's own CSS doesn't paint: iOS Safari's rubber-band
+       overscroll fill (exactly what a pull past scrollY 0 now exposes, since
+       PullToRefresh relies on that gesture) and Chrome's own overscroll glow
+       both default to near-black there instead of inheriting `background`
+       below. That produced the "black strip behind the navbar, regardless of
+       the page's real background" mobile QA report — it was never app
+       markup painting black, it was the browser's own dark-mode default
+       showing through the gap the fixed nav pill leaves. Pinning both
+       properties makes that gap (and any other UA-painted sliver) always
+       resolve to the same warm cream every real page uses. */
+    color-scheme: light;
+    background: hsl(var(--background));
+  }
+
+  /* `body` intentionally does NOT also get overflow-x:hidden: setting overflow
+     on both html and body makes body its own scroll container per the CSS
+     Overflow spec (overflow-x != visible forces overflow-y to compute as
+     auto). The real page scroll happens on `html` (documentElement) in
+     standards mode, so body's scrollport never moves — any `position: sticky`
+     descendant of body (the header) computes stickiness against that inert
+     scrollport and silently behaves like `static`, scrolling away instead of
+     pinning. `html`'s overflow-x:hidden alone already clips horizontal
+     overflow at the real scrolling element, so body doesn't need its own. */
+  body {
+    width: 100%;
+    @apply bg-background text-foreground antialiased;
+    /* No font-family here — Tailwind's font-sans (tailwind.config.ts) already
+       resolves to the identical Geist stack; redeclaring it was a no-op. */
+    font-weight: 500; /* Geist Regular */
+  }
+
+  h1 {
+    font-weight: 600;
+    letter-spacing: -0.05em;
+    text-wrap: balance;
+  }
+
+  h2 {
+    font-weight: 600;
+    letter-spacing: -0.05em;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  h4 {
+    font-weight: 500;
+    text-wrap: balance;
+  }
+
+  /* Smaller headings (h5 is rendered by ui/alert.tsx) */
+  h5, h6 {
+    text-wrap: balance;
+  }
+
+  /* Avoid orphaned words on short-to-medium body text */
+  p, li, figcaption, blockquote, dd, td, summary {
+    text-wrap: pretty;
+  }
+
+  /* Meta text (small text, captions, etc.) */
+  .text-muted-foreground,
+  .text-sm,
+  .text-xs,
+  p.text-muted-foreground,
+  span.text-muted-foreground {
+    font-weight: 400; /* Geist Regular — 300 hurt contrast at small sizes */
+  }
+}
+
+@layer components {
+  /* ---------------------------------------------------------------- glass
+     One frosted-glass material: the nav menu sheet, the mobile header pill,
+     the desktop top bar and the bottom nav.
+
+     Written here rather than as four copies of a long arbitrary-value class
+     string, because the gradients and the rim shadow are identical every time
+     and only the tint changes. A change to how the material reads should be
+     one edit.
+
+     DELIBERATELY STATIC. An earlier version moved the highlight with the
+     pointer and the device gyroscope. It read as a fault rather than as glass:
+     a specular that chases the cursor keeps announcing itself, so the eye goes
+     to the panel instead of through it, and on a surface that is chrome rather
+     than content that is exactly backwards. Real glass under a fixed ceiling
+     light does not move either. What is left is lit from above, which is the
+     one direction that needs no explanation.
+
+     WHY THESE PARTS:
+       blur + saturate   saturation is what separates glass from fog. Blur on
+                         its own greys whatever is behind it; real glass keeps
+                         the colour and pushes it, so the orange and indigo of
+                         the page stay orange and indigo through the surface.
+       the sheen         a broad bloom from the top edge, plus a tight rim
+                         light on the top lip -- on real glass the edge catches
+                         far more light than the face, and without it the
+                         surface is a flat translucent rectangle with no
+                         thickness. Painted as background layers, not
+                         positioned elements, so they stay put while content
+                         scrolls under.
+
+     On alpha, correcting what this note used to say. It claimed the theme
+     tokens cannot take an `/opacity` modifier because none declares
+     `<alpha-value>`. That is wrong: Tailwind rewrites `hsl(var(--card))` to
+     `hsl(var(--card) / .6)` by itself, and `.text-background\/70` and friends
+     are in the built CSS. The tokens that genuinely cannot take one are the
+     literal `var(--x)` hex holders -- `panel`, `mint`, the whole `warm-*`
+     block -- where Tailwind has never seen the value and emits nothing at all.
+     This block uses raw colours anyway, because a glass body is tuned per
+     surface rather than taken from a token. See
+     src/lib/opacity-modifiers.test.ts, which now fails on either mistake. */
+  .glass {
+    -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+    backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  }
+
+  /* Over the cream page. */
+  .glass-light {
+    background-color: hsl(var(--card) / 0.58);
+    background-image:
+      linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.55) 0%,
+        rgba(255, 255, 255, 0.16) 22%,
+        rgba(255, 255, 255, 0) 55%
+      ),
+      radial-gradient(
+        68% 22px at 50% 0%,
+        rgba(255, 255, 255, 0.9) 0%,
+        rgba(255, 255, 255, 0.22) 45%,
+        transparent 80%
+      );
+    box-shadow:
+      inset 0 1.5px 0 0 rgba(255, 255, 255, 0.8),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.2),
+      0 -14px 48px -10px rgba(27, 26, 24, 0.32);
+  }
+
+  /* Over a saturated or dark block: the near-black pills. Same material, a
+     darker body and a brighter rim, because a dark pane shows its edge light
+     far more than its face -- and a bloom tuned for cream blows out to a grey
+     smear on near-black, so this one is dialled right back. */
+  .glass-dark {
+    background-color: rgba(27, 26, 24, 0.62);
+    color: hsl(var(--background));
+    background-image:
+      linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.18) 0%,
+        rgba(255, 255, 255, 0.05) 26%,
+        rgba(255, 255, 255, 0) 60%
+      ),
+      radial-gradient(
+        68% 16px at 50% 0%,
+        rgba(255, 255, 255, 0.42) 0%,
+        rgba(255, 255, 255, 0.1) 48%,
+        transparent 82%
+      );
+    box-shadow:
+      inset 0 1.5px 0 0 rgba(255, 255, 255, 0.34),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.08),
+      0 10px 34px -8px rgba(27, 26, 24, 0.55);
+  }
+
+  /* Solid opaque version of .glass-light: flat fill, no gradient bloom or inset
+     rim-light -- those existed to sell a glass material and read as a rendering
+     glitch on an opaque bar. Edge definition comes from shadow-pill on the
+     element itself (Navbar/TopBar/BottomNav all pair this with shadow-pill). */
+  .solid-light {
+    background-color: hsl(var(--card));
+  }
+
+  /* Solid opaque version of .glass-dark: same rule -- flat fill only. */
+  .solid-dark {
+    background-color: rgb(27, 26, 24);
+    color: hsl(var(--background));
+  }
+
+
+  .nav-link {
+    @apply flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-[color,background-color,box-shadow] duration-200;
+  }
+
+  .nav-link-active {
+    @apply bg-card shadow-sm border border-border;
+  }
+
+  .teacher-card {
+    @apply relative overflow-hidden rounded-2xl bg-card transition-[transform,box-shadow] duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+
+  /* PaperCard (src/components/PaperCard.tsx) — card hover is translateY(-3px)/.2s ease
+     per the design handoff motion rules, nothing else moves; press is scale(.97)/.15s ease. */
+  .shikshaq-paper-card {
+    transition: transform 0.2s ease;
+  }
+
+  @media (hover: hover) {
+    .shikshaq-paper-card:hover {
+      transform: translateY(-3px);
+    }
+  }
+
+  .shikshaq-paper-card:active {
+    transform: scale(0.97);
+    transition: transform 0.15s ease;
+  }
+
+  .subject-badge {
+    @apply inline-flex px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .hero-cta {
+    @apply inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium transition-[transform,box-shadow,background-color] duration-200 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.97];
+  }
+
+  .step-number {
+    @apply font-sans font-normal leading-none;
+  }
+
+  /* Wave divider between sections */
+  .wave-divider {
+    position: relative;
+    height: 50px;
+    overflow: hidden;
+    line-height: 0;
+  }
+
+  @media (min-width: 640px) {
+    .wave-divider {
+      height: 60px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .wave-divider {
+      height: 80px;
+    }
+  }
+}
+
+@layer utilities {
+  /* Expand a control's HIT AREA to the 44px mobile floor (design.md §7,
+     components.md §6) without changing how big it looks. Use this wherever the
+     mockup draws a control smaller than 44px — a 34px filter pill, a 36px
+     WhatsApp disc, a 40px overflow button. Resizing those to 44px would break
+     the drawn design; growing the target instead satisfies both.
+
+     The pseudo is centred on the control. It used to carry `z-index: -1`, on
+     the reasoning that sitting behind the content meant it "never intercepts a
+     click meant for something stacked above" — but a negative z-index puts it
+     behind the *parent's* box as well, and hit-testing follows paint order.
+     The parent therefore won every probe and the overlay intercepted nothing
+     at all: measured live, a 20px footer link with a 44px overlay still
+     resolved to its parent <span> 8px above the text, so C-013's floor was
+     satisfied on paper and nowhere else. `z-index: 0` keeps the pseudo in the
+     positioned-descendants layer — above the parent's background, still below
+     anything with a real stacking order (the bottom nav at z-40, sheets,
+     modals), so the original concern is preserved. It paints nothing, so
+     there is no visual change either way.
+
+     Above `lg` the floor drops to 40px for pointer input.
+
+     The control must be `relative` (all our primitives are). */
+  .tap-44 {
+    position: relative;
+  }
+  .tap-44::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    z-index: 0;
+  }
+  /* Above lg the floor drops to 40px for pointer input (components.md §6) —
+     it does NOT disappear. This previously removed the overlay entirely, which
+     left footer links at 19px and the ticker rail at 23px with no padded target
+     on desktop. Shrink it, don't drop it. */
+  @media (min-width: 1024px) {
+    .tap-44::before {
+      width: max(100%, 40px);
+      height: max(100%, 40px);
+    }
+  }
+
+  /* Removed: hand-rolled .animate-fade-in / .animate-slide-up /
+     .animate-slide-in-left utilities and their fadeIn/slideUp/slideInLeft
+     keyframes. They shadowed the Tailwind animations of the same name and are
+     banned by DESIGN_SYSTEM.md §6. Verified unreferenced across src/. */
+
+  /* `heroSwap` used to be declared here as a bare @keyframes with no utility
+     bound to it. It now lives in tailwind.config.ts (identical values) and is
+     reachable as `animate-hero-swap`, alongside the other three
+     VISUAL_LANGUAGE §7 additions. One definition, not two. */
+
+  /* Diagonal-stripe placeholder — VISUAL_LANGUAGE.md §1.4. The single
+     definition for every missing-photo surface: teacher photo wells, school
+     crests, any empty media box. Pair it with a giant low-alpha initial.
+     Do not re-declare this gradient anywhere else. */
+  .stripe-placeholder {
+    background-image: repeating-linear-gradient(
+      45deg,
+      #F2ECE4 0 8px,
+      #F9F5F1 8px 16px
+    );
+  }
+
+  /* The hero stat cluster's three-element structure, and the desktop-only
+     guard for the ambient loops, live at the BOTTOM of this file — outside
+     @layer, so the guard is never purged along with unused utilities. */
+
+  @keyframes disclosureReveal {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes whatsapp-pulse {
+    0%   { box-shadow: 0 0 0 0    rgba(37, 211, 102, 0.3); }
+    12%  { box-shadow: 0 0 0 14px rgba(37, 211, 102, 0); }
+    100% { box-shadow: 0 0 0 0    rgba(37, 211, 102, 0); }
+  }
+
+  .whatsapp-pulse-once {
+    animation: whatsapp-pulse 7s linear 1s 3;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* For short scrollers inside a rounded panel — the facet dropdowns — where
+     hiding the bar entirely would remove the only cue that there is more
+     below, but the platform's full-width bar (with its stepper arrows) eats
+     into the chips and reads as a desktop control dropped into a sheet. */
+  /* Native <details> snaps open: the chevron rotates over 200ms while the
+     panel itself appears instantly, so the accordion reads as broken motion.
+     This gives the revealed content a fade-and-slide instead.
+
+     It deliberately does NOT animate the panel's height. That was built and
+     then removed: CSS.supports('selector(::details-content)') reports true in
+     current Chrome, yet the [open] rule did not override the closed rule's
+     `block-size: 0` — verified against a bare control, which grew 24px -> 64px
+     while identical markup carrying this class stayed at 24px. The panel
+     stayed clamped shut and every FAQ answer became unreachable. A disclosure
+     that will not disclose is far worse than one that opens without easing. */
+  .disclosure > *:not(summary) {
+    transform-origin: top;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .disclosure[open] > *:not(summary) {
+      animation: disclosureReveal 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+  }
+
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+
+  .scrollbar-slim::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.45);
+  }
+
+  /* Tap-feedback for raw inline-style buttons/links where :active can't be
+     expressed via the style prop. Button press is scale(.97) over .15s ease
+     per the design handoff's binding motion rule. */
+  .shikshaq-tap {
+    transition: transform .15s ease;
+  }
+
+  .shikshaq-tap:active {
+    transform: scale(0.97);
+  }
+
+  /* Hover/press tint for full-width inline-style list rows (search results,
+     recent searches) where a scale-down would look odd on a wide row. */
+  .shikshaq-row {
+    transition: background-color .15s ease-out;
+  }
+
+  .shikshaq-row:hover {
+    background-color: rgba(31,31,31,.04);
+  }
+
+  .shikshaq-row:active {
+    background-color: rgba(31,31,31,.07);
+  }
+}
+
+/* ---- Native date input normalisation --------------------------------------
+   Cross-browser workaround code. Goals, in order: date text left-aligned (WebKit
+   centres it by default), 16px font so iOS doesn't zoom on focus, 2.5rem height
+   to match every other input, calendar picker pinned right.
+   The platform-specific @supports/-webkit-min-device-pixel-ratio blocks that
+   used to follow only re-stated the padding below, so they were dropped.       */
+.date-input-left,
+input[type="date"].date-input-left,
+.date-input-mobile {
+  text-align: left !important;
+  direction: ltr !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 2.5rem !important;
+  line-height: 1.5 !important;
+  font-size: 16px !important; /* prevents iOS zoom on focus */
+  padding-left: 0.75rem !important;
+  padding-right: 2.5rem !important; /* room for the calendar icon */
+  box-sizing: border-box !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+.date-input-left::-webkit-datetime-edit {
+  text-align: left !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: calc(100% - 2rem) !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.date-input-left::-webkit-datetime-edit-text,
+.date-input-left::-webkit-datetime-edit-month-field,
+.date-input-left::-webkit-datetime-edit-day-field,
+.date-input-left::-webkit-datetime-edit-year-field {
+  text-align: left !important;
+  padding: 0 0.25rem 0 0 !important;
+  margin: 0 !important;
+  width: auto !important;
+}
+
+.date-input-left::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1;
+  position: absolute;
+  right: 0.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  margin: 0;
+}
+
+/* Keep the date field flush with the tel field it sits beside in forms. */
+.space-y-2 input[type="tel"] {
+  height: 2.5rem !important;
+}
+
+/* ---- Hero stat cluster: how the tilt and the two animations compose --------
+   VISUAL_LANGUAGE.md §7 + §8. Read this before building the cluster.
+
+   §8 gives each of the four stat cards a PERMANENT tilt (-5deg, 3.5deg,
+   -2.5deg, 4.5deg). §7 gives `fanIn` the literal end state `transform: none`.
+   Those two cannot live on the same element — fanIn would wipe the tilt at the
+   end of the entrance. Owner ruling: use a WRAPPER, so `fanIn` keeps its exact
+   spec value and only ever clears its own entrance transform.
+
+   THREE nested elements, one job each. Do not collapse them:
+
+     <div class="rotate-[-5deg]">                            1. TILT
+       <div class="animate-fan-in [animation-delay:50ms]">   2. ENTRANCE
+         <div class="animate-bob [animation-duration:5.5s]
+                     [animation-delay:550ms]">               3. AMBIENT FLOAT
+           ...card content...
+
+   1. TILT wrapper — the rotation and nothing else. No animation class ever
+      goes here. Use a Tailwind `rotate-[Ndeg]` utility, not an inline style.
+   2. ENTRANCE — `animate-fan-in` with the §8 per-card delay
+      (50 / 140 / 230 / 320ms). Its `both` fill-mode holds the finished state,
+      `transform: none`, which resolves against THIS element only and leaves
+      the wrapper's rotation untouched. Nothing else on this element.
+   3. FLOAT — `animate-bob` with the §8 per-card period
+      (5.5s / 6.5s / 7.5s / 6s). Delay it past the entrance (that card's entry
+      delay + fanIn's 0.5s) so the two never run at once. `bob` only ever
+      writes translateY, so it cannot fight the tilt above it.
+
+   Why three and not two: a single element cannot hold a finite entrance and an
+   infinite loop on the same `animation` property without them fighting over
+   fill-mode. Splitting them means each animation owns one element's transform
+   outright, and the static tilt owns a third.
+
+   `--bob-rotate` stays UNSET here (it defaults to 0deg) — the tilt is on the
+   wrapper. It exists only for a future case where rotation and float must
+   share one element. Do not set it on the stat cards.
+
+   The whole cluster is desktop-only per §8; mobile keeps the search-first
+   stack from DESIGN_SYSTEM.md §11. `bob` is additionally hard-stopped below. */
+
+/* Ambient infinite motion is DESKTOP-ONLY — VISUAL_LANGUAGE.md §7. It costs
+   battery on the mid-range Android phones that are our primary surface, so it
+   is disabled here at the token layer rather than trusted to call sites.
+   Deliberately outside @layer: this is a guard, not a utility, and it must
+   ship whether or not the content scan currently sees these classes. */
+@media (max-width: 1023px) {
+  .animate-sparkle,
+  .animate-bob {
+    animation: none !important;
+  }
+}
+
+/* Reduced motion kills EVERYTHING — VISUAL_LANGUAGE.md §7, DESIGN_SYSTEM.md §6.
+   The universal selector plus pseudo-elements and ::backdrop means this covers
+   every animation and transition in the app, including the §7 additions
+   (hero-swap, sparkle, fan-in, bob) and any future one. The new ambient
+   infinite loops make this MORE important, not less: `animation-iteration-count:1`
+   is what stops `sparkle`/`bob` looping forever, and the ambient utilities are
+   additionally hard-stopped below so no `transform` is left applied. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::backdrop {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Ambient decorative loops leave no residue at all. */
+  .animate-sparkle,
+  .animate-bob {
+    animation: none !important;
+  }
+}
+
+/* CRAFT.md §2: "prefers-reduced-motion: keep the fades, drop the movement."
+   Fixer round 2. The kill-switch above stops every animation from looping or
+   visibly travelling by collapsing animation-duration to 0.01ms -- but for
+   entrance utilities that combine a fade with translateY/scale/blur, a
+   near-zero duration erases the fade too: content simply snaps into place
+   with nothing readable happening, which is not what "keep the fades" asks
+   for. This block gives the ENTRANCE-ONLY utilities named in the fixer brief
+   (plus the .stagger-children children they're used with) a real, short,
+   movement-free fade instead -- same opacity curve, no translate/scale/blur,
+   still one-shot (the kill-switch's animation-iteration-count: 1 above still
+   applies to these class selectors too). Class selectors here outrank the
+   universal (*) kill-switch rule on specificity, so these properties win
+   despite both being !important.
+   Deliberately excluded: animate-spin (loading spinners must keep spinning),
+   animate-shimmer / animate-pulse (skeletons stay visible, static is fine),
+   and the capture shield (its own reduced-motion behaviour is untouched). */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes reducedMotionFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .animate-card-reveal,
+  .animate-card-blur-in,
+  .animate-fade-slide-up,
+  .animate-pop,
+  .animate-search-pop,
+  .animate-fan-in,
+  .animate-sticker-in,
+  .animate-tour-step-in,
+  .animate-blur-swap,
+  .animate-hero-swap,
+  .stagger-children > * {
+    animation-name: reducedMotionFadeIn !important;
+    animation-duration: 180ms !important;
+    animation-timing-function: ease-out !important;
+    animation-delay: 0ms !important;
+    animation-fill-mode: both !important;
+  }
+
+  /* Pure decoration with no "content arriving" meaning to fade in -- dropped
+     outright rather than converted to a fade. */
+  .animate-hero-blink,
+  .animate-count-glow {
+    animation: none !important;
+  }
+}
+
+/* =============================================================================
+   CHARACTER LAYER — task #3. "Loud moments" toolkit: outline/sticker/tape/
+   halftone/signpost. Per the brief these are reserved for hero, empty states,
+   onboarding, success moments, footer, and chip/card scale wayfinding — NOT
+   for restyling scannable list/grid surfaces (that stays crisp per the
+   "crisp skeleton, loud moments" direction). Placed outside @layer, same as
+   `.stripe-placeholder` and the reduced-motion guards below, so these survive
+   regardless of how a later agent's className scan resolves them.
+
+   Every utility here takes color via `currentColor` or a `--outline-color`
+   custom property the CALLER sets (e.g. `style={{ '--outline-color': subject.solid }}`
+   or a Tailwind arbitrary property `[--outline-color:theme(colors.brand.DEFAULT)]`),
+   so none of them hardcode a color — they compose with any subject-palette or
+   brand color per the task's hard constraint.
+   ============================================================================= */
+
+/* ---- Outline system -------------------------------------------------------
+   Thick-black-outline treatment — the single most consistent element across
+   the references. `--outline-width` and `--outline-color` are overridable;
+   defaults are a 3px near-black line, since "thick black outline" is the
+   default reading of the reference grammar. Use `.outline-thick` alone for
+   the line only; add `.outline-offset-shadow` for the solid offset
+   drop-shadow that gives the sticker/keycap look (no blur, hard edge). */
+.outline-thick {
+  --outline-width: 3px;
+  --outline-color: hsl(var(--foreground));
+  outline: var(--outline-width) solid var(--outline-color);
+  outline-offset: -1px;
+}
+
+.outline-offset-shadow {
+  --shadow-offset-x: 4px;
+  --shadow-offset-y: 4px;
+  --shadow-color: hsl(var(--foreground));
+  box-shadow: var(--shadow-offset-x) var(--shadow-offset-y) 0 0 var(--shadow-color);
+}
+
+/* ---- Sticker ---------------------------------------------------------------
+   Die-cut look: white keyline ring + thick outline + slight rotation.
+   Composable with any background color set by the caller (the element's own
+   `background`). Rotation variants give the "playful 3-8deg" range called
+   for in the brief; apply exactly one. `.sticker` alone is keyline+outline
+   with no offset shadow — pair with `.outline-offset-shadow` for the full
+   pinned-sticker look. */
+.sticker {
+  --outline-color: hsl(var(--foreground));
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 4px #FFFFFF,
+    0 0 0 7px var(--outline-color);
+}
+
+.sticker-rotate-sm { transform: rotate(-3deg); }
+.sticker-rotate-md { transform: rotate(5deg); }
+.sticker-rotate-lg { transform: rotate(-7deg); }
+.sticker-rotate-md-rev { transform: rotate(-5deg); }
+.sticker-rotate-lg-rev { transform: rotate(7deg); }
+
+/* ---- Tape ---------------------------------------------------------------
+   Artifact treatment for "pinning" cards, e.g. an onboarding step or a
+   featured-teacher moment. `.tape` is a single strip positioned at the top;
+   `.tape--corner-*` offer alternate placements. Color is a translucent warm
+   neutral by default (reads as masking tape on any card fill) but honors
+   `--tape-color` if the caller wants a tinted strip. */
+.tape {
+  --tape-color: rgba(249, 245, 241, 0.85);
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 72px;
+  height: 26px;
+  background: var(--tape-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  z-index: 1;
+}
+
+.tape--corner-left {
+  left: 14%;
+  transform: rotate(-6deg);
+}
+
+.tape--corner-right {
+  left: auto;
+  right: 14%;
+  transform: rotate(6deg);
+}
+
+/* ---- Halftone / riso grain ---------------------------------------------------
+   Subtle texture overlay, cheap to render — pure CSS radial-gradient dot
+   pattern, no image request. Apply to a `position: relative` container; the
+   texture lives on `::after` so it never intercepts pointer events and never
+   fights the element's own background. Opacity is intentionally low (riso
+   "grain", not a loud pattern). Color follows `currentColor` via
+   `--halftone-color` so it can sit on light or dark/tinted fills. */
+.halftone-overlay {
+  position: relative;
+}
+
+.halftone-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  --halftone-color: currentColor;
+  background-image: radial-gradient(currentColor 1px, transparent 1px);
+  background-size: 6px 6px;
+  opacity: 0.06;
+  color: var(--halftone-color);
+}
+
+/* ---- Signpost ----------------------------------------------------------------
+   The wayfinding primitive — a directional pointer shape for subject/board
+   chips, cards, and section headers. Three scales share one clip-path family
+   (a rectangle with one pointed end) so the metaphor stays legible whether
+   it's a small chip or a full section-header banner. Background/text color
+   always comes from the caller (subject-palette `solid`/`tint`, brand, etc.)
+   — nothing here is hardcoded.
+
+   `.signpost` — chip scale (pill body + pointed right end), pairs with
+     inline padding that leaves room for the point (`padding-right` already
+     accounts for it).
+   `.signpost-card` — card scale, pointed left edge, for a subject/board card
+     that reads as a route marker.
+   `.signpost-header` — section-header scale, a wide banner with a pointed
+     right end, sized for a page/section title bar. */
+.signpost {
+  --signpost-point: 10px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--signpost-point)) 0,
+    100% 50%,
+    calc(100% - var(--signpost-point)) 100%,
+    0 100%
+  );
+  padding-right: calc(var(--signpost-point) + 0.75rem);
+}
+
+.signpost-card {
+  --signpost-point: 16px;
+  clip-path: polygon(
+    var(--signpost-point) 0,
+    100% 0,
+    100% 100%,
+    var(--signpost-point) 100%,
+    0 50%
+  );
+  padding-left: calc(var(--signpost-point) + 0.5rem);
+}
+
+.signpost-header {
+  --signpost-point: 22px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--signpost-point)) 0,
+    100% 50%,
+    calc(100% - var(--signpost-point)) 100%,
+    0 100%
+  );
+  padding-right: calc(var(--signpost-point) + 1.5rem);
+}
+
+/* ---- Entrance choreography (task #4) -----------------------------------------
+   Staggers a list/grid's direct children with `animate-card-reveal` (the
+   existing whitelisted entrance) without hand-writing a delay per item.
+   Caps at 6 items per DESIGN_SYSTEM.md §6's "stagger 40ms, cap at 6 items" —
+   items past the 6th share the 6th's delay rather than climbing forever.
+   Usage: put `.stagger-children` on the grid/list container and
+   `animate-card-reveal` on each child; no per-item inline style needed. */
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(n+6) { animation-delay: 200ms; }
+
+/* On touch devices, sticky :hover states shouldn't latch after a tap.
+   (Previously this block also forced `transition-property` on every element
+   and promoted every img/button to its own GPU layer via translateZ(0) —
+   both hurt performance: the layer-per-element explosion cost memory and the
+   blanket transition override killed tactile transform feedback on mobile.) */
+@media (hover: none) {
+  .teacher-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+/* =============================================================================
+   REFERENCE DEVICE LIBRARY — pure-CSS devices. See REFERENCE_DEVICES.md for
+   the letter-to-device mapping and src/components/devices/README.md for full
+   usage docs (this file only carries the devices that don't need React
+   structure/props). Placed outside @layer, same as `.stripe-placeholder`
+   above, so class-scan purging can never drop them. Every device takes color
+   via a caller-set custom property (`--marker-color`, `--grid-line-color`,
+   etc.) or `currentColor` — never a hardcoded hex, per the task's hard
+   constraint. Colors should come from a token or `getSubjectPalette()`.
+   ============================================================================= */
+
+/* NOTE: Device A (marker highlight) and Device I (graph/ruled ground) are
+   NOT re-declared here — they already exist further below as `.marker-highlight`
+   (+ `--pill` / `--tilt` / `--outlined` variants) and `.ground-graph` /
+   `.ground-graph--fine` / `.ground-ruled` under the "REFERENCE DEVICES" block.
+   Use those. This block only adds the devices not covered elsewhere. */
+
+/* ---- G. Torn-paper banner ---------------------------------------------------
+   `.torn-edge` (above) gives a torn edge mask on one side of an element.
+   `.torn-banner` extends it into a full strip: torn top AND bottom, for a
+   section header or shelf-header label carrying a title. Color is the
+   element's own background (caller sets it); the mask punches the paper-tear
+   silhouette out of both the top and bottom edges via two stacked
+   conic-gradient masks. */
+.torn-banner {
+  --torn-size: 14px;
+  position: relative;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  mask-image:
+    conic-gradient(from -45deg at bottom, #000 90deg, transparent 0),
+    conic-gradient(from 135deg at top, #000 90deg, transparent 0);
+  mask-size: var(--torn-size) var(--torn-size), var(--torn-size) var(--torn-size);
+  mask-repeat: repeat-x, repeat-x;
+  mask-position: bottom, top;
+  -webkit-mask-image:
+    conic-gradient(from -45deg at bottom, #000 90deg, transparent 0),
+    conic-gradient(from 135deg at top, #000 90deg, transparent 0);
+  -webkit-mask-size: var(--torn-size) var(--torn-size), var(--torn-size) var(--torn-size);
+  -webkit-mask-repeat: repeat-x, repeat-x;
+  -webkit-mask-position: bottom, top;
+}
+
+/* ---- H. Halftone dot ground — strengthened -----------------------------------
+   `.halftone-overlay` (above) is deliberately subtle (0.06 opacity "riso
+   grain"). Per REFERENCE_DEVICES.md §H this device is "near-unused" and the
+   brief calls for genuinely saturated, high-impact application on loud
+   surfaces (first-fold color bands, empty-state cards, footer, onboarding).
+   `.halftone-overlay-strong` is the same dot-screen mechanism at a much
+   bolder opacity and slightly larger dot for a true printed/riso feel —
+   apply this one, not the base variant, on loud-surface color bands. */
+.halftone-overlay-strong::after {
+  background-size: 9px 9px;
+  opacity: 0.16;
+}
+
+/* ---- I. Graph / grid paper ground -------------------------------------------
+   CSS repeating-linear-gradient grid, two densities. The single most
+   on-theme ground for an exam-paper library — reads as "school exercise
+   book" instantly. Apply to a `position:relative` container (or the page
+   background directly); line color/opacity configurable via
+   `--grid-line-color`, defaults to a faint warm-neutral line that reads on
+   the warm bone ground.
+   `.grid-paper-fine`  — dense squared graph-paper grid (12px cells).
+   `.grid-paper-ruled` — wider horizontal ruled-notebook lines (28px). */
+.grid-paper-fine {
+  --grid-line-color: rgba(31, 31, 31, 0.07);
+  background-image:
+    repeating-linear-gradient(0deg, var(--grid-line-color) 0 1px, transparent 1px 12px),
+    repeating-linear-gradient(90deg, var(--grid-line-color) 0 1px, transparent 1px 12px);
+}
+
+.grid-paper-ruled {
+  --grid-line-color: rgba(31, 31, 31, 0.09);
+  background-image: repeating-linear-gradient(
+    0deg,
+    var(--grid-line-color) 0 1px,
+    transparent 1px 28px
+  );
+}
+
+/* ---- O. Signpost cluster — chip-scale extension ------------------------------
+   `.signpost` / `.signpost-card` / `.signpost-header` (above) give the single
+   pointed-plate shape at three scales. `.signpost-plate` is the cluster unit:
+   a signpost-header-scale plate sized for stacking several on a post (see
+   `<SignpostCluster>` in src/components/devices/ for the stacked React
+   composition with per-plate rotation and color). Kept here since it's a pure
+   shape utility with no state. */
+.signpost-plate {
+  --signpost-point: 14px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--signpost-point)) 0,
+    100% 50%,
+    calc(100% - var(--signpost-point)) 100%,
+    0 100%
+  );
+  padding: 0.6rem 1.4rem 0.6rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* ---- Q. Ticket / coupon shape ------------------------------------------------
+   Semicircular notches bitten out of the left and right edges, plus an
+   optional dashed tear line. The notch geometry is a fixed-radius mask so it
+   holds up at any element width — see `<TicketShape>` for the React wrapper
+   that also renders the dashed divider at a caller-supplied position. */
+.ticket-notched {
+  --notch-radius: 10px;
+  --notch-color: var(--warm-page, #F9F5F1);
+  mask-image:
+    radial-gradient(circle var(--notch-radius) at 0 50%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--notch-radius) at 100% 50%, transparent 99%, #000 100%);
+  mask-composite: intersect;
+  -webkit-mask-image:
+    radial-gradient(circle var(--notch-radius) at 0 50%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--notch-radius) at 100% 50%, transparent 99%, #000 100%);
+  -webkit-mask-composite: source-in, source-in;
+}
+
+/* ============================================================================
+   REFERENCE DEVICES — see REFERENCE_DEVICES.md for the source image of each.
+   Owner ruling (VISUAL_DIRECTION.md §9a): the ground stays LIGHT — dark footer
+   only. So saturated color and heavy display type carry the impact. These
+   devices are deliberately bold; timid tints were already rejected once.
+   All colors come from tokens or a caller-set custom property. No new hex
+   beyond the shared near-black ink already used by the outline system.
+   ========================================================================== */
+
+/* ---- Device A: Marker highlight --------------------------------------------
+   Reference: Lots Art ("ILLUSTRATION" on yellow, "YOUR BRAND" on a green pill),
+   Chuckle deck ("CREATIVE", "JOY"). A highlighter block sitting BEHIND one or
+   two words of a headline, slightly larger than the text.
+
+   Implemented with box-decoration-break so it survives line wrapping — a
+   headline that breaks mid-highlight still paints both fragments correctly,
+   which a pseudo-element approach cannot do.
+
+   Usage: <span class="marker-highlight" style={{'--marker-color': palette.solid}}>word</span>
+   Variants: .marker-highlight--pill (rounded), .marker-highlight--tilt (rotated) */
+.marker-highlight {
+  --marker-color: hsl(var(--brand));
+  background-color: var(--marker-color);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.06em 0.24em;
+  margin: 0 -0.06em;
+  border-radius: 3px;
+}
+
+.marker-highlight--pill {
+  border-radius: 999px;
+  padding: 0.06em 0.42em;
+}
+
+.marker-highlight--tilt {
+  display: inline-block;
+  transform: rotate(-1.5deg);
+}
+
+/* ---- Annotated highlight tilt (D-007, desktop phase) -----------------------
+   Backs AnnotatedHighlight's `tilt` prop (src/components/marketing/annotated-
+   statement.tsx) — the one bold word/phrase inside About/Contact/Join's
+   headline statement, e.g. Join's "Keep every rupee." block. The rotation
+   degree is caller-supplied and arbitrary (not one of a fixed set), so it is
+   set via the `--annotated-tilt` custom property in an inline style rather
+   than a Tailwind arbitrary-value class (which requires a static value at
+   build time). Putting the actual `transform` here, instead of on the inline
+   style directly, is what lets the `lg` media query below win — an inline
+   `style` attribute cannot be overridden by any stylesheet rule, tilt-flattening
+   or otherwise. Mirrors the pill overlay's `lg:rotate-0` in the same file. */
+.annotated-highlight-tilt {
+  transform: rotate(var(--annotated-tilt, 0deg));
+}
+
+@media (min-width: 1024px) {
+  .annotated-highlight-tilt {
+    transform: none;
+  }
+}
+
+/* M-007: every rotate() flattens under reduced motion, at every width — the
+   same "inline style always wins" reasoning as the lg: block above applies
+   here too. */
+@media (prefers-reduced-motion: reduce) {
+  .annotated-highlight-tilt {
+    transform: none;
+  }
+}
+
+/* Outlined variant — highlight plus the structural black line, for a
+   first-fold headline that needs maximum presence on the light ground. */
+.marker-highlight--outlined {
+  box-shadow: 0 0 0 3px hsl(var(--foreground));
+}
+
+/* ---- Device I: Graph / ruled paper ground -----------------------------------
+   Reference: pltm (fine graph grid), OVERFLOW (blue grid), My Confession.
+   The most on-theme ground available to an exam-paper product — it reads
+   instantly as a school exercise book.
+
+   `.ground-graph` is squared paper; `.ground-ruled` is lined paper with a
+   margin rule. Both are pure gradients: no image request, no layout cost.
+   Line color and cell size are overridable. */
+.ground-graph {
+  --graph-line: rgba(31, 31, 31, 0.07);
+  --graph-cell: 22px;
+  background-image:
+    linear-gradient(to right, var(--graph-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--graph-line) 1px, transparent 1px);
+  background-size: var(--graph-cell) var(--graph-cell);
+}
+
+.ground-graph--fine {
+  --graph-cell: 11px;
+}
+
+.ground-ruled {
+  --rule-line: rgba(31, 31, 31, 0.08);
+  --rule-height: 28px;
+  background-image: linear-gradient(to bottom, transparent calc(var(--rule-height) - 1px), var(--rule-line) calc(var(--rule-height) - 1px));
+  background-size: 100% var(--rule-height);
+}
+
+/* ---- Device J: Wavy / scalloped divider -------------------------------------
+   Reference: bitesized (red-to-cream wave edge), Truus.
+   A section boundary that is a wave or scallop instead of a straight line.
+   Applied to a band element; masks its own bottom (or top) edge so the band
+   colour tears into the next section. Flip with --divider-flip: -1. */
+.divider-wave {
+  --wave-size: 26px;
+  --divider-flip: 1;
+  -webkit-mask-image: radial-gradient(var(--wave-size) at 50% 0, transparent 99%, #000 101%);
+  mask-image: radial-gradient(var(--wave-size) at 50% 0, transparent 99%, #000 101%);
+  -webkit-mask-size: calc(var(--wave-size) * 2) 100%;
+  mask-size: calc(var(--wave-size) * 2) 100%;
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+}
+
+.divider-scallop {
+  --scallop-size: 20px;
+  -webkit-mask-image: radial-gradient(circle at 50% 100%, #000 var(--scallop-size), transparent calc(var(--scallop-size) + 1px));
+  mask-image: radial-gradient(circle at 50% 100%, #000 var(--scallop-size), transparent calc(var(--scallop-size) + 1px));
+  -webkit-mask-size: calc(var(--scallop-size) * 2) 100%;
+  mask-size: calc(var(--scallop-size) * 2) 100%;
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+}
+
+/* ---- Device K: Marquee ticker ------------------------------------------------
+   Reference: Skate the City ("Skate Park + Skate Park +"), Mershe.
+   A thin saturated band of repeating text. Infinite motion is otherwise banned
+   (DESIGN_SYSTEM.md §6), so this is the one sanctioned exception and it is
+   frozen entirely under prefers-reduced-motion by the universal kill-switch,
+   and static below lg like the other ambient motion. */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 28s linear infinite;
+}
+
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (max-width: 1023px) {
+  .marquee-track { animation: none; }
+}
+
+/* Printing a gated paper.
+
+   Ctrl+P and "Save as PDF" were a clean way around the reader's copy lock:
+   the print view rendered every question the client held, as selectable text
+   in a file. The questions are dropped from the printed page and replaced by
+   a line saying where to read them.
+
+   This protects the FIVE free questions only. The other 181 are not on the
+   client at all -- the server never sent them -- which is what actually keeps
+   them off a printout. */
+/* Capture shield. <html data-capture-shield> is set by CaptureShield for a
+   couple of seconds whenever a capture looks likely -- a screenshot chord, or
+   the page losing focus to a snipping tool. Protected text is blanked rather
+   than merely covered, so a capture composited underneath an overlay still
+   gets nothing.
+
+   `color: transparent` with a matching background keeps the layout exactly
+   where it was: hiding or collapsing the text would reflow the page and make
+   the shield obvious and annoying during an ordinary alt-tab, which is by far
+   the most common reason this fires. */
+:root[data-capture-shield] [data-protected],
+:root[data-capture-shield] [data-protected] * {
+  color: transparent !important;
+  text-shadow: none !important;
+  background-image: none !important;
+}
+:root[data-capture-shield] [data-protected] img,
+:root[data-capture-shield] [data-protected] svg,
+:root[data-capture-shield] [data-protected] .katex {
+  visibility: hidden !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-capture-shield] [data-protected] { transition: color 60ms linear; }
+}
+
+@media print {
+  /* The list itself stays displayed so its ::after can render -- hiding the
+     container would take the replacement line down with the questions. */
+  [data-paper-locked] > li,
+  [data-protected] { display: none !important; }
+  [data-paper-locked] { display: block !important; }
+  [data-paper-locked]::after {
+    display: block;
+    content: 'The questions in this paper are read on shikshaq.in. Please open the paper there.';
+    padding: 24px 0;
+    font-size: 13px;
+  }
+}

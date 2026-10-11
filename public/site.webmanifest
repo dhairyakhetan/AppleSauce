@@ -1,0 +1,17 @@
+{
+  "name": "Shikshaq",
+  "short_name": "Shikshaq",
+  "description": "Find verified tuition teachers in Kolkata for free.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F9F5F1",
+  "theme_color": "#FF8000",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "120x120",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.local
+.env*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Docs (optional / local)
+docs/GOOGLE_AUTH_CUSTOM_DOMAIN.md
+
+# Claude Code agent worktree scratch space
+.claude/worktrees/
+
+# Design handoff drops: the zips the redesign arrived in and their extracted
+# copies. Source material, not source code -- the work from them lives in src/.
+/Shikshok mobile design overhaul*
+/maths_question_bank_deploy-*
+/.handoff-ref/
+
+# Local audit + working notes
+/.audit-reports/
+/AUDIT_*.md
+
+# Supabase CLI scratch
+supabase/.temp/
+
+# tsc -b incremental state
+*.tsbuildinfo
+
+# Regenerable bank load SQL (npm run generate-bank-sql); the data lives in Supabase
+supabase/bank-import.sql
+supabase/bank/
+
+# Downloaded skill/tool archives and bank deploy zips that landed in the repo
+# root while working. Hundreds of MB between them; never part of the app.
+*.zip
+
+# /brag (latent-spaces/brag) skill install + its generated output -- a
+# personal deliverable (a launch video), never part of the app.
+/.agents/
+/.claude/skills/
+/skills-lock.json
+/brag-output/
+
+# Scratch output from scripts/convert-subject-bank.ts (--reserve id list, etc.)
+tmp/
+
+# Raw upstream subject-bank JSONs, ~9MB, consumed once by
+# scripts/convert-subject-bank.ts. The CONVERTED output
+# (data/question-bank-subjects.json) is committed as the source of record for
+# re-imports, exactly as data/question-bank.json is for the maths bank. Keep
+# local copies of these two if you ever need to re-run the conversion.
+/history_civics_bank.json
+/question_bank_economics.json
