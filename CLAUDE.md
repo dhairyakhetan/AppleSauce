@@ -1,5 +1,34 @@
 # Shikshaq — working notes
 
+## Read first: this copy is the games branch
+
+This is branch `feat/games-integration` of `dhairyakhetan/AppleSauce`, not the
+Shikshaq repo. Its first commit is Shikshaq-main exactly as downloaded on
+11 October 2026. The work to bring the question bank and the games into the
+main site goes on top, so the difference from that first commit is what gets
+handed to the Shikshaq repo. The games site it comes from is `main` of this
+same repo (shikshaq-games.vercel.app).
+
+- **Push only to this branch.** Never run `npm run push:all` here, and never
+  add or push to the Shikshaq or `kanitest` remotes. "Two remotes, ONE branch"
+  below is about the Shikshaq repo itself.
+- **The live database cannot be restored.** There is no backup history to go
+  back to, so anything changed there stays changed.
+  - Everything that already exists is read-only: no insert, update or delete
+    on its tables, and no drop, alter, rename or truncate. No
+    `create or replace` of a function that already exists, and no new
+    trigger, policy, grant, index or foreign key on an existing table (a
+    foreign key adds hidden triggers to the table it points at).
+  - Everything new goes in one new schema of its own, made with plain
+    `create` the first time (not `or replace`, not `if not exists`), so a
+    name that is already taken stops the whole script instead of changing
+    what is there. Removing all of it is then one `drop schema ... cascade`.
+  - Never run SQL that writes on the live database yourself. Give it to the
+    user, rehearsed first inside a transaction that raises at the end, with a
+    backup taken before it is run.
+
+---
+
 Kolkata tuition-teacher marketplace with a past-papers library.
 React 18 + Vite + TypeScript + Tailwind + shadcn/ui, Supabase behind it.
 
