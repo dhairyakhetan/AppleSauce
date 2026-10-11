@@ -2,15 +2,17 @@
 
 ## Read first: this copy is the games branch
 
-This is branch `feat/games-integration` of `dhairyakhetan/AppleSauce`, not the
-Shikshaq repo. Its first commit is Shikshaq-main exactly as downloaded on
+This is branch `games` of `dhairyakhetan/AppleSauce`, not the Shikshaq repo.
+Work on `games`; `feat/games-integration` gets the same commits. Its first commit is Shikshaq-main exactly as downloaded on
 11 October 2026. The work to bring the question bank and the games into the
 main site goes on top, so the difference from that first commit is what gets
 handed to the Shikshaq repo. The games site it comes from is `main` of this
 same repo (shikshaq-games.vercel.app).
 
-- **Push only to this branch.** Never run `npm run push:all` here, and never
-  add or push to the Shikshaq or `kanitest` remotes. "Two remotes, ONE branch"
+- **Push to `games` and `feat/games-integration` together**, so they never
+  differ: `git push origin games games:feat/games-integration`. Never run
+  `npm run push:all` here, and never add or push to the Shikshaq or
+  `kanitest` remotes. "Two remotes, ONE branch"
   below is about the Shikshaq repo itself.
 - **The live database cannot be restored.** There is no backup history to go
   back to, so anything changed there stays changed.

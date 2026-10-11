@@ -2,7 +2,7 @@
 
 Use this when making the pull request into the Shikshaq repo. Everything here is relative to the first commit on this
 branch, `4cd7b5b` (Shikshaq-main exactly as downloaded on 11 October 2026), so
-`git diff 4cd7b5b..feat/games-integration` shows the same changes line by line.
+`git diff 4cd7b5b..games` shows the same changes line by line (`feat/games-integration` is the same branch, kept in step).
 
 **Not for the Shikshaq repo:** this file, and the "Read first: this copy is the games branch" section at the top of
 `CLAUDE.md` (it is about this branch only). Leave both out of the PR.
