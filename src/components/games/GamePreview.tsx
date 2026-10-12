@@ -39,14 +39,14 @@ export function GamePreview({ rows }: { rows: Row[] }) {
       <h2 id="preview-h" className="text-[15px] font-bold text-foreground">3. See how it plays</h2>
       {!rows.length && <p className="text-[14px] text-warm-secondary">A game made from your questions shows here.</p>}
       {questions.length > 0 && (
-        <Revise compact questions={questions}
+        <Revise compact written questions={questions}
           extra={() => <button type="button" className={chip('card')} onClick={() => setBig(true)}><Maximize2 aria-hidden /> Full size</button>} />
       )}
       <Dialog open={big} onOpenChange={setBig}>
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl bg-card">
           <DialogTitle>See how it plays</DialogTitle>
           <DialogDescription className="sr-only">Full size, as students see it.</DialogDescription>
-          {big && <Revise questions={questions} />}
+          {big && <Revise written questions={questions} />}
         </DialogContent>
       </Dialog>
     </section>

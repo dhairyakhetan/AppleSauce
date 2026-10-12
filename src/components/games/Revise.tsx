@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
 import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
 import type { BankQuestion } from '@/lib/games/rows';
@@ -10,9 +10,10 @@ import { chip, GAME_NAMES, plural, whyNot } from './helpers';
    short puzzle made from those questions on the device by the games engine (src/lib/games/engine), which checks every
    puzzle before it is shown. A game these topics can't make is greyed out.
 
-   Used twice: Try the games (the approved question bank, full size) and the preview on Write questions (the questions
-   being written, `compact`: smaller, with the pickers that have only one choice left out, and with what each greyed-out
-   game needs, so the writer can fix it). */
+   Used twice: Try the games (the approved question bank, full size) and the preview on Write questions (`written`: the
+   class, subject and chapter are the ones being written, so their pickers show only when the text has more than one to
+   choose from; `compact` too in the page itself: smaller, with what each greyed-out game needs, so the writer can fix
+   it). */
 
 /** What a puzzle needs to know about a question. */
 export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer'>;
@@ -42,16 +43,19 @@ function chaptersOf(questions: ReviseQuestion[]): Chapter[] {
   }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || a.subject.localeCompare(b.subject) || (a.no ?? 0) - (b.no ?? 0));
 }
 
-export function Revise({ questions, compact = false, heading, extra }: {
+export function Revise({ questions, compact = false, written = false, heading, extra }: {
   questions: ReviseQuestion[];
   /** The small version, for the preview on Write questions. */
   compact?: boolean;
+  /** The questions being written: no class, subject or chapter to pick unless the text has more than one. */
+  written?: boolean;
   /** Shown above the pickers (the preview puts its title and buttons here). */
   heading?: ReactNode;
   /** Shown next to "New puzzle" (the preview's "Full size"). */
   extra?: (game: { chapterId: string; topics: string[] }) => ReactNode;
 }) {
   const chapters = useMemo(() => chaptersOf(questions), [questions]);
+  const uid = useId(); // the preview and Try the games can be on the page at once
   /** The chapter open, and the topics left out of it: every other topic is in, including one added later. */
   const [pick, setPickState] = useState({ chapter: '', out: [] as string[] });
   const [round, setRound] = useState(0);
@@ -104,12 +108,12 @@ export function Revise({ questions, compact = false, heading, extra }: {
     <div className={cn('flex flex-col', compact ? 'gap-3' : 'gap-4')}>
       {heading}
       <section aria-label="What are you revising?" className={box}>
-        {!compact && <h2 className="text-[15px] font-bold text-foreground">What are you revising?</h2>}
-        {(!compact || classes.length > 1 || subjects.length > 1) && (
+        {!written && <h2 className="text-[15px] font-bold text-foreground">What are you revising?</h2>}
+        {(!written || classes.length > 1 || subjects.length > 1) && (
           <div className="flex flex-wrap gap-x-6 gap-y-3">
             <div className="flex flex-col gap-1.5">
-              <span className={label} id={`class-l${compact ? '-p' : ''}`}>Class</span>
-              <div className="flex flex-wrap gap-1" role="radiogroup" aria-labelledby={`class-l${compact ? '-p' : ''}`}>
+              <span className={label} id={`${uid}-class`}>Class</span>
+              <div className="flex flex-wrap gap-1" role="radiogroup" aria-labelledby={`${uid}-class`}>
                 {classes.map((n) => (
                   <button key={n} type="button" role="radio" aria-checked={n === chapter.cls} onClick={() => open(chapters.find((c) => c.cls === n))}
                     className={cn(pill, n === chapter.cls ? 'bg-panel text-background' : 'bg-card text-warm-secondary hover:text-foreground')}>Class {n}</button>
@@ -117,8 +121,8 @@ export function Revise({ questions, compact = false, heading, extra }: {
               </div>
             </div>
             <div className="flex flex-col gap-1.5">
-              <span className={label} id={`subject-l${compact ? '-p' : ''}`}>Subject</span>
-              <div className="flex flex-wrap gap-1" role="radiogroup" aria-labelledby={`subject-l${compact ? '-p' : ''}`}>
+              <span className={label} id={`${uid}-subject`}>Subject</span>
+              <div className="flex flex-wrap gap-1" role="radiogroup" aria-labelledby={`${uid}-subject`}>
                 {subjects.map((s) => (
                   <button key={s} type="button" role="radio" aria-checked={s === chapter.subject} onClick={() => open(chapters.find((c) => c.cls === chapter.cls && c.subject === s))}
                     className={cn(pill, s === chapter.subject ? 'bg-panel text-background' : 'bg-card text-warm-secondary hover:text-foreground')}>{s}</button>
@@ -127,10 +131,10 @@ export function Revise({ questions, compact = false, heading, extra }: {
             </div>
           </div>
         )}
-        {(!compact || inSubject.length > 1) && (
+        {(!written || inSubject.length > 1) && (
           <div className="flex flex-col gap-1.5">
-            <span className={label} id={`chapter-l${compact ? '-p' : ''}`}>Chapter</span>
-            <ul className={cn('grid grid-cols-1 gap-2', compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')} aria-labelledby={`chapter-l${compact ? '-p' : ''}`}>
+            <span className={label} id={`${uid}-chapter`}>Chapter</span>
+            <ul className={cn('grid grid-cols-1 gap-2', compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')} aria-labelledby={`${uid}-chapter`}>
               {inSubject.map((c) => (
                 <li key={c.id}>
                   <button type="button" aria-pressed={c.id === chapter.id} onClick={() => open(c)}
@@ -148,7 +152,7 @@ export function Revise({ questions, compact = false, heading, extra }: {
         )}
         <fieldset className="flex flex-col gap-1.5">
           <legend className={cn(label, 'mb-1.5')}>
-            {compact ? `Topics in ${chapter.no !== null ? `Chapter ${chapter.no}` : 'this chapter'}: all are in, tap one to leave it out` : `Which topics of Chapter ${chapter.no} did you study?`}
+            {written ? 'Topics: tap one to leave it out' : `Which topics of Chapter ${chapter.no} did you study?`}
           </legend>
           <div className="flex flex-wrap gap-1.5">
             {chapter.topics.map((t) => (
@@ -188,7 +192,7 @@ export function Revise({ questions, compact = false, heading, extra }: {
         )}
         <div className={cn('rounded-2xl bg-card', compact ? 'p-3' : 'p-4 sm:p-6')}>
           {game ? <GameView key={`${type}|${seed}|${made}`} game={game} compact={compact} onNext={() => setRound((r) => r + 1)} />
-            : <p className="py-6 text-center text-[14px] text-warm-secondary">These topics don't have enough questions for a puzzle yet. {compact ? 'Add a few more.' : 'Pick more topics.'}</p>}
+            : <p className="py-6 text-center text-[14px] text-warm-secondary">These topics don't have enough questions for a puzzle yet. {written ? 'Add a few more.' : 'Pick more topics.'}</p>}
         </div>
       </section>
     </div>
