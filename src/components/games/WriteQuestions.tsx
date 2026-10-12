@@ -2,7 +2,7 @@ import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef
 import { Link } from 'react-router-dom';
 import { ArrowDown, Copy, Download, Send } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
-import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, detailsId, LABEL, parseNumbered, readDetails, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
+import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, detailsId, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, sameName } from '@/lib/games/catalog';
 import { asText, baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from '@/lib/games/format';
 import { chatbotPrompt, listedMaterial } from '@/lib/games/prompt';
@@ -214,14 +214,34 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   const listHasNone = !!catalog.list && !listed.length && !!checkBoard(details.board).code && checkClass(details.class).value !== null && !!checkSubject(details.subject).code;
   const prompt = chatbotPrompt(`${location.origin}/games`) + (chosen ? listedMaterial(chosen) : '');
 
-  /** A topic chip: its Topic line goes after the line the cursor is on (or replaces it when it is empty), and the
+  /** A topic chip. When the topic the cursor is under has no questions yet, its Topic line is swapped for this one;
+   * otherwise this Topic line goes after the line the cursor is on (or replaces it when it is empty). Either way the
    * cursor moves to the line after it, ready for the first question. */
   const addTopic = (t: ListTopic) => {
     const lines = raw.split('\n');
     const topicLine = `Topic ${t.topic_no}: ${t.name}`;
-    let at = caret >= 1 && caret <= lines.length ? caret - 1 : lines.length - 1;
-    if (lines[at]?.trim()) at += 1;
-    lines.splice(at, lines[at]?.trim() === '' ? 1 : 0, topicLine);
+    const cur = caret >= 1 && caret <= lines.length ? caret - 1 : lines.length - 1;
+    // the Topic line the cursor is under (none once a Chapter line is passed), and whether a question follows it
+    let top = -1;
+    for (let i = cur; i >= 0; i--) {
+      const m = readMeta(lines[i]);
+      if (m?.key === 'topic') { top = i; break; }
+      if (m?.key === 'chapter') break;
+    }
+    let hasQuestions = false;
+    for (let i = top + 1; top >= 0 && i < lines.length; i++) {
+      const m = readMeta(lines[i]);
+      if (m?.key === 'topic' || m?.key === 'chapter') break;
+      if (!m && lines[i].trim()) { hasQuestions = true; break; }
+    }
+    let at: number;
+    if (top >= 0 && !hasQuestions) {
+      at = top;
+      lines[at] = topicLine;
+    } else {
+      at = lines[cur]?.trim() ? cur + 1 : cur;
+      lines.splice(at, lines[at]?.trim() === '' ? 1 : 0, topicLine);
+    }
     if (at === lines.length - 1) lines.push('');
     const next = lines.join('\n');
     const pos = lines.slice(0, at + 1).join('\n').length + 1;
@@ -260,14 +280,15 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <section className={SECTION} aria-labelledby="in-h">
           <h2 id="in-h" className="text-[15px] font-bold text-foreground">1. Write</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* Chapter gets a row of its own: its names are long */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {DETAIL_KEYS.map((k) => {
               const problem = typingBox === k ? undefined : k === 'chapter' && listHasNone
                 ? { level: 'warn' as const, text: `The list has no chapters for this board, class and subject yet.` }
                 : checkDetail(k, details[k]);
               if (k === 'chapter' && listed.length) {
                 return (
-                  <div className="col-span-2 flex flex-col gap-1 sm:col-span-1" key={k}>
+                  <div className="col-span-full flex flex-col gap-1" key={k}>
                     <label htmlFor="d-chapter" className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
                     <select id="d-chapter" value={chosen ? String(chosen.chapter_no) : ''}
                       className={cn(FIELD, 'h-11', details.chapter && !chosen && 'ring-2 ring-destructive')}
@@ -282,7 +303,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
                 );
               }
               return (
-                <div className={cn('flex flex-col gap-1', k === 'chapter' && 'col-span-2 sm:col-span-1')} key={k}>
+                <div className={cn('flex flex-col gap-1', k === 'subject' && 'col-span-2 sm:col-span-1', k === 'chapter' && 'col-span-full')} key={k}>
                   <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
                   <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${HINT[k]}`} autoComplete="off"
                     className={cn(FIELD, 'h-11', problem?.level === 'error' && 'ring-2 ring-destructive', problem?.level === 'warn' && 'ring-2 ring-brand')}
@@ -312,7 +333,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
           </p>
           {chosen && (chosen.topics.length ? (
             <div className="flex flex-col gap-1.5">
-              <p className="text-[12px] font-semibold text-warm-secondary">Topics of this chapter on the list: press one to add its Topic line below the cursor</p>
+              <p className="text-[12px] font-semibold text-warm-secondary">Topics of this chapter on the list: press one to add its Topic line below the cursor. A topic with no questions yet is swapped for it.</p>
               <div className="flex flex-wrap gap-2">
                 {chosen.topics.map((t) => (
                   <button key={t.topic_id} type="button" className={chip('card')} onClick={() => addTopic(t)}>Topic {t.topic_no}: {t.name}</button>
