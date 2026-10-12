@@ -303,8 +303,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   colour variables).
 - **Questions and answers are never reworded.** Only numbering, labels,
   bullets, Markdown and spaces are removed.
-- **The chatbot prompt and the code agree:** `lib/games/prompt.test.ts` fails if
-  the columns, IDs, boards, subjects, limits, template or worked example drift.
+- **The chatbot prompt is made for one chapter** on the list (its lines and
+  topics, nothing else; short on purpose). `lib/games/prompt.test.ts` fails if
+  its lines, IDs, limits, difficulties or the page's labels drift from the code.
   Change `prompt.ts` with the rule.
 
 ## Testing and CI

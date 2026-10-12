@@ -5,9 +5,10 @@ import type { GamesApi, SendResult } from '@/lib/games/api';
 import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, detailsId, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, sameName } from '@/lib/games/catalog';
 import { asText, baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from '@/lib/games/format';
-import { chatbotPrompt, listedMaterial } from '@/lib/games/prompt';
+import { chatbotPrompt } from '@/lib/games/prompt';
 import { COLUMNS, toCSV, toJSON, toTSV, type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
 import { btn, chip, copyText, day, download, FIELD, LINKISH, offerUndo, plural } from './helpers';
@@ -70,6 +71,8 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   /** The sent-back list: open or not, and the questions to point at ("See why"). */
   const [backOpen, setBackOpen] = useState(false);
   const [backFocus, setBackFocus] = useState<string[]>([]);
+  /** "Copy chatbot prompt" is asking which chapter the prompt is for. */
+  const [picking, setPicking] = useState(false);
   const boxTimer = useRef(0);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
@@ -98,6 +101,9 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   const details = readDetails(raw);
   const id = detailsId(details);
   const gaps = missing(rows);
+  // a chapter the list gives no topics needs no Topic line
+  const topicless = new Set(catalog.list?.filter((c) => !c.topics.length).map((c) => c.chapter_id));
+  const noTopic = rows.filter((r) => !r.topic && r.topic_no === null && !(r.chapter_id && topicless.has(r.chapter_id))).length;
   const chapters = new Set(rows.map((r) => r.chapter_id ?? [r.board, r.class, r.subject, r.chapter_no, r.chapter].join('|'))).size;
   const topics = new Set(rows.filter((r) => r.topic || r.topic_no !== null).map((r) => [r.chapter_id, r.board, r.class, r.subject, r.chapter_no, r.chapter, r.topic_no, r.topic].join('|'))).size;
   const name = baseName(rows);
@@ -110,7 +116,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   }
   const notes = [
     ...[...byCount].map(([n, what]) => `${have(n)} no ${what.length > 1 ? `${what.slice(0, -1).join(', ')} or ${what[what.length - 1]}` : what[0]}, so no chapter ID. Fill in the boxes above.`),
-    gaps.topic > 0 && `${have(gaps.topic)} no topic. Add a line such as "Topic 1: Name" above them.`,
+    noTopic > 0 && `${have(noTopic)} no topic. Add a line such as "Topic 1: Name" above them.`,
   ].filter(Boolean) as string[];
 
   /** Shows a check mark on a button for a moment after its action worked. */
@@ -212,7 +218,10 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   const typed = parseNumbered(details.chapter, 'chapter');
   const chosen = listed.find((c) => c.chapter_no === typed.no && sameName(c.name, typed.name));
   const listHasNone = !!catalog.list && !listed.length && !!checkBoard(details.board).code && checkClass(details.class).value !== null && !!checkSubject(details.subject).code;
-  const prompt = chatbotPrompt(`${location.origin}/games`) + (chosen ? listedMaterial(chosen) : '');
+  /** The chatbot prompt is made for one chapter: the one in the boxes, when it is on the list and the example's
+   * questions aren't in the box; otherwise the button asks which. */
+  const promptChapter = examples ? undefined : chosen;
+  const copyPrompt = (ch: ListChapter) => copy('prompt', chatbotPrompt(`${location.origin}/games`, ch));
 
   /** A topic chip. When the topic the cursor is under has no questions yet, its Topic line is swapped for this one;
    * otherwise this Topic line goes after the line the cursor is on (or replaces it when it is empty). Either way the
@@ -352,11 +361,18 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
           </div>
 
           <div className="flex flex-col gap-2 rounded-2xl bg-card p-4">
-            <p className="text-[14px] text-warm-prose"><b className="text-foreground">Starting from notes?</b> Copy this prompt into ChatGPT, Gemini or Claude, add your notes (or just the class, subject and chapter), then paste its reply into Questions. The prompt carries all the instructions the chatbot needs.</p>
-            <button type="button" className={btn('quiet', 'w-fit')} onClick={() => copy('prompt', prompt)}>
-              <ActionIcon done={done === 'prompt'}><Copy /></ActionIcon>Copy chatbot prompt
-            </button>
+            <p className="text-[14px] text-warm-prose"><b className="text-foreground">Starting from notes?</b> Copy this prompt into ChatGPT, Gemini or Claude, add your notes (or nothing, to write from the textbook), then paste its reply into Questions. It is made for one chapter and its topics, so the chatbot writes only what fits them.</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button type="button" className={btn('quiet', 'w-fit')} onClick={() => (promptChapter ? void copyPrompt(promptChapter) : setPicking(true))}>
+                <ActionIcon done={done === 'prompt'}><Copy /></ActionIcon>Copy chatbot prompt
+              </button>
+              {promptChapter
+                ? <span className="text-[13px] text-warm-secondary">For chapter {promptChapter.chapter_no}: {promptChapter.name}. <button type="button" className={LINKISH} onClick={() => setPicking(true)}>Another chapter</button></span>
+                : <span className="text-[13px] text-warm-secondary">It asks which chapter first.</span>}
+            </div>
           </div>
+          <ChapterPicker open={picking} setOpen={setPicking} catalog={catalog} start={examples ? undefined : details}
+            onCopy={(ch) => { void copyPrompt(ch); setPicking(false); }} />
         </section>
 
         <section className={SECTION} aria-labelledby="out-h" ref={results} tabIndex={-1}>
@@ -524,6 +540,76 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onRetry
         </ul>
       )}
     </section>
+  );
+}
+
+const uniq = <T,>(xs: T[]) => [...new Set(xs)];
+/** The chosen value if it is one of the options; the only option when there is just one. */
+const fit = <T,>(v: T, options: T[]) => (options.includes(v) ? v : options.length === 1 ? options[0] : undefined);
+
+/** "Copy chatbot prompt" when the boxes don't name a chapter of the person's own: which chapter, from the list. */
+function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
+  open: boolean; setOpen: (o: boolean) => void; catalog: Catalog;
+  /** The detail boxes, to start from (none while the example is loaded). */
+  start?: Record<DetailKey, string>;
+  onCopy: (ch: ListChapter) => void;
+}) {
+  const list = catalog.list ?? [];
+  const [pick, setPick] = useState({ board: '', cls: '', subject: '', chapter: '' });
+  useEffect(() => {
+    if (!open) return;
+    setPick({
+      board: start ? checkBoard(start.board).name : '',
+      cls: String((start && checkClass(start.class).value) ?? ''),
+      subject: start ? checkSubject(start.subject).name : '',
+      chapter: String((start && parseNumbered(start.chapter, 'chapter').no) ?? ''),
+    });
+    // starts from the boxes as they are when it opens, not as they change behind it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const boards = uniq(list.map((c) => c.board)).sort();
+  const board = fit(pick.board, boards);
+  const classes = uniq(list.filter((c) => c.board === board).map((c) => c.class)).sort((a, b) => a - b);
+  const cls = fit(Number(pick.cls), classes);
+  const subjects = uniq(list.filter((c) => c.board === board && c.class === cls).map((c) => c.subject)).sort();
+  const subject = fit(pick.subject, subjects);
+  const chapters = list.filter((c) => c.board === board && c.class === cls && c.subject === subject).sort((a, b) => a.chapter_no - b.chapter_no);
+  const ch = chapters.find((c) => String(c.chapter_no) === pick.chapter) ?? (chapters.length === 1 ? chapters[0] : undefined);
+
+  const field = (label: string, value: string, options: [string, string][], change: (v: string) => void, wide?: string) => (
+    <label className={cn('flex flex-col gap-1', wide)}>
+      <span className="text-[12px] font-semibold text-warm-secondary">{label}</span>
+      <select value={value} disabled={!options.length} onChange={(e) => change(e.target.value)} className={cn(FIELD, 'h-11 disabled:opacity-50')}>
+        <option value="">Choose</option>
+        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+      </select>
+    </label>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-lg rounded-2xl bg-card">
+        <DialogTitle>Which chapter are the questions for?</DialogTitle>
+        <DialogDescription>The prompt is made for one chapter and its topics on the list, so the chatbot writes only what fits them.</DialogDescription>
+        {!catalog.list ? (
+          <p className="text-[14px] text-warm-secondary">{catalog.error ? `Couldn't load the list of chapters. ${catalog.error}` : 'Loading the list of chapters…'}</p>
+        ) : !list.length ? (
+          <p className="text-[14px] text-warm-secondary">The list of chapters is empty, so there is no chapter to make a prompt for yet.</p>
+        ) : (
+          <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); if (ch) onCopy(ch); }}>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {field('Board', board ?? '', boards.map((b) => [b, b]), (v) => setPick({ board: v, cls: '', subject: '', chapter: '' }))}
+              {field('Class', cls ? String(cls) : '', classes.map((c) => [String(c), String(c)]), (v) => setPick((p) => ({ ...p, cls: v, subject: '', chapter: '' })))}
+              {field('Subject', subject ?? '', subjects.map((s) => [s, s]), (v) => setPick((p) => ({ ...p, subject: v, chapter: '' })), 'col-span-2 sm:col-span-1')}
+              {field('Chapter', ch ? String(ch.chapter_no) : '', chapters.map((c) => [String(c.chapter_no), `${c.chapter_no}: ${c.name}`]), (v) => setPick((p) => ({ ...p, chapter: v })), 'col-span-full')}
+            </div>
+            {ch && <p className="text-[13px] text-warm-secondary">{ch.topics.length ? `Its topics: ${ch.topics.map((t) => `${t.topic_no} ${t.name}`).join(', ')}.` : 'It has no topics on the list.'}</p>}
+            <button type="submit" className={btn('brand', 'w-fit')} disabled={!ch}><Copy aria-hidden />Copy chatbot prompt</button>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

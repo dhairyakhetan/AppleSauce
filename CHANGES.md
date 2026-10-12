@@ -23,8 +23,9 @@ It is the question bank site (shikshaq-games.vercel.app) brought into the main s
   chapters, and the chapter's topics become buttons that add their Topic line. They check the rows (each linked to its
   chapter and topic by an ID), play a small version of Try the games made from their questions, and send them for
   approval or download them. Questions an HoD sent back show at the top, with the reason, and "Fix it" puts one back
-  in the box. "Copy chatbot prompt" copies the full instructions a chatbot needs, plus the chosen chapter's listed
-  topics.
+  in the box. "Copy chatbot prompt" copies a short prompt made for one chapter: that chapter's lines and its topics,
+  and nothing about any other. It uses the chapter in the boxes; when there isn't one of the teacher's own (or the
+  example is loaded), it first asks which chapter, from the list.
 - **Approve questions** (`/games/approve`, HoDs and admins). Batches wait here. Approve or send back one question or a
   whole batch, with a reason the teacher sees. Every action can be undone for a few seconds. The approved tab is the
   question bank, and downloads as CSV or JSON.
@@ -164,7 +165,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `src/lib/games/format.ts` | The formatter: reads the pasted text into rows, with every problem and its line. Unchanged from the games site. |
 | `src/lib/games/details.ts` | Boards, classes, subjects, chapters, topics and the IDs. Unchanged from the games site. |
 | `src/lib/games/catalog.ts` | Checks the Questions box against the list of chapters and topics, on the line to fix, the way the database will. |
-| `src/lib/games/prompt.ts` | What "Copy chatbot prompt" copies, and the chosen chapter's listed topics added under it. |
+| `src/lib/games/prompt.ts` | What "Copy chatbot prompt" copies: the instructions for one chapter on the list, with its lines and topics. |
 | `src/lib/games/api.ts` | Every database call, as one `GamesApi` object. `realGamesApi` calls the `games` schema's functions through Shikshaq's own Supabase client. |
 | `src/lib/games/engine/` | The games engine (`index`, `shared`, `crossword`, `wordsearch`, `matching`, `fill`). Each game has a maker and a separate checker, and a puzzle is only shown after its checker passes it. Unchanged from the games site, except one character (below). |
 | `src/hooks/useGamesRoleBadge.ts` | The account menu's check: your role on the games team, or none. Cached for 30 minutes, no retries. Any failure means no link. |
@@ -204,8 +205,8 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 - **Who gets in**: only emails on the team's list, from a Google or email-link sign-in. On the games site anyone signed
   in with Google was a member.
 - **Chatbot instructions**: no longer hidden in the page (on shikshaq.in that would be hidden text on every page). All
-  of it now travels in the copied prompt. The board and subject lists in it come from the code, and it tells the
-  chatbot to use the list's chapter and topic names.
+  of it now travels in the copied prompt, which is made for one chapter: about 3,300 characters instead of the games
+  site's 14,800, with no lists of boards and subjects and no guessing which chapter or textbook is meant.
 - **The database layer**: `db.ts` split into `rows.ts` (no database) and `api.ts` (the calls). The calls use Shikshaq's
   Supabase client and the `games` schema's functions instead of the games site's own Supabase project and its tables.
 - **One character in the engine**: `[\s\-]` became `[\s-]` in `engine/shared.ts`. It behaves the same, and Shikshaq's
@@ -217,7 +218,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | --- | --- |
 | `npx tsc -b` | Clean. The games files were also checked with `strict` and unused-code checks on: clean. |
 | `npx eslint .` | 0 errors, 212 warnings, the same 212 as before this change. The games files have none. |
-| `npm test` | 147 files, 2,208 tests, all pass (140 files and 2,085 tests before). |
+| `npm test` | 147 files, 2,206 tests, all pass (140 files and 2,085 tests before). |
 | Both SQL scripts on Supabase's own Postgres 17 (local) | Install: as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
 | Real network calls, local Supabase, real OAuth sign-in | The site's calls go to `/rest/v1/rpc/<function>` with the `games` profile, and return 200. A member wrote questions with the chapter picker and a topic button. An off-list topic was underlined and held back. One question was sent as batch `B20261012-01`. The HoD approved it, and Try the games played it from the bank. A password session got `reauth` from `games.my_role()` and the "Sign in with Google" page. Signed out: refused. Tables can't be read directly. |
 | Live-shaped build (`vite build` without `VITE_PREVIEW_TOOLS`) | Builds. No dummy code, made-up data or preview tools in it. The games pages are a separate download (142 kB script, 4 kB styles), fetched only when `/games` opens. |
