@@ -256,7 +256,7 @@ status.
 
 A staff team like the papers and teachers teams, for the revision games: people
 on it write short questions and answers, HoDs approve them, and the games
-(crossword, word search, matching, fill in the blank) are made from the approved
+(crossword, word search, matching, fill in the blank, multiple choice) are made from the approved
 ones on the device, with no AI. Brought in from the games site (`main` of
 `dhairyakhetan/AppleSauce`, shikshaq-games.vercel.app).
 

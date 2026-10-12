@@ -14,8 +14,9 @@ same changes line by line. All work is on `games`; `feat/games-integration` is a
 **Adds a games team to Shikshaq, at `/games`, visible only to the people on its list.**
 
 The team writes short questions and answers for revision games. An HoD approves them, and students' puzzles
-(crossword, word search, matching, fill in the blank) are made from the approved ones on the device, with no AI.
-It is the question bank site (shikshaq-games.vercel.app) brought into the main site, rebuilt in Shikshaq's look.
+(crossword, word search, matching, fill in the blank, multiple choice) are made from the approved ones on the device,
+with no AI. It is the question bank site (shikshaq-games.vercel.app) brought into the main site, rebuilt in Shikshaq's
+look.
 
 - **Write questions** (`/games`). Teachers write `Question | Answer` lines under Board, Class, Subject, Chapter and
   Topic lines. Problems are underlined as they write. Questions can only be written for a chapter and topic on the
@@ -33,6 +34,15 @@ It is the question bank site (shikshaq-games.vercel.app) brought into the main s
   questions and Try the games, HoDs also Approve questions, admins also Team, and anyone else a one-line page.
 - **Try the games** (`/games/play`). Pick a class, subject and chapter; every topic is in by default, and tapping one
   leaves it out. Then play the puzzles students will get. Every puzzle is checked before it is shown.
+- **Multiple choice.** A question can carry up to 5 wrong options after its answer (`Question | Answer | Wrong; Wrong;
+  Wrong`), kept in a new `wrong_options` column. A question without them still plays as multiple choice, with other
+  answers from the round as its options. True/false questions play only as multiple choice.
+- **Typed answers are checked the way a teacher would** (fill in the blank), for every subject: case, spaces and
+  punctuation don't matter; words in `[brackets]` are optional (`Decomposition [reaction]`); a short form in round
+  brackets after the answer counts (`Central Processing Unit (CPU)`); words the question already says, "a/the" and
+  titles (Lord, Dr, Mahatma...) can be left out; numbers count by value (`1/2` and `0.5`, `eight` and `8`); a small spelling slip
+  gets half a point and is shown in amber with the right spelling. A wrong answer turns into the right one in place,
+  without a jump.
 - **Team** (`/games/team`, admins). Add someone by their Google email as member, HoD or admin, change roles, remove
   people. The moderator can't be removed or demoted.
 - **Account menu.** A "Games team" group with Write questions (and Approve questions for HoDs and admins), only for
@@ -158,18 +168,18 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `src/components/games/ApproveQuestions.tsx` | Approve questions: waiting, approved and sent-back tabs, batches, the reason box, undo, older approved questions a page at a time, download of the bank (admins). |
 | `src/components/games/TryGames.tsx` | Try the games: loads the bank into `Revise`. |
 | `src/components/games/Team.tsx` | Team: add, change and remove people. |
-| `src/components/games/GameView.tsx` | The four games, playable (also in a compact size for the preview). |
+| `src/components/games/GameView.tsx` | The five games, playable (also in a compact size for the preview). |
 | `src/components/games/Guide.tsx` | "How to write your questions", for people: the format and what makes a good question. The limits come from the code. |
 | `src/components/games/shared.tsx` | Shared parts on screen: the table of rows grouped by chapter and topic, loading, failure and empty states, and the icon that turns into a check mark. |
 | `src/components/games/helpers.ts` | Plain helpers: button looks, dates, saving and copying, "Undo" (Shikshaq's toasts), the games' names. |
 | `src/components/games/games.css` | Only what utility classes can't do: the underline layer behind the Questions box and the puzzle grids. Uses Shikshaq's colour variables only, and loads with the games pages only. |
 | `src/lib/games/rows.ts` | The question row, its CSV, JSON and Sheets exports, the bank's statuses, roles, and the list's chapter and topic types. |
-| `src/lib/games/format.ts` | The formatter: reads the pasted text into rows, with every problem and its line. Unchanged from the games site. |
+| `src/lib/games/format.ts` | The formatter: reads the pasted text into rows, with every problem and its line. As on the games site, plus wrong options for multiple choice. |
 | `src/lib/games/details.ts` | Boards, classes, subjects, chapters, topics and the IDs. Unchanged from the games site. |
 | `src/lib/games/catalog.ts` | Checks the Questions box against the list of chapters and topics, on the line to fix, the way the database will. |
 | `src/lib/games/prompt.ts` | What "Copy chatbot prompt" copies: the instructions for one chapter on the list, with its lines and topics. |
 | `src/lib/games/api.ts` | Every database call, as one `GamesApi` object. `realGamesApi` calls the `games` schema's functions through Shikshaq's own Supabase client. |
-| `src/lib/games/engine/` | The games engine (`index`, `shared`, `crossword`, `wordsearch`, `matching`, `fill`). Each game has a maker and a separate checker, and a puzzle is only shown after its checker passes it. Unchanged from the games site, except one character (below). |
+| `src/lib/games/engine/` | The games engine (`index`, `shared`, `crossword`, `wordsearch`, `matching`, `fill`, `choice`), and `answers.ts`, which decides whether a typed answer is right, half right (a spelling slip) or wrong. Each game has a maker and a separate checker, and a puzzle is only shown after its checker passes it. |
 | `src/hooks/useGamesRoleBadge.ts` | The account menu's check: your role on the games team, or none. Cached for 30 minutes, no retries. Any failure means no link. |
 | `src/dummy/games-fake-api.ts` | Dummy mode's made-up database. It keeps the real one's rules: the list, repeats skipped, numbering within a topic, sent-back questions not taken back unchanged, who may do what, the password case. |
 | `src/dummy/GamesDummy.tsx` | Dummy mode's wrapper and its purple bar. Reached only through the test-build-only lazy import, so it is compiled out of the live site. |
@@ -204,15 +214,18 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
   - The preview ("3. See how it plays"): a small version of Try the games, made from the questions being written.
   - The fixed list of chapters and topics, with the chapter picker and topic buttons.
   - The password sign-in rule.
+  - Multiple choice (a fifth game and the `wrong_options` column) and the answer checking described above. On the
+    games site a typed answer had to match letter for letter.
 - **Who gets in**: only emails on the team's list, from a Google or email-link sign-in. On the games site anyone signed
   in with Google was a member.
 - **Chatbot instructions**: no longer hidden in the page (on shikshaq.in that would be hidden text on every page). All
-  of it now travels in the copied prompt, which is made for one chapter: about 3,300 characters instead of the games
-  site's 14,800, with no lists of boards and subjects and no guessing which chapter or textbook is meant.
+  of it now travels in the copied prompt, which is made for one chapter: about 3,800 characters instead of the games
+  site's 14,800, with no lists of boards and subjects and no guessing which chapter or textbook is meant. It also asks
+  for some multiple-choice questions, and explains optional words and short forms.
 - **The database layer**: `db.ts` split into `rows.ts` (no database) and `api.ts` (the calls). The calls use Shikshaq's
   Supabase client and the `games` schema's functions instead of the games site's own Supabase project and its tables.
-- **One character in the engine**: `[\s\-]` became `[\s-]` in `engine/shared.ts`. It behaves the same, and Shikshaq's
-  lint treats the escape as an error.
+- **Lint**: `[\s\-]` became `[\s-]` in `engine/shared.ts`. It behaves the same, and Shikshaq's lint treats the escape
+  as an error.
 
 ## Checks run on this branch
 
