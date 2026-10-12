@@ -1,6 +1,6 @@
 /**
  * The games schema (supabase/games/install.sql), run on an empty in-memory Postgres (PGlite) with Supabase's sign-in
- * stubbed: installing it (the dry run, the owner line, the check that nothing outside `games` changes), who can call
+ * stubbed: installing it (the dry run, the moderator line, the check that nothing outside `games` changes), who can call
  * what, how the sign-in counts, the fixed list of chapters and topics, sending, numbering, duplicates, sending back,
  * approving and the team. Nothing here touches a real database. The tests in a file run in order and build on each other.
  */
@@ -13,9 +13,11 @@ type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Result = { rows?: Json[]; error?: string };
 
 const SQL = readFileSync('supabase/games/install.sql', 'utf8');
-/** The script with an owner and the dry run switched off, as it is run for real. */
-const installable = (owner = 'owner@x.in', dryRun = 'no') =>
-  SQL.replace("'OWNER@EXAMPLE.COM'", `'${owner}'`).replace("'games_install.dry_run', 'yes'", `'games_install.dry_run', '${dryRun}'`);
+/** The moderator's email, as committed. */
+const MODERATOR = 'dhairyaplayz97@gmail.com';
+/** The script with a moderator and the dry run switched off, as it is run for real. */
+const installable = (moderator = 'mod@x.in', dryRun = 'no') =>
+  SQL.replace(`'games_install.moderator', '${MODERATOR}'`, `'games_install.moderator', '${moderator}'`).replace("'games_install.dry_run', 'yes'", `'games_install.dry_run', '${dryRun}'`);
 
 /** An empty Postgres with what Supabase provides: the roles, and auth.uid() and auth.jwt() reading the token. */
 async function supabaseLike() {
@@ -105,15 +107,22 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('installing it', () => {
-  it('as committed, it stops and asks for the owner\'s email, keeping nothing', async () => {
+  it('as committed, it is a dry run with the moderator filled in, keeping nothing', async () => {
+    expect(SQL).toContain(`select set_config('games_install.moderator', '${MODERATOR}', true);`);
     const fresh = await supabaseLike();
-    expect(await failure(fresh, SQL)).toMatch(/Put the owner's Google email on the OWNER line/);
+    expect(await failure(fresh, SQL)).toMatch(/Dry run passed/);
+    expect(await schemas(fresh)).toBe(0);
+  });
+
+  it('stops, keeping nothing, if the moderator line is not an email', async () => {
+    const fresh = await supabaseLike();
+    expect(await failure(fresh, installable('not an email'))).toMatch(/Put the moderator's Google email on the MODERATOR line/);
     expect(await schemas(fresh)).toBe(0);
   });
 
   it('the dry run does everything, then undoes it', async () => {
     const fresh = await supabaseLike();
-    expect(await failure(fresh, installable('owner@x.in', 'yes'))).toMatch(/Dry run passed/);
+    expect(await failure(fresh, installable('mod@x.in', 'yes'))).toMatch(/Dry run passed/);
     expect(await schemas(fresh)).toBe(0);
   });
 
@@ -134,7 +143,7 @@ describe('installing it', () => {
 
   it('a second run stops at "create schema games", changing nothing', async () => {
     expect(await failure(db, installable())).toMatch(/schema "games" already exists/);
-    expect(await count('games.team where owner')).toBe(1);
+    expect(await count('games.team where moderator')).toBe(1);
   });
 
   it('knows exactly the boards and subjects the site knows, with the same codes', async () => {
@@ -160,10 +169,10 @@ describe('who can call what, and how the sign-in counts', () => {
 
   it('nobody signed in can read or write the tables directly', async () => {
     for (const t of ['team', 'batches', 'questions', 'question_bank', 'chapters', 'topics', 'settings']) {
-      refused(await as('owner@x.in', `select * from games.${t}`), /permission denied/);
+      refused(await as('mod@x.in', `select * from games.${t}`), /permission denied/);
     }
-    refused(await as('owner@x.in', `insert into games.team (email, role) values ('me@x.in', 'admin')`), /permission denied/);
-    refused(await as('owner@x.in', 'select games.team_role()'), /permission denied/);
+    refused(await as('mod@x.in', `insert into games.team (email, role) values ('me@x.in', 'admin')`), /permission denied/);
+    refused(await as('mod@x.in', 'select games.team_role()'), /permission denied/);
   });
 
   it('a Google sign-in or an email link counts; a password, or another provider, doesn\'t', async () => {
@@ -195,20 +204,20 @@ describe('who can call what, and how the sign-in counts', () => {
 });
 
 describe('the team', () => {
-  it('admins add people and change roles; nobody demotes or removes the owner, or themselves', async () => {
-    refused(await as('owner@x.in', `select games.admin_set_role('not-an-email', 'hod')`), /doesn't look like an email/);
-    refused(await as('owner@x.in', `select games.admin_set_role('x@y.in', 'boss')`), /Unknown role/);
-    await value('owner@x.in', `select games.admin_set_role('  Gus@X.IN ', 'hod')`);
+  it('admins add people and change roles; nobody demotes or removes the moderator, or themselves', async () => {
+    refused(await as('mod@x.in', `select games.admin_set_role('not-an-email', 'hod')`), /doesn't look like an email/);
+    refused(await as('mod@x.in', `select games.admin_set_role('x@y.in', 'boss')`), /Unknown role/);
+    await value('mod@x.in', `select games.admin_set_role('  Gus@X.IN ', 'hod')`);
     expect(await value('gus@x.in', 'select games.my_role()')).toBe('hod');
-    refused(await as('owner@x.in', `select games.admin_set_role('owner@x.in', 'member')`), /own admin role/);
-    refused(await as('owner@x.in', `select games.admin_remove('OWNER@x.in')`), /remove yourself/);
-    await value('owner@x.in', `select games.admin_set_role('dee@x.in', 'admin')`);
-    refused(await as('dee@x.in', `select games.admin_set_role('owner@x.in', 'hod')`), /owner stays an admin/);
-    refused(await as('dee@x.in', `select games.admin_remove('owner@x.in')`), /owner can't be removed/);
+    refused(await as('mod@x.in', `select games.admin_set_role('mod@x.in', 'member')`), /own admin role/);
+    refused(await as('mod@x.in', `select games.admin_remove('MOD@x.in')`), /remove yourself/);
+    await value('mod@x.in', `select games.admin_set_role('dee@x.in', 'admin')`);
+    refused(await as('dee@x.in', `select games.admin_set_role('mod@x.in', 'hod')`), /moderator stays an admin/);
+    refused(await as('dee@x.in', `select games.admin_remove('mod@x.in')`), /moderator can't be removed/);
     await value('dee@x.in', `select games.admin_remove('gus@x.in')`);
     expect(await value('gus@x.in', 'select games.my_role()')).toBeNull();
-    const people = await value('owner@x.in', 'select games.admin_people()');
-    expect(people[0]).toMatchObject({ email: 'owner@x.in', owner: true });
+    const people = await value('mod@x.in', 'select games.admin_people()');
+    expect(people[0]).toMatchObject({ email: 'mod@x.in', moderator: true });
   });
 });
 
@@ -386,7 +395,7 @@ describe('loading the list of chapters and topics (list.sql)', () => {
       { chapter_id: 'CBSE07SCI05', board: 'CBSE', subject: 'Science', name: 'Acids, Bases and Salts' },
       { chapter_id: 'ICSE06GEO02', board: 'ICSE', subject: 'Geography', name: 'Landforms of the Earth' },
     ]);
-    const list = (await run(fresh, 'authenticated', claims('owner@x.in'), 'select games.catalog() c')).rows![0].c;
+    const list = (await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.catalog() c')).rows![0].c;
     expect(list.find((c: Json) => c.chapter_id === 'CBSE07SCI04').topics.map((t: Json) => t.topic_id)).toEqual(['CBSE07SCI04T01', 'CBSE07SCI04T02']);
     expect(list.find((c: Json) => c.chapter_id === 'CBSE07SCI05').topics).toEqual([]);
   });

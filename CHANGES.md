@@ -31,7 +31,7 @@ It is the question bank site (shikshaq-games.vercel.app) brought into the main s
 - **Try the games** (`/games/play`). Pick a class, subject and chapter; every topic is in by default, and tapping one
   leaves it out. Then play the puzzles students will get. Every puzzle is checked before it is shown.
 - **Team** (`/games/team`, admins). Add someone by their Google email as member, HoD or admin, change roles, remove
-  people. The owner can't be removed.
+  people. The moderator can't be removed or demoted.
 - **Account menu.** A "Games team" group with Write questions (and Approve questions for HoDs and admins), only for
   people on the team.
 
@@ -50,8 +50,8 @@ Run these in the Supabase dashboard's SQL editor. Neither script touches anythin
 
 ### 1. Install the `games` schema: `supabase/games/install.sql`
 
-1. Open the file, and on the **OWNER** line near the top replace `OWNER@EXAMPLE.COM` with the Google email of the
-   person who runs the games team. They become its first admin, and nobody can remove them.
+1. The **MODERATOR** line near the top already has `dhairyaplayz97@gmail.com`: the games team's first admin, whom
+   nobody can remove or demote. Nothing to change there.
 2. Paste the whole file into the SQL editor and run it. This is a **dry run**: it builds everything, checks it, then
    undoes it. It must end with an error that starts **"Dry run passed"**. Nothing is kept.
    - If it says anything else, stop and send me the message. Nothing was kept.
@@ -90,7 +90,7 @@ knows.
 
 ### 3. Add the team
 
-Sign in to the site with the owner's Google account, open `/games/team`, and add people by their Google email.
+Sign in to the site with the moderator's Google account, open `/games/team`, and add people by their Google email.
 
 ---
 
@@ -144,7 +144,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 
 | File | What it is |
 | --- | --- |
-| `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the owner line and the outside-change check (above). Tables: settings, team, boards, subjects, chapters, topics, batches, questions, question_bank. The site calls functions only. |
+| `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the moderator line and the outside-change check (above). Tables: settings, team, boards, subjects, chapters, topics, batches, questions, question_bank. The site calls functions only. |
 | `supabase/games/list.sql` | Loads the fixed list of chapters and topics from pasted rows, with a dry run. It only adds. |
 | `src/pages/Games.tsx` | The page: checks who you are (including the "sign in with Google" page for a password sign-in), loads the list of chapters, the links between the four parts, the "not for you" pages, and the real/dummy switch (the same pattern as `pages/Hod.tsx`). A part stays mounted once opened. |
 | `src/components/games/WriteQuestions.tsx` | Write questions: the four detail boxes (kept in step with the text; Chapter becomes a picker from the list), topic buttons, the Questions box with underlined problems, the check panel, downloads, the sent-back panel, the preview, Send, the guide, and the phone's "jump to results" button. |
@@ -168,7 +168,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `src/hooks/useGamesRoleBadge.ts` | The account menu's check: your role on the games team, or none. Cached for 30 minutes, no retries. Any failure means no link. |
 | `src/dummy/games-fake-api.ts` | Dummy mode's made-up database. It keeps the real one's rules: the list, repeats skipped, numbering within a topic, sent-back questions not taken back unchanged, who may do what, the password case. |
 | `src/dummy/GamesDummy.tsx` | Dummy mode's wrapper and its purple bar. Reached only through the test-build-only lazy import, so it is compiled out of the live site. |
-| Tests | `src/lib/games/database.test.ts` (both SQL scripts on an in-memory Postgres: the dry run, the owner line, every kind of outside change caught, who can call what, the sign-in rule, the list, sending, numbering, approving, the bank, paging; 31 tests), `src/lib/games/catalog.test.ts` (the list check), `src/lib/games/format.test.ts` (the formatter), `src/lib/games/prompt.test.ts` (the chatbot prompt agrees with the code), `src/lib/games/engine/engine.test.ts` and `engine-stress.test.ts` (every checker catches broken puzzles; thousands of puzzles checked), `src/dummy/games-fake-api.test.ts` (the dummy database keeps the rules). |
+| Tests | `src/lib/games/database.test.ts` (both SQL scripts on an in-memory Postgres: the dry run, the moderator line, every kind of outside change caught, who can call what, the sign-in rule, the list, sending, numbering, approving, the bank, paging; 31 tests), `src/lib/games/catalog.test.ts` (the list check), `src/lib/games/format.test.ts` (the formatter), `src/lib/games/prompt.test.ts` (the chatbot prompt agrees with the code), `src/lib/games/engine/engine.test.ts` and `engine-stress.test.ts` (every checker catches broken puzzles; thousands of puzzles checked), `src/dummy/games-fake-api.test.ts` (the dummy database keeps the rules). |
 
 ## Changed Shikshaq files
 
@@ -215,8 +215,8 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | --- | --- |
 | `npx tsc -b` | Clean. The games files were also checked with `strict` and unused-code checks on: clean. |
 | `npx eslint .` | 0 errors, 212 warnings, the same 212 as before this change. The games files have none. |
-| `npm test` | 147 files, 2,207 tests, all pass (140 files and 2,085 tests before). |
-| Both SQL scripts on Supabase's own Postgres 17 (local) | Install: as committed it stops at the OWNER line; the dry run ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
+| `npm test` | 147 files, 2,208 tests, all pass (140 files and 2,085 tests before). |
+| Both SQL scripts on Supabase's own Postgres 17 (local) | Install: as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
 | Real network calls, local Supabase, real OAuth sign-in | The site's calls go to `/rest/v1/rpc/<function>` with the `games` profile, and return 200. A member wrote questions with the chapter picker and a topic button. An off-list topic was underlined and held back. One question was sent as batch `B20261012-01`. The HoD approved it, and Try the games played it from the bank. A password session got `reauth` from `games.my_role()` and the "Sign in with Google" page. Signed out: refused. Tables can't be read directly. |
 | Live-shaped build (`vite build` without `VITE_PREVIEW_TOOLS`) | Builds. No dummy code, made-up data or preview tools in it. The games pages are a separate download (142 kB script, 4 kB styles), fetched only when `/games` opens. |
 | Browser, dummy mode, desktop (1280 px) and phone (390 px) | All four parts and every role work, including the password case. No sideways scrolling on a phone, and no page errors. |

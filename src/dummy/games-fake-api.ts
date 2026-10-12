@@ -16,7 +16,7 @@ export const DUMMY_ME = { email: 'you@example.com', name: 'You (dummy)' };
 interface FakeQuestion extends BankQuestion { teacherEmail: string; reviewedBy: string | null; seenAt: string | null }
 interface State { team: Person[]; batches: Batch[]; questions: FakeQuestion[]; catalog: ListChapter[] }
 
-const OWNER = { email: 'asha.rao@example.com', name: 'Asha Rao' };
+const MODERATOR = { email: 'asha.rao@example.com', name: 'Asha Rao' };
 const HOD = { email: 'vikram.singh@example.com', name: 'Vikram Singh' };
 const ROHAN = { email: 'rohan.mehta@example.com', name: 'Rohan Mehta' };
 const PRIYA = { email: 'priya.das@example.com', name: 'Priya Das' };
@@ -123,11 +123,11 @@ const indiaDay = (iso: string) =>
 function seed(): State {
   const s: State = {
     team: [
-      { ...OWNER, role: 'admin', owner: true, added_at: hoursAgo(24 * 30), last_seen_at: hoursAgo(5), name: OWNER.name },
-      { ...HOD, role: 'hod', owner: false, added_at: hoursAgo(24 * 20), last_seen_at: hoursAgo(2), name: HOD.name },
-      { ...ROHAN, role: 'member', owner: false, added_at: hoursAgo(24 * 10), last_seen_at: hoursAgo(26), name: ROHAN.name },
-      { ...PRIYA, role: 'member', owner: false, added_at: hoursAgo(24 * 3), last_seen_at: null, name: PRIYA.name },
-      { ...DUMMY_ME, role: 'admin', owner: false, added_at: hoursAgo(24 * 15), last_seen_at: hoursAgo(0.1) },
+      { ...MODERATOR, role: 'admin', moderator: true, added_at: hoursAgo(24 * 30), last_seen_at: hoursAgo(5), name: MODERATOR.name },
+      { ...HOD, role: 'hod', moderator: false, added_at: hoursAgo(24 * 20), last_seen_at: hoursAgo(2), name: HOD.name },
+      { ...ROHAN, role: 'member', moderator: false, added_at: hoursAgo(24 * 10), last_seen_at: hoursAgo(26), name: ROHAN.name },
+      { ...PRIYA, role: 'member', moderator: false, added_at: hoursAgo(24 * 3), last_seen_at: null, name: PRIYA.name },
+      { ...DUMMY_ME, role: 'admin', moderator: false, added_at: hoursAgo(24 * 15), last_seen_at: hoursAgo(0.1) },
     ],
     batches: [],
     questions: [],
@@ -260,7 +260,7 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       const p = me();
       if (!role) s.team = s.team.filter((x) => x !== p);
       else if (p) p.role = role;
-      else s.team.push({ ...DUMMY_ME, role, owner: false, added_at: new Date().toISOString(), last_seen_at: null });
+      else s.team.push({ ...DUMMY_ME, role, moderator: false, added_at: new Date().toISOString(), last_seen_at: null });
     },
     role: roleOf,
 
@@ -386,7 +386,7 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       await wait();
       need('admin');
       const rank = { admin: 0, hod: 1, member: 2 };
-      return [...s.team].sort((a, b) => Number(b.owner) - Number(a.owner) || rank[a.role] - rank[b.role] || (a.name ?? a.email).localeCompare(b.name ?? b.email));
+      return [...s.team].sort((a, b) => Number(b.moderator) - Number(a.moderator) || rank[a.role] - rank[b.role] || (a.name ?? a.email).localeCompare(b.name ?? b.email));
     },
 
     async setPersonRole(email, role) {
@@ -396,9 +396,9 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) throw new Error("That doesn't look like an email address.");
       if (mail === DUMMY_ME.email && role !== 'admin') throw new Error("You can't take away your own admin role.");
       const p = s.team.find((x) => x.email === mail);
-      if (p?.owner && role !== 'admin') throw new Error('The owner stays an admin.');
+      if (p?.moderator && role !== 'admin') throw new Error('The moderator stays an admin.');
       if (p) p.role = role;
-      else s.team.push({ email: mail, name: null, role, owner: false, added_at: new Date().toISOString(), last_seen_at: null });
+      else s.team.push({ email: mail, name: null, role, moderator: false, added_at: new Date().toISOString(), last_seen_at: null });
     },
 
     async removePerson(email) {
@@ -406,7 +406,7 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       need('admin');
       const mail = email.trim().toLowerCase();
       if (mail === DUMMY_ME.email) throw new Error("You can't remove yourself.");
-      if (s.team.find((x) => x.email === mail)?.owner) throw new Error("The owner can't be removed.");
+      if (s.team.find((x) => x.email === mail)?.moderator) throw new Error("The moderator can't be removed.");
       s.team = s.team.filter((x) => x.email !== mail);
     },
   };

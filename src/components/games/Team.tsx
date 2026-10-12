@@ -9,7 +9,7 @@ import { Empty, Loading } from './shared';
 
 /* The games team: who may open the games pages, and what they may do there. Only emails on this list get in; signing
    in to Shikshaq doesn't add anyone. Admins add someone by email (they needn't have signed in yet), change a role, or
-   take someone off; the owner stays an admin and can't be removed. The database checks all of it. A change shows the
+   take someone off; the moderator stays an admin and can't be removed. The database checks all of it. A change shows the
    next time the person opens or refreshes a games page. */
 
 const ROLE_HINT: Record<GamesRole, string> = {
@@ -92,7 +92,7 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
         {!people ? (error ? null : <Loading label="Loading the team" />) : !people.length ? <Empty>Nobody is on the games team yet.</Empty> : (
           <ul className="flex flex-col gap-2">
             {people.map((p) => {
-              const locked = p.email === me.toLowerCase() || p.owner;
+              const locked = p.email === me.toLowerCase() || p.moderator;
               return (
                 <li key={p.email} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted px-4 py-3">
                   <div className="min-w-0">
@@ -103,7 +103,7 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
                   </div>
                   {locked ? (
                     <span className={cn('rounded-full px-3 py-1.5 text-[13px] font-semibold', p.role === 'admin' ? 'bg-brand-subtle text-brand-deep' : 'bg-card text-warm-secondary')}>
-                      {ROLE_NAMES[p.role]} ({p.email === me.toLowerCase() ? 'you' : 'owner'})
+                      {ROLE_NAMES[p.role]} ({p.email === me.toLowerCase() ? 'you' : 'moderator'})
                     </span>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">

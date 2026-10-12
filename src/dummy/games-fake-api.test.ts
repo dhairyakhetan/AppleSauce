@@ -79,9 +79,9 @@ describe('the dummy games database', () => {
     expect(kept).toMatchObject({ changed: [], skipped: [back.id] });
   });
 
-  it('keeps the owner an admin and stops admins removing themselves', async () => {
+  it('keeps the moderator an admin and stops admins removing themselves', async () => {
     const api = createFakeGamesApi(false);
-    await expect(api.setPersonRole('asha.rao@example.com', 'member')).rejects.toThrow(/owner/);
+    await expect(api.setPersonRole('asha.rao@example.com', 'member')).rejects.toThrow(/moderator/);
     await expect(api.removePerson('you@example.com')).rejects.toThrow(/yourself/);
     await api.setPersonRole('New.Person@Example.com ', 'hod');
     expect((await api.loadPeople()).find((p) => p.email === 'new.person@example.com')?.role).toBe('hod');

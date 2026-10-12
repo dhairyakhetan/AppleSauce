@@ -103,8 +103,8 @@ export const ROLE_NAMES: Record<GamesRole, string> = { admin: 'Admin', hod: 'HoD
  * signed in in a way that doesn't prove their email (a password): they must sign in with Google or an email link. */
 export type RoleCheck = GamesRole | 'reauth' | null;
 
-/** Someone on the games team. `owner`: the admin who runs it, whom nobody can remove or demote. */
-export interface Person { email: string; name: string | null; role: GamesRole; owner: boolean; added_at: string; last_seen_at: string | null }
+/** Someone on the games team. `moderator`: the admin who runs it, whom nobody can remove or demote. */
+export interface Person { email: string; name: string | null; role: GamesRole; moderator: boolean; added_at: string; last_seen_at: string | null }
 
 // ---------------------------------------------------------------- the fixed list of chapters and topics
 

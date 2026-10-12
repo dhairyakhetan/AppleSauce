@@ -5,7 +5,8 @@
 -- it goes in one new schema, `games`. It reads nothing in Shikshaq's own tables and changes nothing outside `games`.
 --
 -- How to run it (Supabase dashboard, SQL editor). Read CHANGES.md first: take a backup before step 3.
---   1. Put the owner's Google email on the OWNER line below (the games team's first admin; nobody can remove them).
+--   1. The MODERATOR line below has the moderator's Google email (the games team's first admin; nobody can remove or
+--      demote them).
 --   2. Run the whole file as it is. It is a dry run: it does everything, checks it, then undoes it, and ends with
 --      "Dry run passed". Nothing is kept.
 --   3. Change 'yes' to 'no' on the DRY RUN line, and run the whole file again. This time it is kept.
@@ -40,8 +41,8 @@
 
 begin;
 
--- 1. OWNER: the games team's first admin. Their Google email, between the quotes:
-select set_config('games_install.owner', 'OWNER@EXAMPLE.COM', true);
+-- 1. MODERATOR: the games team's first admin, whom nobody can remove or demote. Their Google email, between the quotes:
+select set_config('games_install.moderator', 'dhairyaplayz97@gmail.com', true);
 -- 2. DRY RUN: 'yes' does everything and then undoes it. Change it to 'no' to keep it.
 select set_config('games_install.dry_run', 'yes', true);
 
@@ -117,13 +118,13 @@ create table games.team (
   email text primary key check (email = lower(email) and email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
   role text not null check (role in ('admin', 'hod', 'member')),
   name text check (char_length(name) <= 120),
-  owner boolean not null default false check (not owner or role = 'admin'),
+  moderator boolean not null default false check (not moderator or role = 'admin'),
   added_by text,
   added_at timestamptz not null default now(),
   last_seen_at timestamptz
 );
-create unique index team_one_owner on games.team (owner) where owner;
-comment on table games.team is 'The games team: email, role (admin, hod or member), name, and the owner (an admin nobody can remove or demote).';
+create unique index team_one_moderator on games.team (moderator) where moderator;
+comment on table games.team is 'The games team: email, role (admin, hod or member), name, and the moderator (an admin nobody can remove or demote).';
 
 -- How two questions are compared: case, extra spaces and punctuation at the end don't matter.
 create function games.norm(t text) returns text language sql immutable set search_path = ''
@@ -168,14 +169,14 @@ begin
   return mine;
 end $$;
 
--- The team, for admins: the owner, then admins, HoDs and members.
+-- The team, for admins: the moderator, then admins, HoDs and members.
 create function games.admin_people() returns jsonb language plpgsql stable security definer set search_path = ''
 as $$
 begin
   if games.team_role() is distinct from 'admin' then raise exception 'Only a games admin can see the team.'; end if;
   return coalesce((
-    select jsonb_agg(jsonb_build_object('email', t.email, 'name', t.name, 'role', t.role, 'owner', t.owner, 'added_at', t.added_at, 'last_seen_at', t.last_seen_at)
-                     order by t.owner desc, case t.role when 'admin' then 0 when 'hod' then 1 else 2 end, coalesce(t.name, t.email))
+    select jsonb_agg(jsonb_build_object('email', t.email, 'name', t.name, 'role', t.role, 'moderator', t.moderator, 'added_at', t.added_at, 'last_seen_at', t.last_seen_at)
+                     order by t.moderator desc, case t.role when 'admin' then 0 when 'hod' then 1 else 2 end, coalesce(t.name, t.email))
     from games.team t
   ), '[]');
 end $$;
@@ -190,7 +191,7 @@ begin
   if new_role is null or new_role not in ('admin', 'hod', 'member') then raise exception 'Unknown role.'; end if;
   if mail !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then raise exception 'That doesn''t look like an email address.'; end if;
   if mail = games.proven_email() and new_role <> 'admin' then raise exception 'You can''t take away your own admin role.'; end if;
-  if new_role <> 'admin' and exists (select 1 from games.team t where t.email = mail and t.owner) then raise exception 'The owner stays an admin.'; end if;
+  if new_role <> 'admin' and exists (select 1 from games.team t where t.email = mail and t.moderator) then raise exception 'The moderator stays an admin.'; end if;
   insert into games.team (email, role, added_by) values (mail, new_role, games.proven_email())
   on conflict (email) do update set role = excluded.role;
 end $$;
@@ -203,7 +204,7 @@ declare
 begin
   if games.team_role() is distinct from 'admin' then raise exception 'Only a games admin can change the team.'; end if;
   if mail = games.proven_email() then raise exception 'You can''t remove yourself.'; end if;
-  if exists (select 1 from games.team t where t.email = mail and t.owner) then raise exception 'The owner can''t be removed.'; end if;
+  if exists (select 1 from games.team t where t.email = mail and t.moderator) then raise exception 'The moderator can''t be removed.'; end if;
   delete from games.team where email = mail;
 end $$;
 
@@ -697,16 +698,16 @@ grant execute on function games.my_role(), games.catalog(), games.submit_batch(j
   games.bank(), games.bank_count(), games.waiting_count(), games.hod_questions(), games.hod_approved(timestamptz, text, int),
   games.hod_set_status(text[], text, text), games.admin_people(), games.admin_set_role(text, text), games.admin_remove(text) to authenticated;
 
--- ---------------------------------------------------------------- the owner
+-- ---------------------------------------------------------------- the moderator
 
 do $$
 declare
-  mail text := lower(btrim(current_setting('games_install.owner')));
+  mail text := lower(btrim(current_setting('games_install.moderator')));
 begin
-  if mail = 'owner@example.com' or mail !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
-    raise exception 'Put the owner''s Google email on the OWNER line near the top (it says OWNER@EXAMPLE.COM now), then run the script again. Nothing was kept.';
+  if mail !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+    raise exception 'Put the moderator''s Google email on the MODERATOR line near the top, then run the script again. Nothing was kept.';
   end if;
-  insert into games.team (email, role, owner) values (mail, 'admin', true);
+  insert into games.team (email, role, moderator) values (mail, 'admin', true);
 end $$;
 
 -- ---------------------------------------------------------------- checks
