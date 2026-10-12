@@ -16,7 +16,7 @@ import { chip, GAME_NAMES, plural, whyNot } from './helpers';
    it). */
 
 /** What a puzzle needs to know about a question. */
-export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer'> & { wrong_options?: string[] };
+export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'also' | 'fill' | 'wrong_options'>;
 
 interface Topic { key: string; no: number | null; name: string; count: number }
 interface Chapter { id: string; cls: number | null; subject: string; no: number | null; name: string; topics: Topic[]; questions: ReviseQuestion[] }
@@ -76,12 +76,12 @@ export function Revise({ questions, compact = false, written = false, heading, e
   const chosen = left.length ? left : known;
   const chosenKey = chosen.join('\u0000');
   const items: Item[] = useMemo(
-    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map((q) => ({ id: q.id, question: q.question, answer: q.answer, wrong: q.wrong_options ?? [] })),
+    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map((q) => ({ id: q.id, question: q.question, answer: q.answer, also: q.also ?? [], fill: q.fill ?? null, wrong: q.wrong_options ?? [] })),
     [chapter, chosenKey],
   );
   const seed = seedOf(`${chapter?.id}|${chosenKey}|${round}`);
   // other questions make another puzzle, even with the same seed: the game on screen starts afresh
-  const made = seedOf(items.map((i) => `${i.id}|${i.question}|${i.answer}`).join('\n'));
+  const made = seedOf(items.map((i) => [i.id, i.question, i.answer, i.also?.join(';'), i.fill, i.wrong?.join(';')].join('|')).join('\n'));
   // every game these questions can make (each one already checked), so the player can switch between them
   const games = useMemo(() => {
     const out: Partial<Record<GameType, Game>> = {};

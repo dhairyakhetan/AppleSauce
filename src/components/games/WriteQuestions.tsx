@@ -1,24 +1,27 @@
 import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDown, Copy, Send } from 'lucide-react';
+import { ArrowDown, Copy, Send, Trash2 } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
 import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, sameName } from '@/lib/games/catalog';
-import { asText, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from '@/lib/games/format';
-import { chatbotPrompt } from '@/lib/games/prompt';
+import { usableIn } from '@/lib/games/engine';
+import { asText, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
+import { chatbotPrompt, fixPrompt } from '@/lib/games/prompt';
 import { type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
-import { btn, chip, copyText, day, FIELD, LINKISH, offerUndo, plural } from './helpers';
+import { btn, chip, copyText, day, FIELD, GAME_NAMES, LINKISH, offerUndo, plural } from './helpers';
 import { ActionIcon, RowsTable } from './shared';
 import './games.css';
 
-/* Write questions: people on the games team write questions in one format (Question | Answer, under detail and Topic
-   lines; other common layouts are read too, quietly), check them, see a game made from them, and send them for
-   approval. Only what writing and sending needs is on the page: no IDs, no exports. The example's questions can't be sent while the example is loaded. Questions sent back
-   by an HoD show at the top, with the reason, and can be put back in the box to fix. */
+/* Write questions: people on the games team write questions in one format (a block per question: Q:, A:, Also:, Fill:,
+   Wrong:, Level:, under detail and Topic lines), check them strictly, see a game made from them, and send them for
+   approval. A question with any problem isn't sent: Send then offers to leave those out, or to copy a prompt that asks
+   the chatbot to fix them. Only what writing and sending needs is on the page: no IDs, no exports. The example's
+   questions can't be sent while the example is loaded. Questions sent back by an HoD show at the top, with the reason,
+   and can be put back in the box to fix. */
 
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 /** The example's questions: they are only for trying the page, so they are never sent while the example is loaded. */
@@ -71,6 +74,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   const [backFocus, setBackFocus] = useState<string[]>([]);
   /** "Copy chatbot prompt" is asking which chapter the prompt is for. */
   const [picking, setPicking] = useState(false);
+  /** Send was pressed with questions that need fixing. */
+  const [stopped, setStopped] = useState(false);
   const boxTimer = useRef(0);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
@@ -137,8 +142,25 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [text, example, catalog.list]);
   const all = useMemo(() => (listCheck?.issues.length ? [...formatIssues, ...listCheck.issues].sort((a, b) => a.line - b.line) : formatIssues), [formatIssues, listCheck]);
-  const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) });
+  const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) }, rows);
   const errors = issues.filter((x) => x.level === 'error').length;
+  const toFix = issues.length;
+
+  /**
+   * Which questions need fixing, from every problem (shown or still waiting for the cursor to move on): a problem on its
+   * own lines or on a detail line it is under, a detail missing, or the list ruling it out. Red if any is an error.
+   */
+  const problems = useMemo(() => problemsByRow(rows, all), [rows, all]);
+  const status = (r: Row, i: number): 'error' | 'warn' | undefined => {
+    const xs = problems.byRow.get(i) ?? [];
+    if (xs.some((x) => x.level === 'error') || !r.chapter_id || !r.chapter || listCheck?.blocked.has(r.line)) return 'error';
+    return xs.length ? 'warn' : undefined;
+  };
+  /** The preview plays every question without an error of its own (one missing its chapter details still plays). */
+  const playable = useMemo(
+    () => rows.filter((r) => !all.some((x) => x.level === 'error' && x.line >= r.line && x.line <= (r.end ?? r.line))),
+    [rows, all],
+  );
 
   /** Replacing all the text can always be undone for a few seconds, so there is no "are you sure?". */
   const replaceAll = (next: string, what: string, isExample = false) => {
@@ -165,12 +187,14 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     box.current?.focus({ preventScroll: true });
   };
 
-  /** Sends the questions for approval (not the example's). A question needs a chapter ID and a chapter name to be sent,
-   * and to be on the list; Check says what is missing from the others. */
+  /** The questions that can be sent as they are (not the example's), and those that need fixing first. Nothing can be
+   * sent until the list has loaded. */
   const examples = rows.filter(fromExample).length;
-  const sendable = listCheck ? own.filter((r) => r.chapter_id && r.chapter && !listCheck.blocked.has(r.line)) : [];
+  const mine = rows.map((r, i) => ({ r, i })).filter(({ r }) => !fromExample(r));
+  const sendable = listCheck ? mine.filter(({ r, i }) => !status(r, i)).map(({ r }) => r) : [];
+  const broken = mine.filter(({ r, i }) => status(r, i));
+  const stray = problems.general.filter((x) => x.level === 'error');
   const ready = sendable.length;
-  const notReady = listCheck ? own.length - ready : 0;
   // the text lives only on this page: closing or reloading it with questions not yet sent asks first
   const unsaved = own.length > 0 && raw !== kept;
   useEffect(() => {
@@ -179,20 +203,35 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     addEventListener('beforeunload', ask);
     return () => removeEventListener('beforeunload', ask);
   }, [unsaved]);
-  const send = async () => {
+  const send = async (these: Row[], text = raw) => {
     setSending(true);
     setSent(null);
     setSendError('');
     try {
-      const result = await api.sendBatch(sendable);
+      const result = await api.sendBatch(these);
       setSent(result);
-      setKept(raw);
+      setKept(text);
       if (result.sent) { flash('send'); onSent(); }
     } catch (e) {
       setSendError((e as Error).message);
     } finally {
       setSending(false);
     }
+  };
+  /** Send: straight away when nothing needs fixing; otherwise the questions that do are named first. */
+  const trySend = () => {
+    if (broken.length || stray.length) setStopped(true);
+    else void send(sendable);
+  };
+  /** "Remove those questions and send": they leave the box (Undo brings them back), and the rest are sent. */
+  const removeAndSend = () => {
+    const drop = new Set<number>();
+    for (const { r } of broken) for (let n = r.line; n <= (r.end ?? r.line); n++) drop.add(n);
+    for (const x of stray) drop.add(x.line);
+    const next = raw.split('\n').filter((_, k) => !drop.has(k + 1)).join('\n').replace(/\n{3,}/g, '\n\n');
+    replaceAll(next, `Removed ${plural(broken.length, 'question')}`, example);
+    setStopped(false);
+    void send(sendable, next);
   };
   /** "See why": opens the sent-back list at these questions. */
   const seeWhy = (ids: string[]) => {
@@ -362,7 +401,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
           {issues.length > 0 && (
             <div className={cn('rounded-2xl px-4 py-3 text-[14px]', errors ? 'bg-destructive/10' : 'bg-brand-subtle')}>
-              <b className="text-foreground">{errors ? `${plural(errors, 'line')} left out` : ''}{errors && issues.length > errors ? ', ' : ''}{issues.length > errors ? `${plural(issues.length - errors, 'warning')}` : ''}</b>
+              <b className="text-foreground">{plural(toFix, 'problem')} to fix</b>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {issues.slice(0, 50).map((x) => (
                   <li key={`${x.line}\u0000${x.text}`} className={x.level === 'error' ? 'text-destructive' : 'text-brand-deep'}>
@@ -376,24 +415,27 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
           {notes.length > 0 && <ul className="flex list-disc flex-col gap-0.5 pl-5 text-[14px] text-warm-prose">{notes.map((n) => <li key={n}>{n}</li>)}</ul>}
 
           <div className="rounded-2xl bg-card p-3 sm:p-4">
-            {rows.length ? <RowsTable key={batch} rows={rows} /> : <p className="py-6 text-center text-[14px] text-warm-secondary">Your questions will appear here.</p>}
+            {rows.length ? (
+              <RowsTable key={batch} rows={rows} problem={status}
+                games={(r) => usableIn({ id: String(r.line), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }).map((t) => GAME_NAMES[t])} />
+            ) : <p className="py-6 text-center text-[14px] text-warm-secondary">Your questions will appear here.</p>}
           </div>
         </section>
       </div>
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="rounded-[24px] bg-card p-4 shadow-border sm:p-6">
-          <GamePreview rows={rows} />
+          <GamePreview rows={playable} />
         </div>
-        <form className={SECTION} onSubmit={(e) => { e.preventDefault(); void send(); }}>
+        <form className={SECTION} onSubmit={(e) => { e.preventDefault(); trySend(); }}>
           <h2 className="text-[15px] font-bold text-foreground">4. Send for approval</h2>
           {examples > 0 && (
             <p className="rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] text-foreground" role="status">
               {examples === rows.length ? "The example's questions can't be sent." : `${plural(examples, 'question is', 'questions are')} from the example and won't be sent.`}
             </p>
           )}
-          <button type="submit" className={btn('brand', 'w-fit')} disabled={!ready || sending}>
-            <ActionIcon done={done === 'send'}><Send /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
+          <button type="submit" className={btn('brand', 'w-fit')} disabled={!listCheck || !mine.length || sending}>
+            <ActionIcon done={done === 'send'}><Send /></ActionIcon>{sending ? 'Sending…' : ready && !broken.length && !stray.length ? `Send ${plural(ready, 'question')}` : 'Send'}
           </button>
           {catalog.error && !catalog.list && (
             <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">
@@ -403,7 +445,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
           )}
           {!catalog.list && !catalog.error && <p className="text-[13px] text-warm-secondary">Loading the list of chapters…</p>}
           {catalog.list && !catalog.list.length && <p className="text-[13px] text-warm-secondary">The list of chapters is empty, so nothing can be sent yet. Ask an admin to add it.</p>}
-          {notReady > 0 && <p className="text-[13px] text-warm-secondary">{plural(notReady, "question can't", "questions can't")} be sent yet: Check says why.</p>}
+          {listCheck && broken.length > 0 && <p className="text-[13px] text-warm-secondary">{plural(broken.length, 'question needs', 'questions need')} fixing first: Check says why.</p>}
           {sent && (
             <p className={cn('animate-fade-slide-up rounded-2xl px-4 py-3 text-[14px] text-foreground', sent.sent ? 'bg-mint' : 'bg-brand-subtle')}>
               {sent.sent ? <>Sent {plural(sent.sent, 'question')} for approval. </> : 'Nothing new to send. '}
@@ -417,6 +459,26 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
           )}
           {sendError && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">Couldn't send: {sendError}</p>}
         </form>
+        <Dialog open={stopped} onOpenChange={setStopped}>
+          <DialogContent className="max-w-lg rounded-2xl bg-card">
+            <DialogTitle>There are errors in the questions</DialogTitle>
+            <DialogDescription>
+              {broken.length ? `${broken.length} of ${plural(mine.length, 'question')} can't be sent as ${broken.length === 1 ? 'it is' : 'they are'}` : 'Some lines can\'t be read'}
+              {broken.length > 0 && stray.length > 0 && `, and ${plural(stray.length, 'other line')} can't be read`}. Check says what is wrong with each.
+            </DialogDescription>
+            <div className="flex flex-col gap-2">
+              <button type="button" className={btn('brand', 'w-full')} disabled={!ready || sending} onClick={removeAndSend}>
+                <Trash2 aria-hidden />{ready ? `Remove those and send ${plural(ready, 'question')}` : 'Nothing left to send'}
+              </button>
+              <button type="button" className={btn('dark', 'w-full')} onClick={() => void copy('fix', fixPrompt(raw, rows, all))}>
+                <ActionIcon done={done === 'fix'}><Copy /></ActionIcon>Copy prompt to fix them
+              </button>
+              <p className="min-h-[1.5em] text-[13px] text-warm-secondary" aria-live="polite">
+                {done === 'fix' ? 'Copied. Paste it into the chatbot, then paste its whole reply into Questions, over the old text.' : 'The prompt has each problem and the whole text, and asks the chatbot to write it all again.'}
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="mt-4"><Guide /></div>
@@ -424,8 +486,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center lg:hidden" aria-live="polite">
         {rows.length > 0 && !resultsInView ? (
           <button type="button" onClick={() => scrollToEl(results.current)}
-            className={cn('pointer-events-auto flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[14px] font-semibold shadow-pill', errors ? 'bg-destructive text-destructive-foreground' : 'bg-panel text-background')}>
-            {errors ? `${plural(errors, 'line')} left out · ` : ''}{plural(rows.length, 'question')} <ArrowDown className="size-4" aria-hidden />
+            className={cn('pointer-events-auto flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[14px] font-semibold shadow-pill', toFix ? 'bg-destructive text-destructive-foreground' : 'bg-panel text-background')}>
+            {toFix ? `${plural(toFix, 'problem')} to fix · ` : ''}{plural(rows.length, 'question')} <ArrowDown className="size-4" aria-hidden />
           </button>
         ) : null}
       </div>
@@ -638,14 +700,14 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
           onPaste={(e) => { pasted.current = true; const t = e.currentTarget; onPaste(t.selectionStart === 0 && t.selectionEnd === t.value.length); }}
           onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
           onScroll={sync} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
-          placeholder={'One question per line, like this:\n\nTopic 1: Chemical Equations\nQuestion | Answer\nQuestion | Answer | easy'} />
+          placeholder={'One block per question, like this:\n\nTopic 1: Chemical Equations\n\nQ: The question\nA: The answer\nFill: A sentence with ___ where the answer goes\nWrong: Wrong option; another; another\nLevel: easy'} />
       </div>
       <p id="caret-note" aria-live="polite"
         className={cn('min-h-[1.5em] text-[14px]', here.length ? (here.some((x) => x.level === 'error') ? 'text-destructive' : 'text-brand-deep') : 'text-warm-secondary')}>
         {here.length
           ? <span key={`l${caret}`}><b>Line {caret}:</b> {here.map((x) => x.text).join(' ')}</span>
           : issues.length
-            ? <span key="hint"><span className="games-mark error">Red</span> lines are left out. <span className="games-mark warn">Amber</span> lines are kept, but check them. Put the cursor on one to see why.</span>
+            ? <span key="hint"><span className="games-mark error">Red</span> and <span className="games-mark warn">amber</span> lines need fixing before their questions can be sent. Put the cursor on one to see why.</span>
             : ' '}
       </p>
     </>

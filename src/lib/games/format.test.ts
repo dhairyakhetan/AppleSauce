@@ -4,134 +4,206 @@ import {
   SUBJECTS, titleCase, writeDetail,
 } from './details';
 import {
-  asText, baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, visibleIssues,
+  asText, baseName, blockOf, EXAMPLE, format, lineLevels, MAX_ANSWER_WORDS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, missing, NO_ANSWER, NO_FILL,
+  problemsByRow, visibleIssues,
 } from './format';
 import { counts, setStatus, toCSV, toJSON, toRecord, toTSV, type Bank } from './rows';
 
-const qa = (raw: string) => format(raw).rows.map((r) => [r.question, r.answer]);
 const HEAD = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Matter\n';
-/** The same questions in many shapes at once: what people really paste. */
-const MIXED = `Board: cbse
-Class: X
-Subject: science
-Chapter 1: chemical reactions and equations
+/** A question block with every part, which passes every check. */
+const GOOD = `Q: Gas that green plants take in from the air to make their food
+A: Carbon dioxide
+Also: CO2
+Fill: Green plants take in ___ from the air to make their food.
+Wrong: Oxygen; Nitrogen; Hydrogen
+Level: easy`;
+const one = (block: string) => format(`${HEAD}\n${block}`);
+/** The problems with one block, as [line within the block (Q: is 1), level, text]. */
+const problems = (block: string) => one(block).issues.map((x) => [x.line - 5, x.level, x.text]);
 
-Topic 1: chemical equations
-1. Equation with the same number of atoms of each element on both sides? Ans: Balanced equation
-2. Q. Which law requires a chemical equation to be balanced?
-Ans. Law of conservation of mass
-
-## Topic 2: types of chemical reactions
-- Reaction in which two or more reactants form a single product | Combination reaction | easy
-- Reaction in which a single reactant breaks down into simpler products = Decomposition reaction
-- Gain of oxygen by a substance during a reaction - Oxidation
-
-Topic 3: effects of oxidation in everyday life
-Q3) Common name for the corrosion of iron? Rusting
-Gas filled in chip packets to keep the chips from going rancid | Nitrogen | easy
-What do fats and oils become when they are oxidised?
-`;
-
-describe('reading questions and answers', () => {
-  it('reads every common shape the same way', () => {
-    const shapes = [
-      'What is the capital of France? | Paris',
-      'What is the capital of France?\tParis',
-      '| What is the capital of France? | Paris |',
-      '1. What is the capital of France? Paris',
-      'Q1. What is the capital of France? Ans: Paris',
-      'Q: What is the capital of France? A: Paris',
-      '- What is the capital of France? - Paris',
-      '**What is the capital of France?** Paris',
-      'What is the capital of France? → Paris',
-      'Q. What is the capital of France?\nAns. Paris',
-      '2) What is the capital of France?\nParis',
-      'Question 3: What is the capital of France?\nAnswer: Paris',
-      '﻿What is the capital of France? | Paris\r\n',
-    ];
-    for (const s of shapes) expect(qa(s), s).toEqual([['What is the capital of France?', 'Paris']]);
+describe('reading question blocks', () => {
+  it('reads each part from its labelled line', () => {
+    const { rows, issues } = one(GOOD);
+    expect(issues).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      question: 'Gas that green plants take in from the air to make their food', answer: 'Carbon dioxide', also: ['CO2'],
+      fill: 'Green plants take in ___ from the air to make their food.', wrong_options: ['Oxygen', 'Nitrogen', 'Hydrogen'], difficulty: 'easy',
+      chapter_id: 'CBSE10SCI01', question_no: 1, line: 6, end: 11,
+    });
   });
 
-  it('splits statement lines on =, a spaced dash or a colon', () => {
-    expect(qa('SI unit of force = Newton')).toEqual([['SI unit of force', 'Newton']]);
-    expect(qa('Powerhouse of the cell - Mitochondria')).toEqual([['Powerhouse of the cell', 'Mitochondria']]);
-    expect(qa('Powerhouse of the cell: Mitochondria')).toEqual([['Powerhouse of the cell', 'Mitochondria']]);
-    expect(qa('Q1. Name the gas plants take in\nAns: Carbon dioxide')).toEqual([['Name the gas plants take in', 'Carbon dioxide']]);
-  });
-
-  it('never changes the wording of questions and answers', () => {
-    expect(qa('The ___ is the powerhouse of the cell | mitochondria')).toEqual([['The ___ is the powerhouse of the cell', 'mitochondria']]);
-    expect(qa('3.14 is the value of which constant? | Pi')).toEqual([['3.14 is the value of which constant?', 'Pi']]);
-    expect(qa('Quartz is made of which element besides oxygen? | silicon')).toEqual([['Quartz is made of which element besides oxygen?', 'silicon']]);
-    expect(qa('What is v = u + at called? Equation of motion')).toEqual([['What is v = u + at called?', 'Equation of motion']]);
-    expect(qa('Relation between f and R for a spherical mirror | f = R/2')).toEqual([['Relation between f and R for a spherical mirror', 'f = R/2']]);
-    expect(qa('पानी का रासायनिक सूत्र क्या है? | H₂O')).toEqual([['पानी का रासायनिक सूत्र क्या है?', 'H₂O']]);
-  });
-
-  it('skips code fences, Markdown dividers and table headers', () => {
-    const raw = '```\n| Question | Answer |\n|---|---|\n| Capital of France | Paris |\n```';
-    expect(qa(raw)).toEqual([['Capital of France', 'Paris']]);
-    expect(format(raw).issues).toEqual([]);
-  });
-
-  it('reports every line it cannot use, as an error with its line number', () => {
-    const { rows, issues } = format([
-      'Just a note without an answer',
-      'What is the capital of France?',
-      'Ans: Paris',
-      'Ans: Rome',
-      'What is the capital of Italy?',
-      'Chapter 2: Maps',
-      `${'q'.repeat(MAX_QUESTION + 1)} | a`,
-      `q | ${'a'.repeat(MAX_ANSWER + 1)}`,
-      ' | answer',
-      'a | b | c | d | e',
-      'What is the capital of France? | Paris',
-      'What is the capital of France? | Paris',
-      'What is the capital of Spain?',
+  it('lets a question, answer or sentence contain any symbol: only the label at the start of a line counts', () => {
+    const { rows, issues } = one([
+      'Q: Value of |-7| + 3 [in the set {1, 2}]; note: A: is not a label here',
+      'A: 10',
+      'Fill: |-7| + 3 = ___ (so the answer is a number)',
+      'Wrong: -4; 4; -10',
+      '',
+      'Q: Name of the Python method __init__ is called a',
+      'A: Constructor',
+      'Fill: In Python, __init__ is the ___ of a class.',
+      'Wrong: Destructor; Decorator; Iterator',
     ].join('\n'));
-    expect(rows.map((r) => r.line)).toEqual([2, 11]);
-    expect(issues.filter((x) => x.level === 'error').map((x) => x.line)).toEqual([1, 4, 5, 7, 8, 9, 10, 12, 13]);
-    expect(issues.find((x) => x.line === 5)!.text).toBe('This question has no answer.');
-    expect(issues.find((x) => x.line === 13)!.text).toBe('This question has no answer.');
-    expect(issues.find((x) => x.line === 12)!.text).toBe('Same question as line 11, skipped.');
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => [r.question, r.fill])).toEqual([
+      ['Value of |-7| + 3 [in the set {1, 2}]; note: A: is not a label here', '|-7| + 3 = ___ (so the answer is a number)'],
+      ['Name of the Python method __init__ is called a', 'In Python, __init__ is the ___ of a class.'],
+    ]);
+  });
+
+  it('accepts labels in any case, and the bullets, numbers and bold a chatbot may add before them', () => {
+    const shapes = [
+      'q: Gas that green plants take in\na: Carbon dioxide',
+      '1. Q: Gas that green plants take in\n   A: Carbon dioxide',
+      '- Q: Gas that green plants take in\n- A: Carbon dioxide',
+      '**Q:** Gas that green plants take in\n**A:** Carbon dioxide',
+      '**Q**: Gas that green plants take in\n**A**: Carbon dioxide',
+      'Q:Gas that green plants take in\nA:   Carbon dioxide  ',
+      '```\nQ: Gas that green plants take in\n\nA: Carbon dioxide\n```',
+      'Q: Gas that green plants take in\r\nA: "Carbon dioxide"',
+    ];
+    for (const s of shapes) expect(one(s).rows.map((r) => [r.question, r.answer]), s).toEqual([['Gas that green plants take in', 'Carbon dioxide']]);
+  });
+
+  it('never changes the wording: only extra spaces, and quotes or bold around a whole part, go', () => {
+    const { rows } = one('Q:   Who said "Swaraj is my birthright"?\nA: **Bal Gangadhar Tilak**\nWrong: "Mahatma Gandhi"; Lala Lajpat Rai; Bipin Chandra Pal');
+    expect(rows[0]).toMatchObject({ question: 'Who said "Swaraj is my birthright"?', answer: 'Bal Gangadhar Tilak', wrong_options: ['Mahatma Gandhi', 'Lala Lajpat Rai', 'Bipin Chandra Pal'] });
+  });
+
+  it('reads True/False questions with nothing else', () => {
+    expect(problems('Q: The Sun is a star\nA: True\nLevel: easy')).toEqual([]);
+  });
+});
+
+describe('the checks, each on the line to fix', () => {
+  const cases: [string, string, number, 'error' | 'warn', RegExp][] = [
+    ['no answer', 'Q: Gas that green plants take in', 1, 'error', /^No A: line/],
+    ['empty question', 'Q:\nA: Oxygen', 1, 'error', /question is empty/],
+    ['question too long', `Q: ${'a '.repeat(160)}\nA: Oxygen`, 1, 'error', new RegExp(`longer than ${MAX_QUESTION}`)],
+    ['answer in the question', 'Q: Mitochondria is called the powerhouse of the cell\nA: Mitochondria', 1, 'error', /shows the answer \("Mitochondria"\)/],
+    ['other answer in the question', 'Q: Brain of the computer, the CPU\nA: Central Processing Unit\nAlso: CPU', 1, 'error', /shows the answer \("CPU"\)/],
+    ['of the following', 'Q: Which of the following is a noble gas?\nA: Neon', 1, 'error', /make sense on its own/],
+    ['the above', 'Q: Name the process shown above\nA: Osmosis', 1, 'error', /make sense on its own/],
+    ['a figure', 'Q: Name the part labelled X in the diagram given\nA: Nucleus', 1, 'error', /figure, diagram/],
+    ['true or false in the question', 'Q: True or false: the Sun is a star\nA: True', 1, 'error', /Write only the statement/],
+    ['two blanks in the question', 'Q: The ___ and the ___ of a cell\nA: Nucleus', 1, 'error', /Only one ___/],
+    ['empty answer', 'Q: Gas plants take in\nA:', 2, 'error', /answer is empty/],
+    ['answer of punctuation', 'Q: Gas plants take in\nA: ...', 2, 'error', /no letters or digits/],
+    ['answer too long', 'Q: What does a plant need\nA: Sunlight water air and carbon dioxide gas', 2, 'error', new RegExp(`at most ${MAX_ANSWER_WORDS} words`)],
+    ['yes/no', 'Q: Is the Sun a star\nA: Yes', 2, 'error', /Yes or No/],
+    ['two answers in one', 'Q: Capital of West Bengal\nA: Kolkata / Calcutta', 2, 'error', /each other answer that counts on its own Also/],
+    ['a short form in brackets', 'Q: Brain of the computer\nA: Central Processing Unit (CPU)', 2, 'error', /type the brackets/],
+    ['a note in brackets', 'Q: Time sunlight takes to reach the Earth\nA: 8 minutes (approx.)', 2, 'error', /type the brackets/],
+    ['the old [optional] notation', 'Q: Splitting of a compound\nA: Decomposition [reaction]', 2, 'error', /type the brackets/],
+    ['a symbol nobody can type', 'Q: Square root of 2, written with the root sign\nA: √2', 2, 'error', /can't type "√"/],
+    ['a blank in the answer', 'Q: Powerhouse of the cell\nA: Mito___', 2, 'error', /No ___ in the answer/],
+    ['Also same as the answer', 'Q: Highest mountain range in the world\nA: Himalayas\nAlso: The Himalayas', 3, 'error', /same as the answer/],
+    ['Also twice', 'Q: Brain of the computer\nA: Central Processing Unit\nAlso: CPU\nAlso: cpu', 4, 'error', /written twice/],
+    ['two answers on one Also line', 'Q: Capital of West Bengal\nA: Kolkata\nAlso: Calcutta; Calcutta city', 3, 'error', /One answer per Also/],
+    ['Fill with no blank', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: Plants take in carbon gas.', 3, 'error', /needs ___/],
+    ['Fill with two blanks', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: Plants take in ___ and give out ___.', 3, 'error', /Only one ___/],
+    ['Fill showing the answer', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: Plants take in ___, which is carbon dioxide.', 3, 'error', /shows the answer/],
+    ['Fill too short', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: ___ gas', 3, 'error', /whole sentence/],
+    ['no Fill line', 'Q: Gas plants take in\nA: Carbon dioxide', 1, 'warn', /^No Fill: line/],
+    ['too few wrong options', 'Q: Gas plants take in\nA: Carbon dioxide\nWrong: Oxygen; Nitrogen', 3, 'error', /at least 3 wrong options/],
+    ['too many wrong options', 'Q: Gas plants take in\nA: Carbon dioxide\nWrong: a; b; c; d; e; f', 3, 'error', /At most 5 wrong options/],
+    ['a wrong option twice', 'Q: Gas plants take in\nA: Carbon dioxide\nWrong: Oxygen; oxygen.; Nitrogen', 3, 'error', /written twice/],
+    ['the answer as a wrong option', 'Q: Gas plants take in\nA: Carbon dioxide\nAlso: CO2\nWrong: Oxygen; co2; Nitrogen', 4, 'error', /"co2" counts as the answer/],
+    ['All of the above', 'Q: Gas plants take in\nA: Carbon dioxide\nWrong: Oxygen; Nitrogen; All of the above', 3, 'error', /options are shuffled/],
+    ['options of another kind', 'Q: Year of the Battle of Plassey\nA: 1757\nWrong: 1764; 1857; Buxar', 3, 'error', /same kind as the answer: numbers/],
+    ['a second A line', 'Q: Gas plants take in\nA: Carbon dioxide\nA: Oxygen', 3, 'error', /already has a A: line/],
+    ['a second Wrong line', 'Q: Gas plants take in\nA: Carbon dioxide\nWrong: Oxygen; Nitrogen; Helium\nWrong: Argon', 4, 'error', /all the wrong options on one line/],
+    ['a level that is not one', 'Q: Gas plants take in\nA: Carbon dioxide\nLevel: tricky', 3, 'error', /easy, medium or hard/],
+    ['Fill on True/False', 'Q: The Sun is a star\nA: True\nFill: The Sun is a ___.', 3, 'error', /True\/False question has no Fill/],
+    ['Wrong on True/False', 'Q: The Sun is a star\nA: True\nWrong: False', 3, 'error', /needs no Wrong/],
+    ['a line that is not part of anything', 'Q: Gas plants take in\nA: Carbon dioxide\nit is also called CO2', 3, 'error', /isn't part of the question/],
+    ['options listed as a) b)', 'Q: Gas plants take in\nA: Carbon dioxide\na) Oxygen', 3, 'error', /Don't list options as a\), b\)/],
+    ['a label written another way', 'Question: Gas plants take in\nAnswer: Carbon dioxide', 1, 'error', /Write this label as Q:/],
+    ['a one-line question', 'Gas plants take in | Carbon dioxide', 1, 'error', /Write each question as a block/],
+    ['an answer with no question', 'A: Carbon dioxide', 1, 'error', /has no Q: line above it/],
+  ];
+  it.each(cases)('%s', (_name, block, line, level, text) => {
+    const found = problems(block);
+    expect(found.some(([l, lv, t]) => l === line && lv === level && text.test(String(t))), JSON.stringify(found)).toBe(true);
+  });
+
+  it('a number or a single letter in the question is not a giveaway (x + 4 = 8, Vitamin A)', () => {
+    expect(problems('Q: If x + 4 = 8, what is x?\nA: 4\nFill: When x + 4 = 8, x is ___.\nWrong: 2; 8; 12')).toEqual([]);
+    expect(problems('Q: Deficiency of which vitamin causes night blindness, a common eye problem\nA: Vitamin A\nFill: Lack of ___ causes night blindness.\nWrong: Vitamin C; Vitamin D; Vitamin K')).toEqual([]);
+  });
+
+  it('wrong options may be the kind of an Also answer: "Zero", also "0", with numbers', () => {
+    expect(problems('Q: Temperature at which pure water freezes, in degrees Celsius\nA: Zero\nAlso: 0\nFill: Pure water freezes at ___ degrees Celsius.\nWrong: 10; 32; 100')).toEqual([]);
+  });
+
+  it('a symbol is fine when an Also line gives a way to type it', () => {
+    expect(problems('Q: Square root of 2, written with the root sign\nA: √2\nAlso: sqrt 2\nFill: The square root of 2 is written ___.\nWrong: 2²; 1/2; 2')).toEqual([]);
+  });
+
+  it('allows at most 30 questions in a topic and 80 in a chapter', () => {
+    const blocks = (n: number, from = 0) => Array.from({ length: n }, (_, i) => `Q: Question number ${from + i}\nA: Answer ${from + i}\nFill: Sentence ${from + i} with ___ in it.`).join('\n\n');
+    const topic = format(`${HEAD}Topic 1: T\n${blocks(MAX_PER_TOPIC + 2)}`);
+    expect(topic.issues.filter((x) => /per topic|in topic 1/.test(x.text))).toHaveLength(2);
+    const chapter = format(`${HEAD}${[1, 2, 3].map((t) => `Topic ${t}: T${t}\n${blocks(MAX_PER_TOPIC - 1, t * 100)}`).join('\n')}`);
+    expect(chapter.issues.filter((x) => /per chapter|in this chapter/.test(x.text))).toHaveLength(3 * (MAX_PER_TOPIC - 1) - MAX_PER_CHAPTER);
+  });
+
+  it('flags the same question twice in a chapter', () => {
+    expect(format(`${HEAD}\n${GOOD}\n\n${GOOD}`).issues.map((x) => [x.line, x.text])).toEqual([[13, 'Same question as line 6. Leave one of them out.']]);
   });
 
   it('marks each line with its worst problem, for the underline', () => {
-    const { issues } = format('Board: Xyz\nClass: 13\nq1 | a1\nwhat?');
-    expect([...lineLevels(issues)]).toEqual([[1, 'error'], [2, 'error'], [4, 'error']]);
+    const levels = lineLevels([{ line: 1, level: 'warn', text: 'a' }, { line: 1, level: 'error', text: 'b' }, { line: 2, level: 'warn', text: 'c' }]);
+    expect([...levels]).toEqual([[1, 'error'], [2, 'warn']]);
+  });
+});
+
+describe('which questions have problems', () => {
+  it('ties each problem to its question, or to the questions under the detail line it is on', () => {
+    const text = `Board: CBSE\nClass: 13\nSubject: Science\nChapter 1: Matter\n\n${GOOD}\n\nQ: Gas plants take in\nA: Carbon dioxide\n\nstray words`;
+    const { rows, issues } = format(text);
+    const { byRow, general } = problemsByRow(rows, issues);
+    expect(byRow.get(0)!.map((x) => x.text)).toEqual(['Class must be from 1 to 12.']); // the Class line is above it
+    expect(byRow.get(1)!.map((x) => x.text)).toEqual(['Class must be from 1 to 12.', NO_FILL]);
+    expect(general.map((x) => [x.line, x.text])).toEqual([[16, 'Start each question with Q:, and its answer on the next line with A:.']]); // after a blank line
+    const under = format(`${HEAD}\nQ: Gas plants take in\nA: Carbon dioxide\nstray words`);
+    expect(problemsByRow(under.rows, under.issues).byRow.get(0)!.map((x) => x.text)).toContainEqual(expect.stringMatching(/isn't part of the question/)); // right under it
+    const loose = format(`stray words\n${HEAD}\n${GOOD}`);
+    expect(problemsByRow(loose.rows, loose.issues).general.map((x) => x.line)).toEqual([1]);
+    // a one-line question after a blank line is not part of the good question above it
+    const after = format(`${HEAD}\n${GOOD}\n\nWhich gas do plants give out? | Oxygen`);
+    expect(problemsByRow(after.rows, after.issues)).toMatchObject({ byRow: new Map(), general: [{ line: 13 }] });
   });
 });
 
 describe('"Try an example"', () => {
-  it('shows only the one format, and reads cleanly with nothing missing', () => {
+  it('uses every part, in the one format, with one amber and one red question to show the marks', () => {
     const { rows, issues } = format(EXAMPLE);
-    expect(issues).toEqual([]);
     expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
+    expect(issues.map((x) => [x.level, x.text.slice(0, 20)])).toEqual([['warn', NO_FILL.slice(0, 20)], ['error', 'The question must ma'], ['warn', NO_FILL.slice(0, 20)]]);
     for (const line of EXAMPLE.split('\n').filter(Boolean)) {
-      expect(line).toMatch(/^(Board|Class|Subject): \S|^(Chapter|Topic) \d+: \S|^[^|]+ \| [^|]+( \| (easy|medium|hard))?$/);
+      expect(line).toMatch(/^(Board|Class|Subject): \S|^(Chapter|Topic) \d+: \S|^(Q|A|Also|Fill|Wrong|Level): \S/);
     }
-    expect(rows.map((r) => r.answer)).toEqual(format(MIXED).rows.map((r) => r.answer));
+    expect(rows.some((r) => r.also.length) && rows.some((r) => r.fill) && rows.some((r) => r.wrong_options.length) && rows.some((r) => r.answer === 'True')).toBe(true);
   });
 });
 
-describe('details: board, class, subject, chapter, topic, difficulty', () => {
+describe('details: board, class, subject, chapter, topic', () => {
+  const q = (n: number) => `Q: Question ${n}\nA: Answer ${n}\nFill: Sentence ${n} has ___ in it.`;
+
   it('takes them from lines in any common style and writes names the standard way', () => {
-    const { rows, issues } = format(MIXED);
-    expect(issues.map((x) => [x.line, x.level, x.text])).toEqual([[19, 'error', 'This question has no answer.']]);
-    expect(rows).toHaveLength(7);
-    expect(new Set(rows.map((r) => `${r.chapter_id} ${r.board}/${r.class}/${r.subject}/${r.chapter_no}/${r.chapter}`)))
-      .toEqual(new Set(['CBSE10SCI01 CBSE/10/Science/1/Chemical Reactions and Equations']));
-    expect(rows.map((r) => [r.topic_id, r.question_no])).toEqual([
-      ['CBSE10SCI01T01', 1], ['CBSE10SCI01T01', 2], ['CBSE10SCI01T02', 1], ['CBSE10SCI01T02', 2], ['CBSE10SCI01T02', 3], ['CBSE10SCI01T03', 1], ['CBSE10SCI01T03', 2],
+    const { rows, issues } = format(`Board: cbse\nClass: X\nSubject: science\n## Chapter 1 - chemical reactions and equations\n**Topic 1:** chemical equations\n${q(1)}\nTopic 2: types of reactions\n${q(2)}\n${q(3)}`);
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => [r.chapter_id, r.board, r.class, r.subject, r.chapter, r.topic_id, r.topic, r.question_no])).toEqual([
+      ['CBSE10SCI01', 'CBSE', 10, 'Science', 'Chemical Reactions and Equations', 'CBSE10SCI01T01', 'Chemical Equations', 1],
+      ['CBSE10SCI01', 'CBSE', 10, 'Science', 'Chemical Reactions and Equations', 'CBSE10SCI01T02', 'Types of Reactions', 1],
+      ['CBSE10SCI01', 'CBSE', 10, 'Science', 'Chemical Reactions and Equations', 'CBSE10SCI01T02', 'Types of Reactions', 2],
     ]);
-    expect([...new Set(rows.map((r) => r.topic))]).toEqual(['Chemical Equations', 'Types of Chemical Reactions', 'Effects of Oxidation in Everyday Life']);
-    expect(rows.map((r) => r.answer)).toEqual(['Balanced equation', 'Law of conservation of mass', 'Combination reaction', 'Decomposition reaction', 'Oxidation', 'Rusting', 'Nitrogen']);
-    expect(rows.map((r) => r.difficulty)).toEqual([null, null, 'easy', null, null, null, 'easy']);
   });
 
   it('numbers topics by order of appearance unless numbered, and a new chapter clears the topic', () => {
-    const rows = format(`${HEAD}Topic: a\nq1 | a\nTopic: b\nq2 | a\nTopic 7: c\nq3 | a\nTopic: a\nq4 | a\nChapter 2: x\nq5 | a`).rows;
+    const rows = format(`${HEAD}Topic: a\n${q(1)}\nTopic: b\n${q(2)}\nTopic 7: c\n${q(3)}\nTopic: a\n${q(4)}\nChapter 2: x\n${q(5)}`).rows;
     expect(rows.map((r) => [r.topic, r.topic_no, r.question_no, r.topic_id])).toEqual([
       ['A', 1, 1, 'CBSE10SCI01T01'], ['B', 2, 1, 'CBSE10SCI01T02'], ['C', 7, 1, 'CBSE10SCI01T07'], ['A', 1, 2, 'CBSE10SCI01T01'], ['', null, 1, null],
     ]);
@@ -139,24 +211,24 @@ describe('details: board, class, subject, chapter, topic, difficulty', () => {
   });
 
   it('reads "10.2" in a topic line as topic 2', () => {
-    expect(format(`${HEAD}Topic 1.2: Atoms\nq1 | a1`).rows[0].topic_id).toBe('CBSE10SCI01T02');
+    expect(format(`${HEAD}Topic 1.2: Atoms\n${q(1)}`).rows[0].topic_id).toBe('CBSE10SCI01T02');
   });
 
   it('gives no ID until board, class, subject and chapter number are all known', () => {
-    expect(format('Chapter 1: Matter\nTopic 1: Atoms\nq1 | a1').rows[0]).toMatchObject({ chapter_id: null, topic_id: null, chapter_no: 1, topic_no: 1 });
-    const noNumber = format('Board: CBSE\nClass: 10\nSubject: Science\nChapter: Matter\nq1 | a1');
+    expect(format(`Chapter 1: Matter\nTopic 1: Atoms\n${q(1)}`).rows[0]).toMatchObject({ chapter_id: null, topic_id: null, chapter_no: 1, topic_no: 1 });
+    const noNumber = format(`Board: CBSE\nClass: 10\nSubject: Science\nChapter: Matter\n${q(1)}`);
     expect(noNumber.rows[0].chapter_id).toBeNull();
     expect(noNumber.issues).toEqual([{ line: 4, level: 'warn', text: 'Add the chapter number, for example "3: Acids". It is part of the chapter ID.' }]);
   });
 
-  it('accepts difficulty as a third part or a line, and warns about unknown values on a Difficulty line', () => {
-    const { rows, issues } = format('q1 | a | Hard\nDifficulty: medium\nq2 | a\nq3 | a | e\nDifficulty: tricky\nq4 | a');
-    expect(rows.map((r) => r.difficulty)).toEqual(['hard', 'medium', 'easy', 'medium']);
-    expect(issues).toEqual([{ line: 5, level: 'warn', text: '"tricky" is not easy, medium or hard, so no difficulty was set.' }]);
+  it('takes the level from each question, not from a Difficulty line', () => {
+    const { rows, issues } = format(`${q(1)}\nLevel: Hard\nDifficulty: medium\n${q(2)}`);
+    expect(rows.map((r) => r.difficulty)).toEqual(['hard', null]);
+    expect(issues.map((x) => [x.line, x.text])).toEqual([[5, 'Write the level under each question, as Level: easy (or medium, or hard).']]);
   });
 
   it('flags a wrong class, board or subject as an error, and its questions get no chapter ID', () => {
-    const { rows, issues } = format('Board: cbsc\nClass: 13\nSubject: chemsitry\nChapter 1: x\nq1 | a1');
+    const { rows, issues } = format(`Board: cbsc\nClass: 13\nSubject: chemsitry\nChapter 1: x\n${q(1)}`);
     expect(issues.map((x) => [x.line, x.level, x.text])).toEqual([
       [1, 'error', 'Did you mean CBSE?'],
       [2, 'error', 'Class must be from 1 to 12.'],
@@ -167,171 +239,95 @@ describe('details: board, class, subject, chapter, topic, difficulty', () => {
 
   it('warns about ICSE in class 11, two names for one chapter number, unused details and empty topics', () => {
     const { issues } = format([
-      'Board: ICSE', 'Class: 11', 'Subject: Physics', 'Chapter 1: Units', 'q1 | a',
-      'Chapter 1: Motion', 'q2 | a',
-      'Topic 1: Empty', 'Topic 2: Full', 'q3 | a',
-      'Class: 9', 'Class: 11', 'q4 | a',
+      'Board: ICSE', 'Class: 11', 'Subject: Physics', 'Chapter 1: Units', q(1),
+      'Chapter 1: Motion', q(2),
+      'Topic 1: Empty', 'Topic 2: Full', q(3),
+      'Class: 9', 'Class: 11', q(4),
     ].join('\n'));
     expect(issues.map((x) => [x.line, x.text])).toEqual([
       [1, 'ICSE ends at class 10. Classes 11 and 12 are ISC.'],
-      [6, 'Chapter ID ICSE11PHY01 is already "Units" (line 4). Check the chapter number.'],
-      [8, 'No questions under this topic.'],
-      [11, 'Not used: Class is set again on line 12 before any question.'],
+      [8, 'Chapter ID ICSE11PHY01 is already "Units" (line 4). Check the chapter number.'],
+      [12, 'No questions under this topic.'],
+      [17, 'Not used: Class is set again on line 18 before any question.'],
     ]);
   });
 
-  it('does not mistake sentences for detail lines', () => {
-    expect(qa('Class of compounds that turn litmus red | Acids')).toEqual([['Class of compounds that turn litmus red', 'Acids']]);
-    expect(qa('Section of a plant cell that holds sap? Vacuole')).toEqual([['Section of a plant cell that holds sap?', 'Vacuole']]);
-    expect(qa('Chlorophyll is found in which organelle? Chloroplast')).toEqual([['Chlorophyll is found in which organelle?', 'Chloroplast']]);
-    expect(qa('Class civil engineering as a branch? Yes')).toEqual([['Class civil engineering as a branch?', 'Yes']]);
-  });
-
-  it('reads spreadsheet tables with a header row, in any column order, checking each value once', () => {
-    const tsv = 'Board\tClass\tSubject\tChapter\tTopic\tQuestion\tAnswer\tLevel\ncbse\t10th\tchem\t3: acids\tindicators\tColour of litmus in acid\tRed\teasy\ncbse\t10th\tchem\t3: acids\tindicators\tColour of litmus in base\tBlue\t\nxyz\t10\tchem\t3: acids\t\tA third\tC\t\nxyz\t10\tchem\t3: acids\t\tA fourth\tD\t';
-    const { rows, issues } = format(tsv);
-    expect(rows.map((r) => [r.chapter_id, r.topic_id, r.chapter, r.topic, r.question_no, r.answer, r.difficulty])).toEqual([
-      ['CBSE10CHE03', 'CBSE10CHE03T01', 'Acids', 'Indicators', 1, 'Red', 'easy'],
-      ['CBSE10CHE03', 'CBSE10CHE03T01', 'Acids', 'Indicators', 2, 'Blue', null],
-      [null, null, 'Acids', '', 1, 'C', null], // xyz isn't a board on the list
-      [null, null, 'Acids', '', 2, 'D', null],
-    ]);
-    expect(issues.map((x) => x.line)).toEqual([4]);
-    const csv = 'question,answer,topic\n"Capital of France, the country",Paris,Europe\n"He said ""hi""",Hi,Words';
-    expect(format(csv).rows.map((r) => [r.question, r.answer, r.topic])).toEqual([['Capital of France, the country', 'Paris', 'Europe'], ['He said "hi"', 'Hi', 'Words']]);
-    expect(qa('1\tCapital of France\tParis')).toEqual([['Capital of France', 'Paris']]);
-  });
-
-  it('keeps detail lines that contain commas after a CSV header', () => {
-    const rows = format('question,answer\nq1,a1\nChapter 3: Acids, Bases and Salts\nq2,a2').rows;
-    expect(rows.map((r) => r.chapter)).toEqual(['', 'Acids, Bases and Salts']);
+  it('does not mistake questions for detail lines', () => {
+    const { rows } = format('Q: Class of compounds that turn litmus red\nA: Acids\nQ: Topic sentence of a paragraph is usually the\nA: First sentence');
+    expect(rows.map((r) => [r.question, r.answer])).toEqual([['Class of compounds that turn litmus red', 'Acids'], ['Topic sentence of a paragraph is usually the', 'First sentence']]);
   });
 
   it('counts questions missing a detail', () => {
-    const { rows } = format('Class: 10\nq1 | a\nTopic: T\nq2 | a');
+    const { rows } = format(`Class: 10\n${q(1)}\nTopic: T\n${q(2)}`);
     expect(missing(rows)).toEqual({ board: 2, class: 0, subject: 2, chapter: 2, topic: 1, id: 2 });
   });
 });
 
 describe('output for the database', () => {
-  const { rows } = format(MIXED);
+  const { rows } = format(EXAMPLE);
 
   it('has one flat record per question, with null for missing values', () => {
-    expect(toRecord(rows[0])).toEqual({
-      chapter_id: 'CBSE10SCI01', topic_id: 'CBSE10SCI01T01', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1,
-      chapter: 'Chemical Reactions and Equations', topic_no: 1, topic: 'Chemical Equations', question_no: 1,
-      question: 'Equation with the same number of atoms of each element on both sides?', answer: 'Balanced equation', wrong_options: [], difficulty: null,
+    expect(toRecord(rows[2])).toEqual({
+      chapter_id: 'CBSE10SCI01', topic_id: 'CBSE10SCI01T02', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1,
+      chapter: 'Chemical Reactions and Equations', topic_no: 2, topic: 'Types of Chemical Reactions', question_no: 1,
+      question: 'Reaction in which a single reactant breaks down into simpler products', answer: 'Decomposition reaction', also: ['Decomposition'],
+      fill: 'A reaction in which a single reactant breaks down into simpler products is called a ___.',
+      wrong_options: ['Combination reaction', 'Displacement reaction', 'Neutralisation reaction'], difficulty: 'easy',
     });
-    expect(JSON.parse(toJSON(rows))).toHaveLength(7);
+    expect(JSON.parse(toJSON(rows))).toHaveLength(rows.length);
   });
 
   it('writes CSV with proper quoting and no byte-order mark', () => {
-    const csv = toCSV(format('He said "hi", then left | Hi, there').rows);
+    const csv = toCSV(format('Q: He said "hi", then left\nA: Hi, there').rows);
     expect(csv.charCodeAt(0)).not.toBe(0xfeff);
-    expect(csv.split('\n')[0]).toBe('chapter_id,topic_id,board,class,subject,chapter_no,chapter,topic_no,topic,question_no,question,answer,wrong_options,difficulty');
-    expect(csv.split('\n')[1]).toBe(',,,,,,,,,1,"He said ""hi"", then left","Hi, there",,');
+    expect(csv.split('\n')[0]).toBe('chapter_id,topic_id,board,class,subject,chapter_no,chapter,topic_no,topic,question_no,question,answer,also,fill,wrong_options,difficulty');
+    expect(csv.split('\n')[1]).toBe(',,,,,,,,,1,"He said ""hi"", then left","Hi, there",,,,');
   });
 
-  it('reads its own CSV and spreadsheet copy back into the same rows', () => {
-    const strip = (rs: typeof rows) => rs.map(({ line: _line, ...r }) => r);
-    expect(strip(format(toCSV(rows)).rows)).toEqual(strip(rows));
-    expect(strip(format(toTSV(rows)).rows)).toEqual(strip(rows));
-  });
-
-  it('writes rows back in the one format, which reads back into the same rows ("Fix in the formatter")', () => {
-    const strip = (rs: typeof rows) => rs.map(({ line: _line, ...r }) => r);
+  it('writes rows back in the one format, which reads back into the same rows ("Fix it")', () => {
+    const strip = (rs: typeof rows) => rs.map(({ line: _l, end: _e, under: _u, ...r }) => r);
     const text = asText(rows);
-    expect(format(text).issues).toEqual([]);
     expect(strip(format(text).rows)).toEqual(strip(rows));
-    expect(text.split('\n').slice(0, 6)).toEqual(['Board: CBSE', 'Class: 10', 'Subject: Science', 'Chapter 1: Chemical Reactions and Equations', 'Topic 1: Chemical Equations', 'Equation with the same number of atoms of each element on both sides? | Balanced equation']);
-    // one question on its own, a question with no topic after one with a topic, and a bar inside an answer
+    expect(text.split('\n').slice(0, 7)).toEqual(['Board: CBSE', 'Class: 10', 'Subject: Science', 'Chapter 1: Chemical Reactions and Equations', 'Topic 1: Chemical Equations', '', 'Q: Law which says that mass can neither be created nor destroyed in a chemical reaction']);
+    // one question on its own, and a question with no topic after one with a topic
     expect(strip(format(asText([rows[3]])).rows)).toEqual(strip([{ ...rows[3], question_no: 1 }]));
-    const mixed = format(`${HEAD}Topic 1: Atoms\nQ1 | A1\nChapter 2: Molecules\nQ2 | A2\nQ3\tA | B`).rows;
+    const mixed = format(`${HEAD}Topic 1: Atoms\n${GOOD}\nChapter 2: Molecules\nQ: Smallest particle of a compound\nA: Molecule`).rows;
     expect(strip(format(asText(mixed)).rows)).toEqual(strip(mixed));
+    expect(blockOf(rows[2]).split('\n').map((l) => l.split(':')[0])).toEqual(['Q', 'A', 'Also', 'Fill', 'Wrong', 'Level']);
   });
 
   it('writes a spreadsheet copy with the same columns', () => {
     const lines = toTSV(rows).split('\n');
-    expect(lines).toHaveLength(8);
-    expect(lines[1].split('\t')).toHaveLength(14);
+    expect(lines).toHaveLength(rows.length + 1);
+    expect(lines[1].split('\t')).toHaveLength(16);
   });
 
   it('names files after the chapter ID', () => {
     expect(baseName(rows)).toBe('CBSE10SCI01-chemical-reactions-and-equations');
-    expect(baseName(format('Subject: Physics\nq1 | a1').rows)).toBe('physics-questions');
+    expect(baseName(format('Subject: Physics\nQ: q1\nA: a1').rows)).toBe('physics-questions');
     expect(baseName([])).toBe('questions');
   });
 });
 
-describe('multiple choice', () => {
-  it('reads the wrong options after the answer, separated by ";", with the difficulty before or after them', () => {
-    const { rows, issues } = format([
-      'Gas filled in chip packets | Nitrogen | Oxygen; Hydrogen; Carbon dioxide | easy',
-      'Largest planet | Jupiter | hard | Saturn ; Mars',
-      'The Sun is a star | True | False',
-      'Capital of India | [New] Delhi | Mumbai; Kolkata',
-    ].join('\n'));
-    expect(issues).toEqual([]);
-    expect(rows.map((r) => [r.answer, r.wrong_options, r.difficulty])).toEqual([
-      ['Nitrogen', ['Oxygen', 'Hydrogen', 'Carbon dioxide'], 'easy'],
-      ['Jupiter', ['Saturn', 'Mars'], 'hard'],
-      ['True', ['False'], null],
-      ['[New] Delhi', ['Mumbai', 'Kolkata'], null],
-    ]);
-    expect(format('Boiling point of water | 100 °C').rows[0].wrong_options).toEqual([]);
-  });
-
-  it('leaves out a question whose options are broken, saying why', () => {
-    const { rows, issues } = format([
-      'q1 | a | b; c; d; e; f; g',
-      'q2 | Nitrogen | Oxygen; nitrogen.',
-      'q3 | a | b; B',
-      'q4 | a | b; c; All of the above',
-      'q5 | a | b; None of these',
-      'q6 | a | Both A and B; c',
-    ].join('\n'));
-    expect(rows).toEqual([]);
-    expect(issues.map((x) => [x.line, x.text])).toEqual([
-      [1, 'At most 5 wrong options. Separate them with ";".'],
-      [2, 'A wrong option is the same as the answer.'],
-      [3, 'The same wrong option is written twice.'],
-      [4, '"All of the above" doesn\'t work: the options are shuffled. Write a real option instead.'],
-      [5, '"None of these" doesn\'t work: the options are shuffled. Write a real option instead.'],
-      [6, '"Both A and B" doesn\'t work: the options are shuffled. Write a real option instead.'],
-    ]);
-  });
-
-  it('reads an options column from a spreadsheet, and writes the options back out', () => {
-    const sheet = format('Question\tAnswer\tWrong options\tDifficulty\nLargest planet\tJupiter\tSaturn; Mars\tmedium');
-    expect(sheet.rows[0]).toMatchObject({ answer: 'Jupiter', wrong_options: ['Saturn', 'Mars'], difficulty: 'medium' });
-    const strip = (rs: typeof sheet.rows) => rs.map(({ line: _line, ...r }) => r);
-    const mcq = format('Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Matter\nGas in chip packets | Nitrogen | Oxygen; Hydrogen | easy').rows;
-    expect(strip(format(asText(mcq)).rows)).toEqual(strip(mcq));
-    expect(strip(format(toCSV(mcq)).rows)).toEqual(strip(mcq));
-  });
-});
-
 describe('letting people finish writing before flagging', () => {
-  // 1 bad class, 2 no answer (a topic line follows), 4 unreadable, 5 too many parts
-  const { issues } = format('Class: 13\nWhat is H2O?\nTopic 1: Water\njust some words\nQ1 | A1 | x | y | z');
+  // 1 bad class; the question at 3 has no answer yet; 7 isn't part of anything
+  const text = 'Class: 13\n\nQ: What is H2O\n\nTopic 1: Water\n\nmore words';
+  const { rows, issues } = format(text);
   const lines = (xs: typeof issues) => xs.map((x) => x.line);
 
   it('shows everything when nobody is typing', () => {
-    expect(lines(visibleIssues(issues, {}))).toEqual([1, 2, 4, 5]);
-    expect(issues.find((x) => x.line === 2)!.text).toBe(NO_ANSWER);
+    expect(lines(visibleIssues(issues, {}, rows))).toEqual([1, 3, 7]);
+    expect(issues.find((x) => x.line === 3)!.text).toBe(NO_ANSWER);
   });
 
-  it('holds back the line being typed, and "no answer" on the line just above it', () => {
-    expect(lines(visibleIssues(issues, { caret: 4 }))).toEqual([1, 2, 5]);
-    expect(lines(visibleIssues(issues, { caret: 3 }))).toEqual([1, 4, 5]);
-  });
-
-  it('only holds back "no answer" above, not other problems there', () => {
-    expect(lines(visibleIssues(issues, { caret: 5 }))).toEqual([1, 2, 4]);
+  it('holds back the line being typed, and what a question is missing while the cursor is in it or just below', () => {
+    expect(lines(visibleIssues(issues, { caret: 7 }, rows))).toEqual([1, 3]);
+    expect(lines(visibleIssues(issues, { caret: 4 }, rows))).toEqual([1, 7]);
+    expect(lines(visibleIssues(issues, { caret: 6 }, rows))).toEqual([1, 3, 7]);
   });
 
   it('holds back the line a detail box is writing while it is typed in', () => {
-    expect(lines(visibleIssues(issues, { line: 1 }))).toEqual([2, 4, 5]);
+    expect(lines(visibleIssues(issues, { line: 1 }, rows))).toEqual([3, 7]);
   });
 });
 
@@ -512,12 +508,12 @@ describe('the question bank (behind the HoD desk)', () => {
   it('approves, sends back with a reason, and moves back to waiting, on the page\'s copy', () => {
     const bank: Bank = {
       batches: [{ id: 'B20261009-01', by: 'A', email: '', at }],
-      questions: format(MIXED).rows.map((r, i) => ({ ...r, id: `q${i}`, batch: 'B20261009-01', status: 'pending', note: '', reviewedAt: null })),
+      questions: format(EXAMPLE).rows.map((r, i) => ({ ...r, id: `q${i}`, batch: 'B20261009-01', status: 'pending', note: '', reviewedAt: null })),
     };
     const [a, b, c] = bank.questions.map((q) => q.id);
     let next = setStatus(bank, [a, b], 'approved', 'ignored', at);
     next = setStatus(next, [c], 'rejected', '  Answer should be Rusting  ', at);
-    expect(counts(next)).toEqual({ pending: 4, approved: 2, rejected: 1 });
+    expect(counts(next)).toEqual({ pending: 3, approved: 2, rejected: 1 });
     expect(next.questions.find((q) => q.id === a)).toMatchObject({ status: 'approved', note: '', reviewedAt: at });
     expect(next.questions.find((q) => q.id === c)).toMatchObject({ status: 'rejected', note: 'Answer should be Rusting' });
     const back = setStatus(next, [c], 'pending', '', at);

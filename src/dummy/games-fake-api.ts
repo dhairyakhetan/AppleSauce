@@ -21,82 +21,621 @@ const HOD = { email: 'vikram.singh@example.com', name: 'Vikram Singh' };
 const ROHAN = { email: 'rohan.mehta@example.com', name: 'Rohan Mehta' };
 const PRIYA = { email: 'priya.das@example.com', name: 'Priya Das' };
 
-/** Approved: what "Try the games" plays with. */
+/** Approved: what "Try the games" plays with. Every question has each version the games use, as the prompt asks. */
 const APPROVED_HEAT = `Board: CBSE
 Class: 7
 Subject: Science
 Chapter 4: Heat
+
 Topic 1: Hot and Cold
-Device used to measure how hot or cold something is | Thermometer | easy
-Scale of temperature marked on the thermometers we use every day | Celsius | easy
-Normal temperature of the human body, in degrees Celsius | 37 | 35; 40; 98.6 | medium
-Thermometer that a doctor uses to check for fever | Clinical thermometer | Laboratory thermometer; Maximum-minimum thermometer | medium
-Mercury is used in thermometers because it expands evenly when heated | True | False | easy
+
+Q: Device used to measure how hot or cold something is
+A: Thermometer
+Fill: A ___ is used to measure how hot or cold something is.
+Wrong: Barometer; Speedometer; Hygrometer
+Level: easy
+
+Q: Scale of temperature on the thermometers we use every day in India
+A: Celsius
+Fill: The thermometers we use every day measure temperature in degrees ___.
+Wrong: Fahrenheit; Kelvin; Rankine
+Level: easy
+
+Q: Normal temperature of the human body, in degrees Celsius
+A: 37
+Fill: The normal temperature of the human body is ___ degrees Celsius.
+Wrong: 35; 40; 98.6
+Level: medium
+
+Q: Thermometer that a doctor uses to check for fever
+A: Clinical thermometer
+Fill: A doctor checks for fever with a ___.
+Wrong: Laboratory thermometer; Maximum-minimum thermometer; Barometer
+Level: medium
+
+Q: Thermometer used to measure the temperature of objects other than the human body
+A: Laboratory thermometer
+Fill: In an experiment, the temperature of hot water is measured with a ___.
+Wrong: Clinical thermometer; Barometer; Anemometer
+Level: medium
+
+Q: Range of a clinical thermometer, in degrees Celsius
+A: 35 to 42
+Also: 35-42
+Fill: A clinical thermometer reads temperatures from ___ degrees Celsius.
+Wrong: 0 to 100; -10 to 110; 30 to 50
+Level: hard
+
+Q: Mercury is used in thermometers because it expands evenly when heated
+A: True
+Level: easy
+
 Topic 2: Transfer of Heat
-Transfer of heat through a solid from its hotter end to its colder end | Conduction | medium
-Transfer of heat by the movement of a heated liquid or gas | Convection | medium
-Transfer of heat that needs no material to travel through | Radiation | medium
-Material that lets heat pass through it easily | Conductor | easy
-Material that does not let heat pass through it easily | Insulator | easy
+
+Q: Transfer of heat through a solid from its hotter end to its colder end
+A: Conduction
+Fill: Heat travels along a metal spoon kept in hot tea by ___.
+Wrong: Convection; Radiation; Evaporation
+Level: medium
+
+Q: Transfer of heat by the movement of a heated liquid or gas
+A: Convection
+Fill: Water in a pan heats up all through by ___ currents.
+Wrong: Conduction; Radiation; Condensation
+Level: medium
+
+Q: Transfer of heat that needs no material to travel through
+A: Radiation
+Fill: Heat from the Sun reaches the Earth by ___.
+Wrong: Conduction; Convection; Reflection
+Level: medium
+
+Q: Material that lets heat pass through it easily
+A: Conductor
+Also: Good conductor
+Fill: A material such as copper, which lets heat pass through it easily, is called a ___.
+Wrong: Insulator; Magnet; Reflector
+Level: easy
+
+Q: Material that does not let heat pass through it easily
+A: Insulator
+Also: Poor conductor
+Fill: Pan handles are made of wood or plastic because each is an ___ of heat.
+Wrong: Conductor; Magnet; Mirror
+Level: easy
+
+Q: Colour of clothes that takes in the most heat from the Sun
+A: Black
+Also: Dark
+Fill: In summer we avoid ___ clothes because they take in the most heat from the Sun.
+Wrong: White; Yellow; Light blue
+Level: easy
+
+Q: Woollen clothes keep us warm because of what is trapped between their fibres
+A: Air
+Fill: Woollen clothes keep us warm because the ___ trapped between their fibres is a poor conductor of heat.
+Wrong: Water; Dust; Sweat
+Level: medium
+
+Q: Heat always flows from a hotter object to a colder one
+A: True
+Level: easy
+
 Topic 3: Sea and Land Breezes
-Cool wind that blows from the sea towards the land during the day | Sea breeze | medium
-Wind that blows from the land towards the sea at night | Land breeze | medium
-Colour of clothes that takes in the most heat from the sun | Black | easy
-Woollen clothes keep us warm because this is trapped between their fibres | Air | easy`;
+
+Q: Cool wind that blows from the sea towards the land during the day
+A: Sea breeze
+Fill: During the day a ___ blows from the sea towards the land.
+Wrong: Land breeze; Monsoon wind; Trade wind
+Level: medium
+
+Q: Wind that blows from the land towards the sea at night
+A: Land breeze
+Fill: At night a ___ blows from the land towards the sea.
+Wrong: Sea breeze; Monsoon wind; Cyclone
+Level: medium
+
+Q: Moving air caused by the uneven heating of the Earth's surface
+A: Wind
+Fill: Uneven heating of the Earth's surface causes ___.
+Wrong: Rain; Fog; Dew
+Level: easy
+
+Q: What warm air does, because it is lighter than the cool air around it
+A: Rises
+Also: Goes up
+Fill: Air becomes lighter when it is heated, so it ___.
+Wrong: Sinks; Freezes; Stops
+Level: easy
+
+Q: Places near the sea have milder weather than places far from it
+A: True
+Level: medium`;
 
 const APPROVED_LANDFORMS = `Board: ICSE
 Class: 6
 Subject: Geography
 Chapter 2: Landforms of the Earth
+
 Topic 1: Mountains
-Very high landform that rises steeply to a narrow peak | Mountain | easy
-Long chain of mountains joined together | Range | easy
-Highest mountain range in the world | [the] Himalayas | Alps; Andes; Rockies | easy
-Mountains formed when layers of rock are pushed and folded | Fold mountains | medium
+
+Q: Landform that rises steeply far above the land around it, with a narrow peak
+A: Mountain
+Fill: A ___ rises steeply far above the land around it.
+Wrong: Plateau; Plain; Valley
+Level: easy
+
+Q: Long chain of mountains joined together
+A: Mountain range
+Also: Range
+Fill: The Himalayas are a ___, a long chain of mountains joined together.
+Wrong: Plateau; Delta; Valley
+Level: easy
+
+Q: Highest mountain range in the world
+A: Himalayas
+Fill: The ___ are the highest mountain range in the world.
+Wrong: Alps; Andes; Rockies
+Level: easy
+
+Q: Highest mountain peak in the world
+A: Mount Everest
+Also: Everest
+Fill: ___ is the highest mountain peak in the world.
+Wrong: Kanchenjunga; K2; Nanda Devi
+Level: easy
+
+Q: Mountains formed when layers of rock are pushed together and folded
+A: Fold mountains
+Fill: The Himalayas and the Alps are ___, formed when layers of rock were pushed together.
+Wrong: Block mountains; Volcanic mountains; Residual mountains
+Level: medium
+
+Q: Mountain built up from lava and ash that pour out of an opening in the Earth's crust
+A: Volcano
+Also: Volcanic mountain
+Fill: Mount Fuji in Japan is a ___, built up from lava and ash.
+Wrong: Fold mountain; Block mountain; Plateau
+Level: medium
+
+Q: The Aravalli range is one of the oldest mountain ranges in the world
+A: True
+Level: hard
+
 Topic 2: Plateaus and Plains
-Raised flat land that stands above the land around it | Plateau | easy
-Large stretch of flat, low land | Plain | easy
-Fine soil carried and laid down by rivers that makes plains fertile | Silt | medium
-Landform made where a river splits into many streams before it meets the sea | Delta | medium
-Land around a river that is covered with water when the river floods | Floodplain | hard`;
+
+Q: Raised area of land with a flat top that stands well above the land around it
+A: Plateau
+Also: Tableland
+Fill: A ___ is a raised area of land with a flat top.
+Wrong: Plain; Valley; Delta
+Level: easy
+
+Q: Large plateau in southern India, between the Western and Eastern Ghats
+A: Deccan Plateau
+Also: Deccan
+Fill: The ___ lies between the Western Ghats and the Eastern Ghats.
+Wrong: Chota Nagpur Plateau; Malwa Plateau; Tibetan Plateau
+Level: medium
+
+Q: Large stretch of flat, low land
+A: Plain
+Fill: A ___ is a large stretch of flat, low land.
+Wrong: Plateau; Mountain; Hill
+Level: easy
+
+Q: Fine soil carried and laid down by rivers that makes plains fertile
+A: Silt
+Also: Alluvium
+Fill: Rivers lay down fine ___ on their plains, making the land fertile.
+Wrong: Sand; Lava; Gravel
+Level: medium
+
+Q: Landform made where a river splits into many streams before it meets the sea
+A: Delta
+Fill: The Ganga and the Brahmaputra form the world's largest ___ before they meet the sea.
+Wrong: Estuary; Plateau; Gorge
+Level: medium
+
+Q: Land along a river that is covered with water when the river floods
+A: Floodplain
+Fill: Land along a river that is covered with water when the river floods is called its ___.
+Wrong: Delta; Plateau; Valley
+Level: hard
+
+Q: Most of the world's people live on plains
+A: True
+Level: medium`;
+
+const APPROVED_TRADE = `Board: CBSE
+Class: 8
+Subject: History
+Chapter 2: From Trade to Territory
+
+Topic 1: The East India Company Comes East
+
+Q: Year in which the East India Company received a charter from Queen Elizabeth I
+A: 1600
+Fill: The East India Company received a royal charter in ___.
+Wrong: 1498; 1757; 1857
+Level: medium
+
+Q: Portuguese sailor who reached India by sea in 1498
+A: Vasco da Gama
+Fill: In 1498, ___ found the sea route from Europe to India.
+Wrong: Christopher Columbus; Ferdinand Magellan; Bartolomeu Dias
+Level: easy
+
+Q: River on whose banks the first English factory in Bengal was set up in 1651
+A: Hooghly
+Also: Hugli
+Fill: The first English factory in Bengal was set up on the banks of the river ___ in 1651.
+Wrong: Yamuna; Godavari; Narmada
+Level: medium
+
+Q: Order of the Mughal emperor in 1717 that let the Company trade in Bengal without paying duty
+A: Farman
+Also: Firman
+Fill: In 1717 the Mughal emperor issued a ___ letting the Company trade without paying duty.
+Wrong: Diwani; Subsidy; Treaty
+Level: hard
+
+Q: Cotton, silk and spices were among the goods the Company bought in India
+A: True
+Level: easy
+
+Topic 2: From Trade to Wars
+
+Q: Battle of 1757 in which Robert Clive defeated Sirajuddaula
+A: Battle of Plassey
+Also: Plassey
+Fill: In 1757 Robert Clive defeated Sirajuddaula at the ___.
+Wrong: Battle of Buxar; Battle of Panipat; Battle of Haldighati
+Level: easy
+
+Q: Nawab of Bengal defeated by the Company in 1757
+A: Sirajuddaula
+Also: Siraj-ud-daulah
+Fill: In 1757 the Company defeated ___, the Nawab of Bengal.
+Wrong: Mir Jafar; Murshid Quli Khan; Alivardi Khan
+Level: medium
+
+Q: Commander who helped the British win at Plassey and was then made Nawab
+A: Mir Jafar
+Fill: After Plassey the Company made ___ the Nawab of Bengal.
+Wrong: Mir Qasim; Sirajuddaula; Tipu Sultan
+Level: medium
+
+Q: English officer who led the Company's army at Plassey
+A: Robert Clive
+Also: Clive
+Fill: The Company's army at Plassey was led by ___.
+Wrong: Warren Hastings; Lord Dalhousie; Lord Cornwallis
+Level: easy
+
+Q: Battle of 1764 after which the Company was given the Diwani of Bengal
+A: Battle of Buxar
+Also: Buxar
+Fill: The Company's victory at the ___ in 1764 led to the Diwani of Bengal.
+Wrong: Battle of Plassey; Battle of Wandiwash; Battle of Seringapatam
+Level: medium
+
+Q: Right to collect land revenue that the Mughal emperor granted the Company in 1765
+A: Diwani
+Fill: In 1765 the Mughal emperor made the Company the Diwan of Bengal, with the ___ of the province.
+Wrong: Farman; Subsidy; Nizamat
+Level: hard
+
+Topic 3: Company Rule Expands
+
+Q: Policy under which a kingdom passed to the Company if its ruler died without a male heir
+A: Doctrine of Lapse
+Fill: Under the ___, a kingdom passed to the Company if its ruler died without a male heir.
+Wrong: Subsidiary Alliance; Permanent Settlement; Mahalwari system
+Level: medium
+
+Q: Governor-General who brought in the Doctrine of Lapse
+A: Lord Dalhousie
+Also: Dalhousie
+Fill: The Doctrine of Lapse was brought in by ___.
+Wrong: Lord Wellesley; Lord Cornwallis; Warren Hastings
+Level: medium
+
+Q: System under which an Indian ruler had to keep the Company's troops and pay for them
+A: Subsidiary Alliance
+Fill: Under the ___, Indian rulers had to pay for the British troops kept in their states.
+Wrong: Doctrine of Lapse; Permanent Settlement; Ryotwari system
+Level: medium
+
+Q: Ruler of Mysore known as the Tiger of Mysore
+A: Tipu Sultan
+Also: Tipu
+Fill: ___ was known as the Tiger of Mysore.
+Wrong: Haidar Ali; Ranjit Singh; Shivaji
+Level: easy
+
+Q: Kingdom taken over by the Company in 1856, on the ground that it was badly governed
+A: Awadh
+Also: Oudh
+Fill: In 1856 the Company took over ___, saying that it was being misgoverned.
+Wrong: Jhansi; Satara; Nagpur
+Level: hard
+
+Q: Rani Lakshmibai lost the kingdom of Jhansi under the Doctrine of Lapse
+A: True
+Level: medium`;
+
+const APPROVED_GEOMETRY = `Board: CBSE
+Class: 6
+Subject: Mathematics
+Chapter 4: Basic Geometrical Ideas
+
+Topic 1: Points, Lines and Rays
+
+Q: Part of a line with two end points
+A: Line segment
+Also: Segment
+Fill: A ___ is a part of a line that has two end points.
+Wrong: Ray; Line; Point
+Level: easy
+
+Q: Part of a line that starts at a point and goes on endlessly in one direction
+A: Ray
+Fill: A ___ has one end point and goes on endlessly in one direction.
+Wrong: Line segment; Line; Arc
+Level: easy
+
+Q: Number of lines that can be drawn through two given points
+A: 1
+Also: One
+Fill: Through two given points, exactly ___ line can be drawn.
+Wrong: 0; 2; 3
+Level: medium
+
+Q: Lines in a plane that never meet, however far they are extended
+A: Parallel lines
+Fill: Lines in a plane that never meet are called ___.
+Wrong: Intersecting lines; Perpendicular lines; Curved lines
+Level: easy
+
+Q: Point where two lines cross each other
+A: Point of intersection
+Also: Intersection
+Fill: Two lines that cross meet at their ___.
+Wrong: Midpoint; Centre; End point
+Level: medium
+
+Q: Two lines that meet at a point are called intersecting lines
+A: True
+Level: easy
+
+Topic 2: Polygons
+
+Q: Polygon with three sides
+A: Triangle
+Fill: A ___ is a polygon with three sides.
+Wrong: Quadrilateral; Pentagon; Hexagon
+Level: easy
+
+Q: Polygon with four sides
+A: Quadrilateral
+Fill: A polygon with four sides is called a ___.
+Wrong: Triangle; Pentagon; Hexagon
+Level: easy
+
+Q: Point where two sides of a polygon meet
+A: Vertex
+Also: Corner
+Fill: The point where two sides of a polygon meet is called a ___.
+Wrong: Diagonal; Edge; Centre
+Level: easy
+
+Q: Line segment joining two vertices of a polygon that are not next to each other
+A: Diagonal
+Fill: A ___ joins two vertices of a polygon that are not next to each other.
+Wrong: Side; Radius; Ray
+Level: medium
+
+Q: Number of diagonals of a quadrilateral
+A: 2
+Also: Two
+Fill: A quadrilateral has ___ diagonals.
+Wrong: 1; 3; 4
+Level: medium
+
+Q: A triangle has no diagonals
+A: True
+Level: medium
+
+Topic 3: Circles
+
+Q: Line segment from the centre of a circle to a point on the circle
+A: Radius
+Fill: A ___ joins the centre of a circle to a point on the circle.
+Wrong: Diameter; Chord; Arc
+Level: easy
+
+Q: Chord that passes through the centre of a circle
+A: Diameter
+Fill: The longest chord of a circle, which passes through its centre, is called the ___.
+Wrong: Radius; Arc; Tangent
+Level: easy
+
+Q: Distance around a circle
+A: Circumference
+Also: Perimeter
+Fill: The distance around a circle is called its ___.
+Wrong: Diameter; Area; Radius
+Level: easy
+
+Q: Part of a circle between two points on it
+A: Arc
+Fill: The part of a circle between two points on it is called an ___.
+Wrong: Chord; Sector; Radius
+Level: medium
+
+Q: Diameter, in cm, of a circle whose radius is 5 cm
+A: 10
+Fill: A circle with a radius of 5 cm has a diameter of ___ cm.
+Wrong: 5; 2.5; 25
+Level: medium
+
+Q: Every diameter of a circle is twice as long as its radius
+A: True
+Level: easy`;
 
 /** Waiting for an HoD. */
 const WAITING_CELL = `Board: CBSE
 Class: 9
 Subject: Science
 Chapter 5: The Fundamental Unit of Life
+
 Topic 1: The Cell
-Basic unit of structure and function of all living things | Cell | easy
-Scientist who first saw cells, in a thin slice of cork | Robert Hooke | medium
-Jelly-like substance that fills the cell inside its membrane | Cytoplasm | easy
-Part of the cell that controls all its activities | Nucleus | easy
+
+Q: Basic unit of structure and function of all living things
+A: Cell
+Fill: The ___ is the basic unit of structure and function of all living things.
+Wrong: Tissue; Organ; Atom
+Level: easy
+
+Q: Scientist who first saw cells, in a thin slice of cork, in 1665
+A: Robert Hooke
+Also: Hooke
+Fill: In 1665 ___ saw cells in a thin slice of cork.
+Wrong: Robert Brown; Anton van Leeuwenhoek; Rudolf Virchow
+Level: medium
+
+Q: Jelly-like substance that fills the cell inside its membrane
+A: Cytoplasm
+Fill: The ___ is the jelly-like substance inside the cell membrane.
+Wrong: Nucleus; Cell sap; Chlorophyll
+Level: easy
+
+Q: Part of the cell that controls all its activities
+A: Nucleus
+Fill: The ___ controls all the activities of the cell.
+Wrong: Cytoplasm; Cell wall; Vacuole
+Level: easy
+
+Q: Movement of water through a selectively permeable membrane from a dilute solution to a concentrated one
+A: Osmosis
+Fill: A raisin kept in water swells up as water enters it by ___.
+Wrong: Diffusion; Evaporation; Transpiration
+Level: medium
+
 Topic 2: Cell Organelles
-Organelle known as the powerhouse of the cell | Mitochondria | easy
-Organelle in plant cells where food is made | Chloroplast | medium
-Organelles that hold digestive enzymes | Lysosomes | hard`;
+
+Q: Organelles known as the powerhouses of the cell
+A: Mitochondria
+Also: Mitochondrion
+Fill: The ___ release energy for the cell, which is why they are called its powerhouses.
+Wrong: Ribosomes; Golgi apparatus; Lysosomes
+Level: easy
+
+Q: Organelles in plant cells where food is made using sunlight
+A: Chloroplasts
+Also: Chloroplast
+Fill: Plants make food in their ___, which contain chlorophyll.
+Wrong: Mitochondria; Vacuoles; Ribosomes
+Level: medium
+
+Q: Organelles that hold digestive enzymes and are called the suicide bags of the cell
+A: Lysosomes
+Also: Lysosome
+Fill: ___ are called the suicide bags of the cell.
+Wrong: Ribosomes; Plastids; Centrosomes
+Level: hard
+
+Q: Plant cells have a cell wall but animal cells do not
+A: True
+Level: easy`;
 
 const WAITING_FLAME = `Board: CBSE
 Class: 8
 Subject: Science
 Chapter 6: Combustion and Flame
-Topic 1: Combustion
-Chemical process in which a substance reacts with oxygen and gives off heat | Combustion | easy
-Lowest temperature at which a substance catches fire | Ignition temperature | medium
-Substance that is burnt to give heat | Fuel | easy
-Gas from the air that is needed for burning | Oxygen | easy`;
 
-/** Sent back to you: what the notifications show. */
+Topic 1: Combustion
+
+Q: Chemical process in which a substance reacts with oxygen and gives off heat
+A: Combustion
+Also: Burning
+Fill: Wood reacting with oxygen and giving off heat and light is an example of ___.
+Wrong: Condensation; Corrosion; Evaporation
+Level: easy
+
+Q: Lowest temperature at which a substance catches fire
+A: Ignition temperature
+Fill: A substance does not catch fire until it reaches its ___.
+Wrong: Boiling point; Melting point; Freezing point
+Level: medium
+
+Q: Substance that is burnt to give heat
+A: Fuel
+Fill: Wood, coal and LPG are each a ___.
+Wrong: Oxidant; Ash; Smoke
+Level: easy
+
+Q: Gas from the air that is needed for burning
+A: Oxygen
+Also: O2
+Fill: A burning candle goes out when it is covered by a jar because the ___ inside runs out.
+Wrong: Nitrogen; Carbon dioxide; Hydrogen
+Level: easy
+
+Q: Water is used to put out fires in electrical equipment
+A: False
+Level: medium
+
+Topic 2: Flame
+
+Q: Hottest zone of a candle flame
+A: Outermost zone
+Also: Non-luminous zone
+Also: Outer zone
+Fill: The ___ of a candle flame is the hottest part of it.
+Wrong: Innermost zone; Middle zone; Luminous zone
+Level: hard
+
+Q: Colour of the outermost zone of a candle flame
+A: Blue
+Fill: The outermost zone of a candle flame is ___.
+Wrong: Yellow; Black; Red
+Level: medium
+
+Q: Amount of heat a fuel gives when one kilogram of it burns completely
+A: Calorific value
+Fill: The heat given when 1 kg of a fuel burns completely is called its ___.
+Wrong: Ignition temperature; Boiling point; Density
+Level: hard`;
+
+/** Sent back to you: what the notifications show. Both read well; what is wrong is the science, which only an HoD sees. */
 const SENT_BACK_HEAT = `Board: CBSE
 Class: 7
 Subject: Science
 Chapter 4: Heat
-Topic 2: Transfer of Heat
-Heat flows from a colder object to a hotter one by this process | Conduction | medium
-Topic 3: Sea and Land Breezes
-Does a black shirt take in more heat than a white one? | Yes | easy`;
 
-const NOTE_WRONG_WAY = 'Heat flows from hotter to colder, not the other way. Please rewrite the question.';
-const NOTE_YES_NO = 'No yes/no questions: a puzzle needs a word as the answer. Try "Colour of clothes that ...".';
+Topic 2: Transfer of Heat
+
+Q: Process by which heat flows from a colder object to a hotter one
+A: Conduction
+Fill: Heat flows from a colder object to a hotter one by ___.
+Wrong: Convection; Radiation; Evaporation
+Level: medium
+
+Topic 3: Sea and Land Breezes
+
+Q: Wind that blows from the land towards the sea during the day
+A: Land breeze
+Fill: During the day a ___ blows from the land towards the sea.
+Wrong: Sea breeze; Monsoon wind; Trade wind
+Level: medium`;
+
+/** Every made-up text, for the test that each one passes the checker. */
+export const DUMMY_TEXTS = { APPROVED_HEAT, APPROVED_LANDFORMS, APPROVED_TRADE, APPROVED_GEOMETRY, WAITING_CELL, WAITING_FLAME, SENT_BACK_HEAT };
+
+const NOTE_WRONG_WAY = 'Heat flows from a hotter object to a colder one, never the other way. Please rewrite the question.';
+const NOTE_LAND_BREEZE = 'A land breeze blows at night. During the day the breeze comes from the sea.';
 
 /** A chapter on the made-up list, with its topics numbered from 1. */
 function listed(board: string, cls: number, subject: string, no: number, name: string, topics: string[]): ListChapter {
@@ -107,6 +646,8 @@ function listed(board: string, cls: number, subject: string, no: number, name: s
  * questions yet, and one with no topics (its questions go without a Topic line). The real list comes from the database. */
 export const DUMMY_LIST: ListChapter[] = [
   listed('ICSE', 6, 'Geography', 2, 'Landforms of the Earth', ['Mountains', 'Plateaus and Plains']),
+  listed('CBSE', 6, 'Mathematics', 4, 'Basic Geometrical Ideas', ['Points, Lines and Rays', 'Polygons', 'Circles']),
+  listed('CBSE', 8, 'History', 2, 'From Trade to Territory', ['The East India Company Comes East', 'From Trade to Wars', 'Company Rule Expands']),
   listed('CBSE', 7, 'Science', 4, 'Heat', ['Hot and Cold', 'Transfer of Heat', 'Sea and Land Breezes']),
   listed('CBSE', 7, 'Science', 5, 'Acids, Bases and Salts', ['Acids and Bases', 'Indicators', 'Neutralisation']),
   listed('CBSE', 8, 'Science', 6, 'Combustion and Flame', ['Combustion', 'Flame']),
@@ -144,12 +685,14 @@ function seed(): State {
       q.note = status === 'rejected' ? note : '';
     }
   };
-  put(APPROVED_HEAT, ROHAN, hoursAgo(24 * 6), 'approved', hoursAgo(24 * 5));
-  put(APPROVED_LANDFORMS, PRIYA, hoursAgo(24 * 4), 'approved', hoursAgo(24 * 3));
+  put(APPROVED_HEAT, ROHAN, hoursAgo(24 * 9), 'approved', hoursAgo(24 * 8));
+  put(APPROVED_LANDFORMS, PRIYA, hoursAgo(24 * 7), 'approved', hoursAgo(24 * 6));
+  put(APPROVED_TRADE, ROHAN, hoursAgo(24 * 5), 'approved', hoursAgo(24 * 4));
+  put(APPROVED_GEOMETRY, PRIYA, hoursAgo(24 * 4), 'approved', hoursAgo(24 * 3));
   put(SENT_BACK_HEAT, DUMMY_ME, hoursAgo(30), 'rejected', hoursAgo(20));
-  const [wrongWay, yesNo] = s.questions.filter((q) => q.status === 'rejected');
+  const [wrongWay, landBreeze] = s.questions.filter((q) => q.status === 'rejected');
   wrongWay.note = NOTE_WRONG_WAY;
-  yesNo.note = NOTE_YES_NO;
+  landBreeze.note = NOTE_LAND_BREEZE;
   put(WAITING_CELL, ROHAN, hoursAgo(3), 'pending', null);
   put(WAITING_FLAME, PRIYA, hoursAgo(1), 'pending', null);
   return s;
@@ -174,6 +717,7 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
     seen.add(key);
     const back = s.questions.filter((x) => x.chapter_id === cid && x.status === 'rejected' && x.teacherEmail === who.email
       && norm(x.question) === norm(r.question) && norm(x.answer) === norm(r.answer)
+      && JSON.stringify(x.also) === JSON.stringify(r.also.map((o) => o.trim())) && (x.fill ?? '') === (r.fill ?? '').trim()
       && JSON.stringify(x.wrong_options ?? []) === JSON.stringify((r.wrong_options ?? []).map((o) => o.trim())));
     if (back.length) {
       out.sentBack++;
@@ -184,7 +728,8 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
     const n = Math.max(0, ...s.questions.filter((x) => x.chapter_id === cid && (x.topic_no ?? 0) === tno).map((x) => x.question_no)) + 1;
     const id = `${cid}T${pad2(tno)}Q${String(n).padStart(3, '0')}`;
     s.questions.push({
-      ...r, line: 0, question: r.question.trim(), answer: r.answer.trim(), wrong_options: (r.wrong_options ?? []).map((o) => o.trim()), topic_id: r.topic_no === null ? null : `${cid}T${pad2(tno)}`, question_no: n,
+      ...r, line: 0, end: undefined, under: undefined, question: r.question.trim(), answer: r.answer.trim(), also: r.also.map((o) => o.trim()), fill: r.fill?.trim() || null,
+      wrong_options: (r.wrong_options ?? []).map((o) => o.trim()), topic_id: r.topic_no === null ? null : `${cid}T${pad2(tno)}`, question_no: n,
       id, batch: batch.id, status: 'pending', note: '', reviewedAt: null, teacherEmail: who.email, reviewedBy: null, seenAt: null,
     });
     out.ids.push(id);
@@ -209,8 +754,8 @@ function onTheList(catalog: ListChapter[], r: Row): { problem?: string; row: Row
   return { row: { ...r, chapter: ch.name, topic: tp.name } };
 }
 
-/** The board and subject must be on the site's lists and match the chapter ID's codes; wrong options as the database
- * checks them. */
+/** The board and subject must be on the site's lists and match the chapter ID's codes; other answers, the fill-in
+ * sentence and wrong options as the database checks them. */
 function codesProblem(r: Row): string | null {
   const board = checkBoard(r.board).code;
   const subject = checkSubject(r.subject).code;
@@ -222,6 +767,12 @@ function codesProblem(r: Row): string | null {
   if (wrong.some((o) => !o || o.length > 100)) return `A wrong option is empty or longer than 100 characters: "${r.question}".`;
   if (wrong.some((o) => norm(o) === norm(r.answer))) return `A wrong option is the same as the answer: "${r.question}".`;
   if (new Set(wrong.map(norm)).size < wrong.length) return `A question has the same wrong option twice: "${r.question}".`;
+  const also = r.also.map((o) => o.trim());
+  if (also.length > 5) return `A question has more than 5 other answers: "${r.question}".`;
+  if (also.some((o) => !o || o.length > 100)) return `Another answer is empty or longer than 100 characters: "${r.question}".`;
+  if (also.some((o) => norm(o) === norm(r.answer)) || new Set(also.map(norm)).size < also.length) return `Another answer repeats the answer or another one: "${r.question}".`;
+  const fill = r.fill?.trim() ?? '';
+  if (fill && ((fill.match(/_{3,}/g) ?? []).length !== 1 || fill.length > 300)) return `The fill-in sentence needs exactly one ___ and at most 300 characters: "${r.question}".`;
   return null;
 }
 

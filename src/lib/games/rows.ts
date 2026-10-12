@@ -11,7 +11,7 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 
 /** The columns of a row, in order. These are the column names of the CSV and the keys of the JSON. */
-export const COLUMNS = ['chapter_id', 'topic_id', 'board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'wrong_options', 'difficulty'] as const;
+export const COLUMNS = ['chapter_id', 'topic_id', 'board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'also', 'fill', 'wrong_options', 'difficulty'] as const;
 
 export interface Row {
   /** Board code + class + subject code + chapter number, such as CBSE10SCI01. Null until all four are known. */
@@ -28,27 +28,33 @@ export interface Row {
   /** Position of the question within its topic (within its chapter when there is no topic), from 1. */
   question_no: number;
   question: string;
-  /** Square brackets mark words a student may leave out: "Decomposition [reaction]". */
   answer: string;
-  /** Multiple choice: the wrong options shown beside the answer (up to 5). Empty for an ordinary question. */
+  /** Other answers that count as right (up to 5). */
+  also: string[];
+  /** The fill-in-the-blank version: a sentence with ___ where the answer goes. Null when none was written. */
+  fill: string | null;
+  /** Multiple choice: the wrong options shown beside the answer (3 to 5). Empty for an ordinary question. */
   wrong_options: string[];
   difficulty: Difficulty | null;
-  /** The line of the pasted text the question came from. Not exported. */
+  /** The line of the Questions box the question starts on (its Q: line). Not exported. */
   line: number;
+  /** Its last line, and the detail lines it is under (Board, Class, Subject, Chapter, Topic). Not exported. */
+  end?: number;
+  under?: number[];
 }
 
 // ---------------------------------------------------------------- rows as files
 
 type Record_ = Record<(typeof COLUMNS)[number], string | number | string[] | null>;
 
-/** A row as the database sees it: the columns only, with an empty value as null (and no wrong options as []). */
+/** A row as the database sees it: the columns only, with an empty value as null (and an empty list as []). */
 export function toRecord(r: Row): Record_ {
   const out = {} as Record_;
   for (const c of COLUMNS) out[c] = r[c] === '' ? null : r[c];
   return out;
 }
 
-/** A header row, then one line per question. Wrong options go in one cell, separated by "; ". */
+/** A header row, then one line per question. Other answers and wrong options go in one cell each, separated by "; ". */
 function table(rows: Row[], sep: string, cell: (v: string) => string): string {
   const line = (r: Row) => {
     const rec = toRecord(r);

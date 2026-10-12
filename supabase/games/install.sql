@@ -131,12 +131,16 @@ create function games.norm(t text) returns text language sql immutable set searc
 as $$ select lower(regexp_replace(regexp_replace(btrim(t), '[[:space:]?.!:;,।]+$', ''), '\s+', ' ', 'g')) $$;
 
 -- The signed-in person's email, if this session proves it is theirs: signed in with Google (games.settings) or with an
--- email sign-in link. Null otherwise. `amr` in the token lists how the session was signed in.
+-- email sign-in link. Null otherwise. `amr` in the token lists how the session was signed in. A code sent by text
+-- message is recorded the same way as an email link ('otp'), so on an account that has a phone a code proves nothing
+-- about the email: such an account must sign in with Google.
 create function games.proven_email() returns text language sql stable security definer set search_path = ''
 as $$
   select case when auth.uid() is not null and exists (
       select 1 from jsonb_array_elements(case when jsonb_typeof(auth.jwt() -> 'amr') = 'array' then auth.jwt() -> 'amr' else '[]'::jsonb end) a
-      where coalesce(a ->> 'method', a #>> '{}') = 'otp'
+      where (coalesce(a ->> 'method', a #>> '{}') = 'otp'
+             and not coalesce(auth.jwt() -> 'app_metadata' -> 'providers', '[]'::jsonb) ? 'phone'
+             and nullif(btrim(coalesce(auth.jwt() ->> 'phone', '')), '') is null)
          or (coalesce(a ->> 'method', a #>> '{}') = 'oauth'
              and coalesce(auth.jwt() -> 'app_metadata' -> 'providers', '[]'::jsonb) ?| (select s.sign_in_providers from games.settings s)))
     then nullif(lower(btrim(auth.jwt() ->> 'email')), '') end
@@ -360,6 +364,10 @@ create table games.questions (
   question_no smallint not null check (question_no between 1 and 999),
   question text not null check (char_length(question) between 1 and 300),
   answer text not null check (char_length(answer) between 1 and 100),
+  -- other answers that count as right (none when there is only the one)
+  also text[] not null default '{}' check (cardinality(also) <= 5 and array_position(also, null) is null),
+  -- fill in the blank: the same fact as a sentence, with ___ where the answer goes (one blank only)
+  fill text check (fill is null or (char_length(fill) <= 300 and fill ~ '_{3,}' and fill !~ '_{3,}[^_].*_{3,}')),
   -- multiple choice: the wrong options shown beside the answer (none for an ordinary question)
   wrong_options text[] not null default '{}' check (cardinality(wrong_options) <= 5 and array_position(wrong_options, null) is null),
   difficulty text check (difficulty in ('easy', 'medium', 'hard')),
@@ -398,6 +406,8 @@ create table games.question_bank (
   question_no smallint not null,
   question text not null,
   answer text not null,
+  also text[] not null default '{}',
+  fill text,
   wrong_options text[] not null default '{}',
   difficulty text,
   chapter_id text not null,
@@ -412,7 +422,9 @@ comment on table games.questions is 'Every question ever sent: waiting (pending)
 comment on table games.question_bank is 'The final question bank: approved questions only, one row per question. Kept in step with games.questions automatically.';
 comment on column games.question_bank.question_id is 'Chapter ID + topic + question number, e.g. CBSE10SCI01T02Q003 (T00 = no topic)';
 comment on column games.question_bank.question is 'The question, exactly as the teacher wrote it';
-comment on column games.question_bank.answer is 'The answer, exactly as the teacher wrote it. Words in [square brackets] may be left out by a student';
+comment on column games.question_bank.answer is 'The answer, exactly as the teacher wrote it';
+comment on column games.question_bank.also is 'Other answers that count as right, exactly as the teacher wrote them';
+comment on column games.question_bank.fill is 'Fill in the blank: the same fact as a sentence with ___ where the answer goes (null when none was written)';
 comment on column games.question_bank.wrong_options is 'Multiple choice: the wrong options, exactly as the teacher wrote them (empty for an ordinary question)';
 comment on column games.question_bank.teacher is 'The teacher who sent it (their name, never their email)';
 
@@ -421,14 +433,15 @@ as $$
 begin
   if new.status = 'approved' then
     insert into games.question_bank (question_id, board, class, subject, chapter_no, chapter, topic_no, topic, question_no,
-                                     question, answer, wrong_options, difficulty, chapter_id, topic_id, teacher, approved_at)
+                                     question, answer, also, fill, wrong_options, difficulty, chapter_id, topic_id, teacher, approved_at)
     select new.question_id, new.board, new.class, new.subject, new.chapter_no, new.chapter, new.topic_no, new.topic, new.question_no,
-           new.question, new.answer, new.wrong_options, new.difficulty, new.chapter_id, new.topic_id, b.teacher, coalesce(new.reviewed_at, now())
+           new.question, new.answer, new.also, new.fill, new.wrong_options, new.difficulty, new.chapter_id, new.topic_id, b.teacher, coalesce(new.reviewed_at, now())
     from games.batches b where b.batch_id = new.batch_id
     on conflict (question_id) do update set
       board = excluded.board, class = excluded.class, subject = excluded.subject, chapter_no = excluded.chapter_no,
       chapter = excluded.chapter, topic_no = excluded.topic_no, topic = excluded.topic, question_no = excluded.question_no,
-      question = excluded.question, answer = excluded.answer, wrong_options = excluded.wrong_options, difficulty = excluded.difficulty, chapter_id = excluded.chapter_id,
+      question = excluded.question, answer = excluded.answer, also = excluded.also, fill = excluded.fill,
+      wrong_options = excluded.wrong_options, difficulty = excluded.difficulty, chapter_id = excluded.chapter_id,
       topic_id = excluded.topic_id, teacher = excluded.teacher, approved_at = excluded.approved_at;
   else
     delete from games.question_bank where question_id = new.question_id;
@@ -439,10 +452,12 @@ create trigger questions_to_bank after insert or update of status on games.quest
   for each row execute function games.sync_question_bank();
 
 -- Send: the signed-in person's questions, as one batch (the site sends 500 at a time). Each must be for a chapter and
--- topic on the list (their names are taken from the list), and a multiple-choice question has up to 5 wrong options,
--- none the same as the answer or each other. Questions already waiting or approved in the same chapter are skipped,
--- and so is one that was sent back to this same person and hasn't changed (question, answer and wrong options): the
--- site points them to the reason instead. Returns the batch ID, how many were sent and skipped, and the new question IDs.
+-- topic on the list (their names are taken from the list). A question may have up to 5 other answers and up to 5
+-- wrong options, none the same as the answer or each other, and a fill-in sentence with exactly one ___ (the site
+-- checks much more before sending; these are what the bank can't do without). Questions already waiting or approved
+-- in the same chapter are skipped, and so is one that was sent back to this same person and hasn't changed (question,
+-- answer, other answers, fill-in sentence and wrong options): the site points them to the reason instead. Returns the
+-- batch ID, how many were sent and skipped, and the new question IDs.
 create function games.submit_batch(questions jsonb) returns jsonb language plpgsql security definer set search_path = ''
 as $$
 declare
@@ -458,6 +473,8 @@ declare
   qtext text;
   nq text;
   wrong text[];
+  others text[];
+  sentence text;
   why text;
   n int;
   back text[];
@@ -529,6 +546,23 @@ begin
     if (select count(distinct games.norm(x)) from unnest(wrong) x) <> cardinality(wrong) then
       raise exception 'A question has the same wrong option twice: "%".', qtext;
     end if;
+    -- other answers that count: up to 5, each different from the answer and from each other
+    others := coalesce((select array_agg(btrim(w.x) order by w.i)
+                        from jsonb_array_elements_text(case when jsonb_typeof(q -> 'also') = 'array' then q -> 'also' else '[]' end)
+                             with ordinality as w(x, i)), '{}');
+    if cardinality(others) > 5 then raise exception 'A question has more than 5 other answers: "%".', qtext; end if;
+    if exists (select 1 from unnest(others) x where char_length(x) not between 1 and 100) then
+      raise exception 'Another answer is empty or longer than 100 characters: "%".', qtext;
+    end if;
+    if exists (select 1 from unnest(others) x where games.norm(x) = games.norm(q ->> 'answer'))
+       or (select count(distinct games.norm(x)) from unnest(others) x) <> cardinality(others) then
+      raise exception 'Another answer repeats the answer or another one: "%".', qtext;
+    end if;
+    -- the fill-in sentence: exactly one ___
+    sentence := nullif(btrim(coalesce(q ->> 'fill', '')), '');
+    if sentence is not null and (char_length(sentence) > 300 or sentence !~ '_{3,}' or sentence ~ '_{3,}[^_].*_{3,}') then
+      raise exception 'The fill-in sentence needs exactly one ___ and at most 300 characters: "%".', qtext;
+    end if;
 
     if cid || '|' || nq = any(seen)
        or exists (select 1 from games.questions x where x.chapter_id = cid and games.norm(x.question) = nq and x.status <> 'rejected') then
@@ -538,7 +572,8 @@ begin
     seen := seen || (cid || '|' || nq);
     select array_agg(x.question_id) into back from games.questions x join games.batches b on b.batch_id = x.batch_id
     where x.chapter_id = cid and x.status = 'rejected' and games.norm(x.question) = nq
-      and games.norm(x.answer) = games.norm(q ->> 'answer') and x.wrong_options = wrong and b.teacher_email = mail;
+      and games.norm(x.answer) = games.norm(q ->> 'answer') and x.also = others and coalesce(x.fill, '') = coalesce(sentence, '')
+      and x.wrong_options = wrong and b.teacher_email = mail;
     if back is not null then
       sent_back := sent_back + 1;
       back_ids := back_ids || back;
@@ -546,11 +581,11 @@ begin
     end if;
     select coalesce(max(x.question_no), 0) + 1 into n from games.questions x where x.chapter_id = cid and coalesce(x.topic_no, 0) = coalesce(tno, 0);
     insert into games.questions (question_id, batch_id, chapter_id, topic_id, board, class, subject, chapter_no, chapter,
-                                 topic_no, topic, question_no, question, answer, wrong_options, difficulty)
+                                 topic_no, topic, question_no, question, answer, also, fill, wrong_options, difficulty)
     values (cid || 'T' || lpad(coalesce(tno, 0)::text, 2, '0') || 'Q' || lpad(n::text, 3, '0'), bid, cid,
             case when tno is null then null else cid || 'T' || lpad(tno::text, 2, '0') end,
             ch.board, ch.class, ch.subject, ch.chapter_no, ch.name, tno, coalesce(tp.name, ''),
-            n, qtext, btrim(q ->> 'answer'), wrong, q ->> 'difficulty')
+            n, qtext, btrim(q ->> 'answer'), others, sentence, wrong, q ->> 'difficulty')
     returning question_id into qid;
     added := added || qid;
     sent := sent + 1;

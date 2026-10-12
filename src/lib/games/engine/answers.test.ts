@@ -1,156 +1,112 @@
 import { describe, expect, it } from 'vitest';
-import { mark, rightForms } from './answers';
-import { gridWord, enumeration, loose, shownAnswer } from './shared';
+import { mark, sameAnswer } from './answers';
 
-/* Typed answers are marked the way a teacher would, in every subject: what may be left out, what counts as the same,
-   and what is only a spelling slip (half a point). */
+/* Typed answers are marked strictly: right only when they are the answer or one of the other answers the writer wrote
+   (Also lines), half a point for a small spelling slip, and nothing guessed. Each case below is one a teacher or
+   student would actually meet, in some subject. */
 
-const m = (typed: string, answer: string, question = '', others: string[] = []) => mark(typed, answer, { question, others });
+const m = (typed: string, answer: string, also: string[] = [], others: string[] = []) =>
+  mark(typed, { answer, also }, others.map((a) => ({ answer: a })));
 
-describe('what may be left out', () => {
-  it('words the question already says (Science)', () => {
-    const q = 'Reaction in which a single reactant breaks down into simpler products';
-    for (const t of ['Decomposition', 'decomposition reaction', 'DECOMPOSITION REACTION.']) expect(m(t, 'Decomposition reaction', q), t).toBe('right');
-    expect(m('reaction', 'Decomposition reaction', q)).toBe('wrong');
-    expect(m('Combination', 'Decomposition reaction', q)).toBe('wrong');
-    // the question doesn't say "reaction": the whole answer is needed
-    expect(m('Decomposition', 'Decomposition reaction', 'Splitting of a compound into simpler substances')).toBe('wrong');
-    expect(m('Pituitary', 'Pituitary gland', 'Which gland is called the master gland?')).toBe('right');
-    expect(m('Exothermic', 'Exothermic reactions', 'Reaction in which heat is given out')).toBe('right');
+describe('right', () => {
+  it('the answer, whatever the case, spaces, hyphens, punctuation, dashes and Latin accents', () => {
+    for (const t of ['carbondioxide', '  carbon-dioxide ', 'CARBON DIOXIDE.', 'Carbon  Dioxide!']) expect(m(t, 'Carbon dioxide'), t).toBe('right');
+    expect(m('law of conservation of MASS.', 'Law of conservation of mass')).toBe('right');
+    expect(m('Café', 'cafe')).toBe('right');
+    expect(m("Newtons", "Newton's")).toBe('right');
+    expect(m('-5', '−5')).toBe('right'); // a typed minus and the minus sign Word puts in
+    expect(m('100°C', '100 °C')).toBe('right');
+    expect(m('x+y', 'x + y')).toBe('right');
+    expect(m('1,00,000', '100000')).toBe('right'); // commas between digits
   });
 
-  it('words in square brackets, in any subject', () => {
-    expect(m('Decomposition', 'Decomposition [reaction]', 'Splitting of a compound')).toBe('right');
-    expect(m('Decomposition reaction', 'Decomposition [reaction]')).toBe('right');
-    expect(m('Nehru', '[Jawaharlal] Nehru', 'First Prime Minister of India')).toBe('right');
-    expect(m('Jawaharlal', '[Jawaharlal] Nehru', 'First Prime Minister of India')).toBe('wrong');
-    expect(m('5', '[x =] 5', 'Solve 2x + 3 = 13')).toBe('right');
-    expect(m('x=5', '[x =] 5', 'Solve 2x + 3 = 13')).toBe('right');
-    expect(m('Delhi', '[New] Delhi', 'Capital of India')).toBe('right');
-    expect(shownAnswer('Decomposition [reaction]')).toBe('Decomposition reaction');
-    expect(shownAnswer('[x =] 5')).toBe('x = 5');
+  it('another answer the writer wrote, and a, an or the at the start', () => {
+    expect(m('cpu', 'Central Processing Unit', ['CPU'])).toBe('right');
+    expect(m('Calcutta', 'Kolkata', ['Calcutta'])).toBe('right');
+    expect(m('Decomposition', 'Decomposition reaction', ['Decomposition'])).toBe('right');
+    expect(m('The Himalayas', 'Himalayas')).toBe('right');
+    expect(m('Himalayas', 'The Himalayas')).toBe('right');
+    expect(m('a simile', 'Simile')).toBe('right');
   });
 
-  it('a joining word left at the edge (History, Geography)', () => {
-    expect(m('Plassey', 'Battle of Plassey', 'Which battle in 1757 gave the British control of Bengal?')).toBe('right');
-    expect(m('of Plassey', 'Battle of Plassey', 'Which battle in 1757 gave the British control of Bengal?')).toBe('right');
-    expect(m('Battle', 'Battle of Plassey', 'Which battle in 1757 gave the British control of Bengal?')).toBe('wrong');
-    expect(m('Cancer', 'Tropic of Cancer', 'Which tropic passes through the middle of India?')).toBe('right');
-    expect(m('Bengal', 'Bay of Bengal', 'Into which water body does the Ganga flow?')).toBe('wrong');
+  it('any script, as written', () => {
+    expect(m('নাইট্রোজেন', 'নাইট্রোজেন')).toBe('right');
+    expect(m('नाइट्रोजन', 'नाइट्रोजन')).toBe('right');
+  });
+});
+
+describe('wrong: nothing the writer didn\'t write counts', () => {
+  it('a word left out, unless an Also line allows it', () => {
+    expect(m('Decomposition', 'Decomposition reaction')).toBe('wrong');
+    expect(m('Vitamin', 'Vitamin A')).toBe('wrong');
+    expect(m('World War', 'World War I')).toBe('wrong');
+    expect(m('Dalhousie', 'Lord Dalhousie')).toBe('wrong');
+    expect(m('Lord Dalhousie', 'Dalhousie')).toBe('wrong');
+    expect(m('Nitrogen gas', 'Nitrogen')).toBe('wrong');
   });
 
-  it('a, an and the, and a title before a name', () => {
-    expect(m('Himalayas', 'the Himalayas', 'Highest mountain range in the world')).toBe('right');
-    expect(m('the Himalayas', 'Himalayas', 'Highest mountain range in the world')).toBe('right');
-    expect(m('a simile', 'Simile', 'Figure of speech that compares using like or as')).toBe('right');
-    expect(m('Dalhousie', 'Lord Dalhousie', 'Governor-General who brought in the Doctrine of Lapse')).toBe('right');
-    expect(m('Gandhi', 'Mahatma Gandhi', 'Leader of the Dandi March')).toBe('right');
-    expect(m('cobra', 'King cobra', 'Longest venomous snake')).toBe('wrong'); // King is not a title here
-    expect(m('penguin', 'Emperor penguin', 'Largest penguin')).toBe('wrong');
+  it('any short form or initials not written down', () => {
+    expect(m('CPU', 'Central Processing Unit')).toBe('wrong');
+    expect(m('Read Access Memory', 'RAM')).toBe('wrong');
+    expect(m('CO', 'Calcium Oxide')).toBe('wrong');
+    expect(m('LCM', 'Law of conservation of mass')).toBe('wrong');
   });
 
-  it("but not when that leaves nothing to type (English)", () => {
-    expect(m('An', 'An', 'Article before a vowel sound: ___ apple')).toBe('right');
-    expect(m('The', 'An', 'Article before a vowel sound: ___ apple')).toBe('wrong');
+  it('numbers exactly as written: no values, no word forms', () => {
+    expect(m('5', '−5')).toBe('wrong');
+    expect(m('35', '3.5')).toBe('wrong');
+    expect(m('34', '3, 4')).toBe('wrong');
+    expect(m('102', '10^2')).toBe('wrong');
+    expect(m('0.75', '3/4')).toBe('wrong'); // "Write 0.75 as a fraction": 0.75 is not the answer
+    expect(m('eight', '8')).toBe('wrong');
+    expect(m('8', '8', ['Eight'])).toBe('right');
+    expect(m('Eight', '8', ['Eight'])).toBe('right');
+  });
+
+  it('empty, or only punctuation', () => {
     expect(m('', 'Simile')).toBe('wrong');
     expect(m('  ...  ', 'Simile')).toBe('wrong');
   });
 });
 
-describe('what counts as the same', () => {
-  it('case, spaces, hyphens, punctuation and Latin accents', () => {
-    expect(m('carbondioxide', 'Carbon dioxide')).toBe('right');
-    expect(m('  carbon-dioxide ', 'Carbon dioxide')).toBe('right');
-    expect(m('law of conservation of MASS.', 'Law of conservation of mass')).toBe('right');
-    expect(m('Café', 'cafe')).toBe('right');
-    expect(m("Newtons", "Newton's")).toBe('right');
+describe('almost: half a point for a spelling slip, and only that', () => {
+  it('one letter missing, extra or swapped with the next, in a word of 5 letters or more', () => {
+    for (const [t, a] of [['Photosynthsis', 'Photosynthesis'], ['Mitochondira', 'Mitochondria'], ['Chlorophyl', 'Chlorophyll'], ['Exotehrmic', 'Exothermic'], ['Galvanisatoin', 'Galvanisation'], ['Thar Desrt', 'Thar Desert']]) {
+      expect(m(t, a), t).toBe('almost');
+    }
   });
 
-  it('the short form after an answer (Computers, Economics, Chemistry)', () => {
-    expect(m('CPU', 'Central Processing Unit (CPU)', 'Brain of the computer')).toBe('right');
-    expect(m('central processing unit', 'Central Processing Unit (CPU)', 'Brain of the computer')).toBe('right');
-    expect(m('NaCl', 'Sodium chloride (NaCl)', 'Common salt')).toBe('right');
-    expect(m('Calcutta', 'Kolkata (Calcutta)', 'Capital of West Bengal')).toBe('right');
-    // the question already gives the short form: typing it back isn't the answer
-    expect(m('CPU', 'Central Processing Unit (CPU)', 'What is the full form of CPU?')).toBe('wrong');
-    expect(m('Central Processing Unit', 'Central Processing Unit (CPU)', 'What is the full form of CPU?')).toBe('right');
-    expect(gridWord('Central Processing Unit (CPU)')).toBe('CENTRALPROCESSINGUNIT');
-    expect(enumeration('Central Processing Unit (CPU)')).toBe('(7, 10, 4)');
-    // brackets that are part of the answer stay
-    expect(m('f(x)', 'f(x)')).toBe('right');
-    expect(m('g', '(g)')).toBe('right');
+  it("never a letter changed for another: that is usually another word (Science, Geography, History, English)", () => {
+    for (const [t, a] of [
+      ['Endothermic', 'Exothermic'], ['Alkene', 'Alkane'], ['Ethyne', 'Ethene'], ['Nitrite', 'Nitrate'], ['Sodium sulphate', 'Sodium sulphite'],
+      ['Sodium chlorite', 'Sodium chloride'], ['Hypotonic', 'Hypertonic'], ['Afferent', 'Efferent'], ['Ilium', 'Ileum'], ['Fusion', 'Fission'],
+      ['Eastern Ghats', 'Western Ghats'], ['Microeconomics', 'Macroeconomics'], ['drank', 'drink'], ['effect', 'affect'], ['Inhalation', 'Exhalation'],
+    ]) expect(m(t, a), `${t} for ${a}`).toBe('wrong');
   });
 
-  it('short forms from initials, in some cases (Economics, Biology, Civics)', () => {
-    expect(m('GDP', 'Gross Domestic Product', 'Total value of goods and services produced in a country in a year')).toBe('right');
-    expect(m('gdp', 'Gross Domestic Product', 'Total value of goods and services produced in a country in a year')).toBe('right');
-    expect(m('RBC', 'Red blood cell', 'Cell that carries oxygen in the blood')).toBe('right');
-    expect(m('GST', 'Goods and Services Tax', 'Single tax on the supply of goods and services in India')).toBe('right');
-    expect(m('UN', 'United Nations', 'Body formed in 1945 to keep world peace')).toBe('right');
-    expect(m('BE', 'Balanced equation', 'Equation with equal atoms on both sides')).toBe('wrong'); // two plain words: not a short form
-    expect(m('GDP', 'Gross Domestic Product', 'What is the full form of GDP?')).toBe('wrong'); // the question says it
-    // a short form as the answer: the words it stands for count
-    expect(m('Goods and Services Tax', 'GST', 'Tax brought in across India in 2017')).toBe('right');
-    expect(m('central processing unit', 'CPU', 'Brain of the computer')).toBe('right');
-    expect(m('Central Unit', 'CPU', 'Brain of the computer')).toBe('wrong');
+  it('never at the first letter, never in a short word, a number or a Roman numeral', () => {
+    for (const [t, a] of [
+      ['Abiotic', 'Biotic'], ['Unsaturated', 'Saturated'], ['Indirect tax', 'Direct tax'], ['itochondria', 'Mitochondria'],
+      ['Vitamin D', 'Vitamin K'], ['Chandragupta I', 'Chandragupta II'], ['Louis XIV', 'Louis XVI'], ['XXXVII', 'XXXVIII'],
+      ['Ion', 'Iron'], ['1875', '1857'], ['১০০০১', '১০০০০'], ['World War II', 'World War I'],
+    ]) expect(m(t, a), `${t} for ${a}`).toBe('wrong');
   });
 
-  it('numbers by their value (Maths, History, EVS)', () => {
-    expect(m('0.75', '3/4')).toBe('right');
-    expect(m('3 / 4', '0.75')).toBe('right');
-    expect(m('.5', '1/2')).toBe('right');
-    expect(m('1000', '1,000')).toBe('right');
-    expect(m('100000', '1,00,000')).toBe('right'); // Indian grouping
-    expect(m('8', 'Eight', 'How many legs does a spider have?')).toBe('right');
-    expect(m('twenty-five', '25')).toBe('right');
-    expect(m('twenty five', '25')).toBe('right');
-    expect(m('5', '-5')).toBe('wrong');
-    expect(m('-5', '-5')).toBe('right');
-    expect(m('1875', '1857')).toBe('wrong'); // no slips in numbers
-    expect(m('1857', '1857')).toBe('right');
-    expect(m('3,4', '34')).toBe('wrong');
-    expect(m('2.50', '2.5')).toBe('right');
+  it("never when what was typed is another answer in the same round", () => {
+    expect(m('Combination reaction', 'Combination reactoin', [], ['Combination reaction'])).toBe('wrong');
+    expect(m('Conduction', 'Convection', [], ['Conduction'])).toBe('wrong');
   });
 
-  it('units given as symbols (Maths, Geography, Physics)', () => {
-    for (const t of ['90', '90°', '90 degrees', '90 degree']) expect(m(t, '90°', 'Each angle of a rectangle'), t).toBe('right');
-    expect(m('50 percent', '50%')).toBe('right');
-    expect(m('50 per cent', '50%')).toBe('right');
-    expect(m('50', '50%')).toBe('right');
-    expect(m('9.8 m/s2', '9.8 m/s²')).toBe('right');
-    expect(m('5cm', '5 cm')).toBe('right');
-    expect(m('5', '5 cm')).toBe('wrong');
-  });
-
-  it('Hindi, Bengali and other scripts: vowel signs count', () => {
-    expect(m('प्रकाश संश्लेषण', 'प्रकाश संश्लेषण')).toBe('right');
-    expect(m('काम', 'कम')).toBe('wrong'); // different words, different only by a vowel sign
-    expect(loose('कमल')).not.toBe(loose('कमला'));
-    expect(m('রবীন্দ্রনাথ ঠাকুর', 'রবীন্দ্রনাথ ঠাকুর')).toBe('right');
-    expect(m('ঠাকুর', 'রবীন্দ্রনাথ ঠাকুর', 'রবীন্দ্রনাথ কে ছিলেন?')).toBe('right'); // the question says রবীন্দ্রনাথ
+  it('a slip in an Also answer counts too', () => {
+    expect(m('Decompositon', 'Decomposition reaction', ['Decomposition'])).toBe('almost');
   });
 });
 
-describe('a spelling slip is almost (half a point)', () => {
-  it('one letter in 5 to 9 letters, two in 10 or more', () => {
-    expect(m('Decompositon', 'Decomposition reaction', 'Reaction in which a compound breaks down')).toBe('almost');
-    expect(m('Photosynthsis', 'Photosynthesis')).toBe('almost');
-    expect(m('Fotosynthsis', 'Photosynthesis')).toBe('wrong'); // three letters out
-    expect(m('Mitochondira', 'Mitochondria')).toBe('almost'); // two letters swapped
-    expect(m('Oxidaton', 'Oxidation')).toBe('almost');
-    expect(m('Shakespear', 'William Shakespeare', 'Who wrote Hamlet?')).toBe('wrong'); // William is needed
-    expect(m('Shakespear', '[William] Shakespeare', 'Who wrote Hamlet?')).toBe('almost');
-  });
-
-  it('never in short answers, numbers, or when it is another answer in the round', () => {
-    expect(m('Ion', 'Iron')).toBe('wrong');
-    expect(m('Meiosis', 'Mitosis')).toBe('wrong');
-    expect(m('1947', '1974')).toBe('wrong');
-    expect(m('Isotone', 'Isotope')).toBe('almost');
-    expect(m('Isotone', 'Isotope', '', ['Isotope', 'Isotone'])).toBe('wrong');
-  });
-
-  it('keeps the work small even with many optional words', () => {
-    expect(rightForms('[a] [b] [c] [d] [e] [f] [g] [h] [i] [j] [k] [l] word').size).toBeLessThan(5000);
+describe('sameAnswer', () => {
+  it('is the comparison the checker uses for Also and Wrong lines', () => {
+    expect(sameAnswer('Oxygen', 'oxygen.')).toBe(true);
+    expect(sameAnswer('The Himalayas', 'Himalayas')).toBe(true);
+    expect(sameAnswer('Floodplain', 'Flood plain')).toBe(true);
+    expect(sameAnswer('Oxygen', 'Ozone')).toBe(false);
   });
 });

@@ -31,11 +31,15 @@ const pickN = <T,>(xs: readonly T[], n: number, r: () => number) => Array.from({
 const sample = <T,>(xs: readonly T[], n: number, r: () => number) => shuffle(xs, r).slice(0, n);
 const randomWord = (r: () => number, len: number, alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') =>
   Array.from({ length: len }, () => alphabet[Math.floor(r() * alphabet.length)]).join('');
+/** Questions as the prompt asks for them: most with a fill-in sentence and wrong options; some with the ___ in the
+ * question, some giving their answer away (no game may use those), some with an other accepted answer. */
 const asItems = (answers: string[], r: () => number): Item[] => answers.map((a, i) => ({
   id: `i${i}`,
-  // some questions contain their answer or a gap, to exercise fill-in-the-blank
-  question: r() < 0.2 ? `Fill in: the ___ is important (${i})` : r() < 0.2 ? `Which word, ${a}, is meant here (${i})?` : `Clue number ${i} for this answer`,
+  question: r() < 0.15 ? `Fill in: the ___ is important (${i})` : r() < 0.1 ? `Which word, ${a}, is meant here (${i})?` : `Clue number ${i} for this answer`,
   answer: a,
+  also: r() < 0.2 ? [`${a} also`] : [],
+  fill: r() < 0.8 ? `Sentence number ${i} with ___ in it.` : null,
+  wrong: r() < 0.8 ? [`Wrong ${i}a`, `Wrong ${i}b`, `Wrong ${i}c`] : [],
 }));
 
 /** The kinds of question set, from ordinary to nasty. */
@@ -47,10 +51,10 @@ const KINDS: Record<string, (r: () => number) => Item[]> = {
   'words inside words': (r) => asItems(pickN(['ion', 'ionic', 'ions', 'atom', 'atomic', 'atoms', 'cell', 'cells', 'nucleus', 'nuclei', 'tin', 'tint', 'stint'], 6, r), r),
   'palindromes and repeats': (r) => asItems(pickN(['level', 'radar', 'noon', 'kayak', 'refer', 'aaa', 'abab', 'zzzzzz', 'madam', 'civic', 'iron'], 6, r), r),
   'long answers (12-15 letters)': (r) => asItems(Array.from({ length: 3 + Math.floor(r() * 6) }, () => randomWord(r, 12 + Math.floor(r() * 4))), r),
-  'duplicates and blanks': (r) => [...asItems(pickN(VOCAB, 6, r), r), ...asItems(pickN(VOCAB, 3, r), r).map((it, i) => ({ ...it, id: `d${i}` })), { id: 'e1', question: '', answer: 'x' }, { id: 'e2', question: 'Q', answer: ' ' }],
+  'duplicates and blanks': (r) => [...asItems(pickN(VOCAB, 6, r), r), ...asItems(pickN(VOCAB, 3, r), r).map((it, i) => ({ ...it, id: `d${i}` })), { id: 'e1', question: '', answer: 'x' }, { id: 'e2', question: 'Q', answer: ' ' }, { id: 'e3', question: 'Q3', answer: 'y', fill: 'Two ___ blanks ___ here' }],
   'nothing for grids': (r) => asItems(pickN(OTHER, 5, r), r),
   'multiple choice, true/false and messy options': (r) => sample(VOCAB, 3 + Math.floor(r() * 8), r).map((a, i) => ({
-    id: `m${i}`, question: `Question ${i} about this`,
+    id: `m${i}`, question: `Question ${i} about it`,
     answer: r() < 0.2 ? (r() < 0.5 ? 'True' : 'False') : a,
     // some options repeat each other or the answer, as a careless paste might
     wrong: r() < 0.7 ? [...sample(VOCAB, 1 + Math.floor(r() * 4), r), ...(r() < 0.2 ? [a, a.toUpperCase()] : [])] : undefined,
@@ -60,6 +64,15 @@ const KINDS: Record<string, (r: () => number) => Item[]> = {
     while (s.replace(/ /g, '').length < 16) s = `${s} ${VOCAB[Math.floor(r() * VOCAB.length)]}`.trim();
     return s.replace(/ /g, '').length <= 25 ? s : s.split(' ').slice(0, 2).join(' ');
   }), r),
+  // a real chapter: a few long answers (they can only go down) among ordinary ones
+  'long answers among ordinary ones': (r) => asItems([
+    ...Array.from({ length: 2 + Math.floor(r() * 3) }, () => {
+      let s = '';
+      while (s.replace(/ /g, '').length < 16) s = `${s} ${VOCAB[Math.floor(r() * VOCAB.length)]}`.trim();
+      return s;
+    }).filter((s) => s.replace(/ /g, '').length <= 25),
+    ...sample(VOCAB, 5 + Math.floor(r() * 5), r),
+  ], r),
 };
 
 const MAKERS: Record<GameType, (items: Item[], r: () => number) => Game | null> = {
@@ -118,10 +131,12 @@ describe('stress', () => {
     const total = [...stats.values()].reduce((n, s) => n + s.made, 0);
     console.log(`${total} puzzles made and checked; every one shown passed its checker.`);
 
-    // ordinary questions must almost always make every game
+    // ordinary questions must almost always make every game; long answers, every crossword
     for (const type of GAME_TYPES) {
       const s = stats.get(`${type}|real words`)!;
-      expect(s.made / s.sets, type).toBeGreaterThan(type === 'matching' || type === 'fill' ? 0.99 : 0.9);
+      expect(s.made / s.sets, type).toBeGreaterThan(type === 'matching' || type === 'fill' || type === 'choice' ? 0.99 : 0.9);
     }
+    const long = stats.get('crossword|long answers among ordinary ones')!;
+    expect(long.made / long.sets).toBeGreaterThan(0.95);
   }, 600_000);
 });

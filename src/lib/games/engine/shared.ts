@@ -1,11 +1,25 @@
 /**
- * The rules every game shares: what a question is, how answers are compared, and which answers can go in a grid.
- * Makers and checkers both use these, so they can never disagree about them.
+ * The rules every game shares: what a question is, which of its versions each game uses, and which answers can go in a
+ * grid. Makers and checkers both use these, so they can never disagree about them.
+ *
+ * A question is written once, with every version the games need (supabase/games/install.sql, src/lib/games/format.ts):
+ * the question, its answer, other accepted answers (`also`), the fill-in sentence with ___ where the answer goes
+ * (`fill`), and wrong options for multiple choice (`wrong`). Nothing is guessed: a game uses a question only when the
+ * version it needs was written.
  */
 
-/** One question from the bank. `id` must be unique (the question's ID in the database). `wrong`: a multiple-choice
- * question's wrong options, as the teacher wrote them. */
-export interface Item { id: string; question: string; answer: string; wrong?: readonly string[] }
+/** One question from the bank. `id` must be unique (the question's ID in the database). */
+export interface Item {
+  id: string;
+  question: string;
+  answer: string;
+  /** Other answers that count as right, as the writer wrote them. */
+  also?: readonly string[];
+  /** The fill-in-the-blank version: a sentence with ___ where the answer goes. */
+  fill?: string | null;
+  /** Multiple choice: the wrong options, as the writer wrote them. */
+  wrong?: readonly string[];
+}
 
 /**
  * Accents taken off Latin letters (Café → Cafe). Marks in other scripts are kept: in Devanagari or Bengali they are the
@@ -13,37 +27,61 @@ export interface Item { id: string; question: string; answer: string; wrong?: re
  */
 export const unaccent = (s: string) => s.normalize('NFKD').replace(/(?<=\p{Script=Latin})\p{M}+/gu, '').normalize('NFC');
 
-/** Text for comparing: case, Latin accents, spaces and punctuation don't matter. */
+/** Text for comparing on screen: case, Latin accents, spaces and punctuation don't matter. */
 export const loose = (s: string) => unaccent(s).toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim();
 
-/**
- * The answer as students see it. Words in square brackets are ones a student may leave out ("Decomposition [reaction]",
- * "[Jawaharlal] Nehru"): the brackets go, the words stay.
- */
-export const shownAnswer = (answer: string) => answer.replace(/\[([^\]]*)\]/g, '$1').replace(/\s+/g, ' ').trim();
+/** The answer and every other accepted answer, in the order written. */
+export const answersOf = (it: Pick<Item, 'answer' | 'also'>) => [it.answer, ...(it.also ?? [])];
 
-/** "Central Processing Unit (CPU)": the main answer and the one in brackets after it. "(g)" and "f(x)" aren't split. */
-export function splitAlt(text: string): { main: string; alt: string | null } {
-  const m = text.match(/^(.*\S)\s+\(([^()]*[^\s()][^()]*)\)\s*$/);
-  return m ? { main: m[1], alt: m[2].trim() } : { main: text, alt: null };
+/** The blank in a fill-in sentence: three or more underscores (two stay text, as in Python's __init__). */
+export const BLANK = /_{3,}/g;
+export const blanks = (s: string) => (s.match(BLANK) ?? []).length;
+
+/** True or False: these questions only make sense as multiple choice. */
+export const isTrueFalse = (answer: string) => /^(true|false)$/i.test(answer.trim());
+
+/** A number on its own ("1857", "-3.5", "3/4"): such an answer may appear in its question by chance (x + 4 = 8). */
+export const isNumber = (s: string) => /^[-+]?\d+(?:[,.:/]\d+)*$/.test(s.replace(/\s+/g, ''));
+
+/**
+ * Whether a text shows one of the question's answers, as whole words. An answer with no letters (a number, √2) or of
+ * one letter (Vitamin "A", next to the word "a") doesn't count: it can be in a question by chance (x + 4 = 8).
+ */
+export function shows(text: string, it: Pick<Item, 'answer' | 'also'>): boolean {
+  const t = ` ${loose(text)} `;
+  return answersOf(it).some((a) => {
+    const l = loose(a);
+    return /\p{L}/u.test(l) && l.length > 1 && !isTrueFalse(a) && t.includes(` ${l} `);
+  });
 }
 
-/** What goes in a grid: the answer as shown, without a trailing "(CPU)". */
-const gridText = (answer: string) => unaccent(splitAlt(shownAnswer(answer)).main).normalize('NFKD').replace(/\p{M}/gu, '');
+/** The fill-in sentence: the Fill line, or the question itself when it has exactly one blank. Null when there is none. */
+export function fillText(it: Pick<Item, 'question' | 'fill'>): string | null {
+  if (it.fill && blanks(it.fill) === 1) return it.fill;
+  return blanks(it.question) === 1 ? it.question : null;
+}
 
-/**
- * The form an answer takes in a crossword or word search: letters A to Z only, upper case.
- * Spaces, hyphens, apostrophes and full stops are dropped ("Carbon dioxide" → CARBONDIOXIDE, "Newton's" → NEWTONS);
- * accents are removed; "Central Processing Unit (CPU)" goes in as CENTRALPROCESSINGUNIT. Null when the answer has
- * digits, symbols or another script, which can't go in a letter grid.
- */
-export function gridWord(answer: string): string | null {
-  const t = gridText(answer).trim();
+/** Letters only, for a grid: accents removed. Null when the text has digits, symbols or another script. */
+export function gridWord(text: string): string | null {
+  const t = unaccent(text).normalize('NFKD').replace(/\p{M}/gu, '').trim();
   return /^[A-Za-z][A-Za-z\s\-'’.]*$/.test(t) ? t.replace(/[^A-Za-z]/g, '').toUpperCase() : null;
 }
 
+/**
+ * What a crossword or word search hides for a question: the answer if it fits, else the first other accepted answer
+ * that does ("Decomposition reaction" is too long for a word search, "Decomposition" isn't). Null if none fits.
+ */
+export function gridForm(it: Pick<Item, 'answer' | 'also'>, min: number, max: number): { text: string; word: string } | null {
+  for (const text of answersOf(it)) {
+    const word = gridWord(text);
+    if (word && word.length >= min && word.length <= max) return { text, word };
+  }
+  return null;
+}
+
 /** Crossword enumeration: the length of each word of the answer, "(8, 8)" for "Balanced equation". */
-export const enumeration = (answer: string) => `(${gridText(answer).split(/[\s-]+/).map((w) => w.replace(/[^A-Za-z]/g, '').length).filter(Boolean).join(', ')})`;
+export const enumeration = (text: string) =>
+  `(${unaccent(text).normalize('NFKD').replace(/\p{M}/gu, '').split(/[\s-]+/).map((w) => w.replace(/[^A-Za-z]/g, '').length).filter(Boolean).join(', ')})`;
 
 /** Usable questions: both parts filled in, each ID once. */
 export const usable = (items: readonly Item[]) => {

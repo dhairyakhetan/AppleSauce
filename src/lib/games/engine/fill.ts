@@ -1,48 +1,21 @@
 /**
- * Fill in the blank: each question is shown with one gap, and the student types the answer.
- * Where the gap goes:
- *   "given" - the question already has ___ in it;
- *   "found" - the answer appears in the question as whole words, exactly once: it is cut out;
- *   "end"   - otherwise the gap goes after the question ("SI unit of force? ____").
- * A question that would still show its own answer is not used. What a student types is marked by answers.ts: right,
- * almost (a spelling slip, half a point) or wrong.
+ * Fill in the blank: each question's fill-in sentence, with its blank (___) as a box to type in. Only questions whose
+ * writer wrote that sentence are used (a Fill line, or a question that has the ___ itself): nothing is cut out of a
+ * question or added to its end. A sentence that would still show the answer is not used. What a student types is
+ * marked by answers.ts: right, almost (a spelling slip, half a point) or wrong.
  */
-import { loose, shownAnswer, shuffle, type Item } from './shared';
+import { BLANK, blanks, fillText, shows, shuffle, type Item } from './shared';
 
 export const FILL = { min: 1, max: 10 } as const;
 
-export interface FillRow { id: string; before: string; after: string; answer: string; mode: 'given' | 'found' | 'end' }
+export interface FillRow { id: string; before: string; after: string; answer: string; also: string[] }
 export interface FillIn { type: 'fill'; rows: FillRow[] }
 
-const GAP = /_{2,}/g;
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** The words a student must type: the answer without its [optional] words. */
-const core = (answer: string) => answer.replace(/\[[^\]]*\]/g, ' ');
-/** Whether the answer can be read in the text (as whole words, ignoring case, accents and punctuation), whole or the
- * part that must be typed. */
-const shows = (text: string, answer: string) =>
-  [shownAnswer(answer), core(answer)].some((a) => loose(a) !== '' && ` ${loose(text)} `.includes(` ${loose(a)} `));
-
 function row(it: Item): FillRow | null {
-  const q = it.question;
-  const gaps = q.match(GAP) ?? [];
-  let r: FillRow;
-  if (gaps.length === 1) {
-    const at = q.search(GAP);
-    r = { id: it.id, before: q.slice(0, at), after: q.slice(at + gaps[0].length), answer: it.answer, mode: 'given' };
-  } else if (gaps.length > 1) {
-    return null; // two gaps for one answer
-  } else {
-    const word = new RegExp(`(?<![\\p{L}\\p{N}])${escape(shownAnswer(it.answer))}(?![\\p{L}\\p{N}])`, 'giu');
-    const hits = [...q.matchAll(word)];
-    if (hits.length === 1) {
-      const at = hits[0].index!;
-      r = { id: it.id, before: q.slice(0, at), after: q.slice(at + hits[0][0].length), answer: it.answer, mode: 'found' };
-    } else {
-      r = { id: it.id, before: `${q.trimEnd()} `, after: '', answer: it.answer, mode: 'end' };
-    }
-  }
-  return shows(r.before + ' ' + r.after, r.answer) ? null : r;
+  const text = fillText(it);
+  if (!text || shows(text.replace(BLANK, ' '), it)) return null;
+  const [before, after] = text.split(BLANK);
+  return { id: it.id, before, after, answer: it.answer, also: [...(it.also ?? [])] };
 }
 
 export function makeFill(items: Item[], r: () => number): FillIn | null {
@@ -50,7 +23,7 @@ export function makeFill(items: Item[], r: () => number): FillIn | null {
   for (const it of shuffle(items, r)) {
     if (rows.length === FILL.max) break;
     const x = row(it);
-    if (x && loose(shownAnswer(x.answer))) rows.push(x);
+    if (x) rows.push(x);
   }
   return rows.length >= FILL.min ? { type: 'fill', rows } : null;
 }
@@ -64,22 +37,14 @@ export function checkFill(g: FillIn, items: Item[]): string[] {
   for (const x of g.rows) {
     const it = byId.get(x.id);
     if (!it) { out.push(`question ${x.id} is not in the bank`); continue; }
-    if (x.answer !== it.answer || !loose(shownAnswer(x.answer))) out.push(`question ${x.id} has the wrong answer`);
-    const q = it.question;
-    if (x.mode === 'end') {
-      if (x.before !== `${q.trimEnd()} ` || x.after !== '') out.push(`question ${x.id} is not the bank's text`);
-    } else {
-      // the text around the gap must be the question exactly, with only the gap (or the answer) cut out
-      if (!q.startsWith(x.before) || !q.endsWith(x.after) || x.before.length + x.after.length > q.length) {
-        out.push(`question ${x.id} is not the bank's text`);
-        continue;
-      }
-      const cut = q.slice(x.before.length, q.length - x.after.length);
-      if (x.mode === 'given' && !/^_{2,}$/.test(cut)) out.push(`question ${x.id}: the gap is not where ___ was`);
-      if (x.mode === 'found' && loose(cut) !== loose(shownAnswer(x.answer))) out.push(`question ${x.id}: the gap is not where the answer was`);
-    }
-    if (/_{2,}/.test(x.before + x.after)) out.push(`question ${x.id} has more than one gap`);
-    if (shows(x.before + ' ' + x.after, x.answer)) out.push(`question ${x.id} shows its own answer`);
+    if (x.answer !== it.answer || x.also.join('\u0000') !== (it.also ?? []).join('\u0000')) out.push(`question ${x.id} has the wrong answers`);
+    const text = it.fill && blanks(it.fill) === 1 ? it.fill : it.question;
+    const at = text.search(BLANK);
+    const gap = text.match(BLANK)?.[0] ?? '';
+    // the sentence exactly as written, with only its one blank as the box
+    if (blanks(text) !== 1 || text.slice(0, at) !== x.before || text.slice(at + gap.length) !== x.after) out.push(`question ${x.id} is not its fill-in sentence`);
+    if (blanks(x.before + x.after)) out.push(`question ${x.id} has more than one blank`);
+    if (shows(`${x.before} ${x.after}`, it)) out.push(`question ${x.id} shows its own answer`);
   }
   return out;
 }

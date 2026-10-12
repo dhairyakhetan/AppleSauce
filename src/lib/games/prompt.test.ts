@@ -1,13 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { mark } from './engine/answers';
-import { format, MAX_ANSWER, MAX_OPTIONS, MAX_QUESTION, missing } from './format';
-import { chapterLines, chatbotInstructions, chatbotPrompt, formatExample, topicLines } from './prompt';
-import type { ListChapter } from './rows';
+import { format, MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, missing } from './format';
+import { chapterLines, chatbotInstructions, chatbotPrompt, EXAMPLE_BLOCKS, fixPrompt, formatExample, topicLines } from './prompt';
+import { DIFFICULTIES, type ListChapter } from './rows';
 
-/* The chatbot prompt ("Copy chatbot prompt") and the code must agree: a chatbot follows the prompt, and the formatter
-   reads what it writes. The prompt is made for one chapter on the list, so it carries that chapter's lines and topics
-   and nothing about any other. */
+/* The chatbot prompts and the checker must agree: a chatbot follows the prompt, and the checker reads what it writes.
+   The prompt is made for one chapter on the list, so it carries that chapter's lines and topics and nothing about any
+   other. The fix prompt carries each problem and the whole text, and asks for all of it again. */
 
 const HEAT: ListChapter = {
   chapter_id: 'CBSE07SCI04', board: 'CBSE', class: 7, subject: 'Science', chapter_no: 4, name: 'Heat',
@@ -20,11 +19,12 @@ const NO_TOPICS: ListChapter = { chapter_id: 'ICSE06GEO02', board: 'ICSE', class
 const text = chatbotInstructions(HEAT);
 const read = (path: string) => readFileSync(path, 'utf8');
 
-describe('the chatbot prompt agrees with the code', () => {
-  it("starts the chatbot's block with the chapter's lines, which the site reads as that chapter and its topics", () => {
+describe('the chatbot prompt agrees with the checker', () => {
+  it("gives the chapter's lines and its Topic lines exactly, and the page reads them as that chapter and its topics", () => {
     expect(text).toContain(chapterLines(HEAT));
     expect(text).toContain(topicLines(HEAT));
-    const { rows, issues } = format(`${chapterLines(HEAT)}\n${topicLines(HEAT).split('\n').map((t, i) => `${t}\nQuestion ${i + 1} | Its answer`).join('\n')}`);
+    const blocks = topicLines(HEAT).split('\n').map((t, i) => `${t}\n\nQ: Question ${i + 1}\nA: Its answer\nFill: Sentence ${i + 1} with ___ in it.\nWrong: One; Two; Three`).join('\n\n');
+    const { rows, issues } = format(`${chapterLines(HEAT)}\n\n${blocks}`);
     expect(issues).toEqual([]);
     expect(rows.map((r) => [r.chapter_id, r.topic_id, r.chapter, r.topic])).toEqual([
       ['CBSE07SCI04', 'CBSE07SCI04T01', 'Heat', 'Hot and Cold'],
@@ -32,67 +32,102 @@ describe('the chatbot prompt agrees with the code', () => {
     ]);
   });
 
-  it('shows the format with the chapter\'s own lines, and the site reads it with every detail', () => {
-    expect(text).toContain(formatExample(HEAT));
+  it('shows an example that the checker reads with no problems, using every part', () => {
+    expect(text).toContain(EXAMPLE_BLOCKS);
     const { rows, issues } = format(formatExample(HEAT));
     expect(issues).toEqual([]);
     expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
-    expect(rows.map((r) => [r.topic_id, r.difficulty, r.wrong_options])).toEqual([
-      ['CBSE07SCI04T01', 'easy', []],
-      ['CBSE07SCI04T01', null, []],
-      ['CBSE07SCI04T01', 'medium', ['A wrong option', 'Another wrong option', 'A third wrong option']],
+    expect(rows.map((r) => [r.answer, r.also, !!r.fill, r.wrong_options.length, r.difficulty])).toEqual([
+      ['Carbon dioxide', ['CO2'], true, 3, 'easy'],
+      ['6', ['Six'], true, 3, 'easy'],
+      ['True', [], false, 0, 'easy'],
     ]);
+  });
+
+  it('names every label the checker reads, and the shape of a block', () => {
+    for (const label of ['Q:', 'A:', 'Also:', 'Fill:', 'Wrong:', 'Level:']) expect(text).toContain(label);
+    expect(text).toMatch(/Every question has Q, A, Fill, Wrong and Level/);
+    expect(text).toMatch(/True\/False: a statement after Q, and A: True or A: False\. No Also, Fill or Wrong/);
+  });
+
+  it("states the checker's limits", () => {
+    expect(text).toContain(`never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter`);
+    expect(text).toContain('20 to 30 questions per topic');
+    expect(text).toContain(`At most ${MAX_ANSWER_WORDS} words`);
+    expect(text).toContain(`At most ${MAX_QUESTION} characters`);
+    expect(text).toContain(`${MIN_OPTIONS} wrong options (at most ${MAX_OPTIONS}), separated by ";"`);
+    expect(text).toContain(`at most ${MAX_ALSO}, one per line`);
+    expect(text).toContain(DIFFICULTIES.join(', ').replace(/, (\w+)$/, ' or $1'));
+    expect(text).toContain('Exactly one ___');
+  });
+
+  it("states the checker's rules about what a question and an answer may be", () => {
+    for (const rule of ['"of the following"', '"which of these"', '"the above"', 'figure, diagram, map, table or passage', 'Never contains its answer',
+      'Not a yes/no question', 'not "True or false: ..."', 'no brackets', '"/" or "or"', 'All of the above', 'No ";" inside an option', 'x^2', 'sqrt 2']) {
+      expect(text, rule).toContain(rule);
+    }
   });
 
   it('for a chapter with no topics, asks for no Topic lines', () => {
     const plain = chatbotInstructions(NO_TOPICS);
     expect(plain).toContain('This chapter has no topics: write no Topic lines.');
     expect(plain).not.toMatch(/^Topic \d/m);
+    expect(plain).toContain(`never more than ${MAX_PER_CHAPTER}`);
     const { rows, issues } = format(formatExample(NO_TOPICS));
     expect(issues).toEqual([]);
     expect(rows.every((r) => r.chapter_id === 'ICSE06GEO02' && r.topic_no === null)).toBe(true);
   });
 
-  it('carries nothing about other boards, subjects or chapters, and stays short', () => {
+  it('carries nothing about other boards, subjects or chapters, and nothing about the site', () => {
     for (const other of ['ICSE', 'Maharashtra', 'Physics', 'NCERT', 'Boards:', 'Subjects:']) expect(text).not.toContain(other);
-    expect(chatbotPrompt(HEAT).length).toBeLessThan(4000);
-  });
-
-  it('is the same for everyone, and says nothing about the site, signing in or sending', () => {
     expect(text).not.toMatch(/https?:|localhost|shikshaq\.in|sign in|Google|Send|HoD|approv|Questions box/i);
   });
 
-  it('explains multiple choice, optional words and short forms the way the site reads them', () => {
-    expect(text).toContain(`at most ${MAX_OPTIONS})`);
-    expect(text).toMatch(/separated by ";"/);
-    const { rows, issues } = format(`${chapterLines(HEAT)}\nTopic 1: Hot and Cold\nThe Sun is hot | True | False\nUnit of temperature | [degree] Celsius (C) | Kelvin; Newton; Joule | easy`);
-    expect(issues).toEqual([]);
-    expect(rows.map((r) => [r.answer, r.wrong_options])).toEqual([['True', ['False']], ['[degree] Celsius (C)', ['Kelvin', 'Newton', 'Joule']]]);
-    expect(mark('Celsius', rows[1].answer)).toBe('right');
-    expect(mark('C', rows[1].answer)).toBe('right');
-  });
-
-  it('states the limits and the difficulties the site enforces', () => {
-    expect(text).toContain(`at most ${MAX_ANSWER} characters and ideally 1 to 3 words`);
-    expect(text).toContain(`is at most ${MAX_QUESTION} characters`);
-    expect(text).toContain('" | " and easy, medium or hard');
-  });
-
-  it('follows its own rules: no answer inside its question, and no yes/no answers', () => {
-    for (const r of format(formatExample(HEAT)).rows) {
-      expect(r.question.toLowerCase(), r.question).not.toContain(r.answer.toLowerCase());
-      expect(r.answer).not.toMatch(/^(yes|no)$/i);
-    }
-  });
-
-  it("ends with a place for the teacher's material", () => {
+  it('asks for one code block the teacher can copy, and ends with a place for the material', () => {
+    expect(text).toMatch(/Paste everything in ONE code block, so the teacher can copy it with one click/);
     expect(chatbotPrompt(HEAT).startsWith(text)).toBe(true);
     expect(chatbotPrompt(HEAT).trimEnd()).toMatch(/Material \(my notes or questions; if there is nothing here, write from the textbook\):$/);
   });
 });
 
+describe('the prompt to fix problems', () => {
+  const pasted = `${chapterLines(HEAT)}\nstray line\n\nTopic 1: Hot and Cold\n\nQ: Device used to measure temperature\nA: Thermometer\nFill: A ___ measures temperature.\nWrong: Barometer; Speedometer; Hygrometer\n\nQ: Which of the following is a good conductor?\nA: Copper\n\nQ: Normal body temperature, in degrees Celsius\nA: 37\nit is 98.6 in Fahrenheit\n`;
+  const { rows, issues } = format(pasted);
+  const prompt = fixPrompt(pasted, rows, issues);
+
+  it('names each question turned away, with what is wrong with it', () => {
+    expect(prompt).toContain('1. Q: Which of the following is a good conductor?');
+    expect(prompt).toContain('make sense on its own');
+    expect(prompt).toContain('2. Q: Normal body temperature, in degrees Celsius');
+    expect(prompt).toContain('No Fill: line');
+    expect(prompt).toContain("This line isn't part of the question"); // the line under it belongs to it
+    expect(prompt).not.toContain('Q: Device used to measure temperature\n   -'); // nothing wrong with it
+  });
+
+  it('includes the problems on no question, and the whole text', () => {
+    expect(prompt).toContain('Other problems:');
+    expect(prompt).toContain('Line "stray line"');
+    expect(prompt).toContain(`\`\`\`\n${pasted.trimEnd()}\n\`\`\``);
+  });
+
+  it('ends by asking for the entire text again, in one code block, keeping the rest as it is', () => {
+    expect(prompt.trimEnd()).toMatch(/keep everything else exactly as it is.*Then write the entire question text again, from the Board line to the last question, in ONE code block, so I can copy all of it at once\.$/s);
+  });
+
+  it('reminds the format but leaves the how-many limits to the first prompt', () => {
+    expect(prompt).toMatch(/Q: the question, A: the answer, Also:/);
+    expect(prompt).not.toMatch(/20 to 30|per topic|per chapter/);
+  });
+
+  it('fences the text with four backticks when it has code fences of its own', () => {
+    const fenced = `\`\`\`\n${pasted}\`\`\``;
+    const f = format(fenced);
+    expect(fixPrompt(fenced, f.rows, f.issues)).toContain(`\`\`\`\`\n${fenced}\n\`\`\`\``);
+  });
+});
+
 describe('the guide for people', () => {
-  it('has an example that the site reads with no warnings and nothing missing', () => {
+  it('has an example that the checker reads with no problems and nothing missing', () => {
     const guide = read('src/components/games/Guide.tsx');
     const sample = guide.match(/data-testid="guide-sample"[^>]*>\{`([\s\S]*?)`\}<\/pre>/)![1];
     const { rows, issues } = format(sample);

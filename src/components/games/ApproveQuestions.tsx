@@ -188,7 +188,8 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-[15px] font-bold text-foreground">{plural(qs.length, 'question')} from {b.by}</h2>
-                <p className="text-[12px] text-warm-meta">Sent {when(b.at)}</p>
+                {/* the email can't be changed by its owner, as the name can */}
+                <p className="text-[12px] text-warm-meta">{b.email ? `${b.email} · ` : ''}Sent {when(b.at)}</p>
               </div>
               {back?.where !== `batch:${b.id}` && (
                 <div className="flex flex-wrap gap-2">

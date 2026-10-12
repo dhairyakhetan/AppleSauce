@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
-import { MAX_ANSWER, MAX_QUESTION } from '@/lib/games/format';
+import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MIN_OPTIONS } from '@/lib/games/format';
 import { cn } from '@/lib/utils';
 import './games.css';
 
-/* "How to write your questions": the guide for people, at the bottom of Write questions. The format and what makes a
-   good question, nothing more; the limits come from the code, so they can't drift. (Chatbots get their own
-   instructions in the copied prompt, src/lib/games/prompt.ts.) */
+/* "How to write your questions": the guide for people, at the bottom of Write questions. The same rules the checker
+   applies and the chatbot prompt states (src/lib/games/prompt.ts), said for people; the limits come from the code, so
+   they can't drift, and prompt.test.ts checks that the sample reads with no problems. */
 
 const CODE = 'rounded-md bg-muted px-1 py-0.5 font-mono text-[13px] text-foreground';
 
@@ -18,6 +18,9 @@ function Card({ title, span = 1, children }: { title: string; span?: 1 | 2 | 3; 
   );
 }
 
+const B = ({ children }: { children: ReactNode }) => <b className="text-foreground">{children}</b>;
+const C = ({ children }: { children: ReactNode }) => <code className={CODE}>{children}</code>;
+
 export function Guide() {
   return (
     <section id="guide" tabIndex={-1} aria-labelledby="guide-h" className="scroll-mt-24 outline-none">
@@ -25,32 +28,49 @@ export function Guide() {
       <div className="grid grid-cols-1 gap-3 text-[14px] leading-relaxed text-warm-prose lg:grid-cols-3">
         <Card title="The format" span={2}>
           <ol className="flex list-decimal flex-col gap-1.5 pl-5">
-            <li><b className="text-foreground">Fill in Board, Class, Subject and Chapter.</b></li>
-            <li><b className="text-foreground">Add a topic, then one question per line:</b> the question, a bar <code className={CODE}>|</code>, then the answer. To say how hard it is, add another bar and <i>easy</i>, <i>medium</i> or <i>hard</i>.</li>
-            <li><b className="text-foreground">Multiple choice:</b> after the answer, add a bar and the wrong options, separated by <code className={CODE}>;</code>.</li>
-            <li><b className="text-foreground">Fix anything underlined</b>, then send.</li>
+            <li><B>Fill in Board, Class, Subject and Chapter,</B> then add a topic.</li>
+            <li>
+              <B>Write each question as a block of lines,</B> each starting with its label, with a blank line between questions:{' '}
+              <C>Q:</C> the question, <C>A:</C> the answer, <C>Also:</C> another answer that counts (one per line, only if there is one),{' '}
+              <C>Fill:</C> the same fact as a sentence with <C>___</C> where the answer goes, <C>Wrong:</C> {MIN_OPTIONS} wrong options separated by{' '}
+              <C>;</C>, and <C>Level:</C> easy, medium or hard.
+            </li>
+            <li><B>True/False:</B> only <C>Q:</C> with a statement, and <C>A: True</C> or <C>A: False</C>.</li>
+            <li><B>Fix every red or amber line,</B> then send. A question with a problem isn't sent.</li>
           </ol>
           <pre data-testid="guide-sample" className="mt-1 overflow-x-auto whitespace-pre rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
 Class: 10
 Subject: Science
 Chapter 1: Chemical Reactions and Equations
-Topic 1: Chemical Equations
-Law that requires a chemical equation to be balanced | Law of conservation of mass | medium
-Equation with the same number of atoms of each element on both sides | Balanced equation
 Topic 2: Types of Chemical Reactions
-Reaction in which a single reactant breaks down into simpler products | Decomposition reaction | easy
-Gas given off when zinc reacts with dilute sulphuric acid | Hydrogen | Oxygen; Chlorine; Nitrogen | medium`}</pre>
+
+Q: Reaction in which a single reactant breaks down into simpler products
+A: Decomposition reaction
+Also: Decomposition
+Fill: A reaction in which a single reactant breaks down into simpler products is called a ___.
+Wrong: Combination reaction; Displacement reaction; Neutralisation reaction
+Level: easy
+
+Q: Gas given off when zinc reacts with dilute sulphuric acid
+A: Hydrogen
+Also: H2
+Fill: Zinc reacts with dilute sulphuric acid to give off ___ gas.
+Wrong: Oxygen; Chlorine; Nitrogen
+Level: medium
+
+Q: Rusting of iron is a chemical change
+A: True`}</pre>
         </Card>
 
         <Card title="Writing good questions">
           <ul className="flex list-disc flex-col gap-1.5 pl-5">
-            <li><b className="text-foreground">One fact per question</b>, with exactly one correct answer.</li>
-            <li><b className="text-foreground">Short answers:</b> a word, a short phrase or a number (at most {MAX_ANSWER} characters). Puzzles need them short, and crosswords and word searches need letters.</li>
-            <li><b className="text-foreground">Questions that stand alone:</b> no <i>this</i>, <i>the above</i> or <i>as mentioned</i>. At most {MAX_QUESTION} characters.</li>
-            <li><b className="text-foreground">Fill in the blank:</b> write <code className={CODE}>___</code> where the answer goes: <code className={CODE}>The ___ is the powerhouse of the cell | Mitochondria</code>.</li>
-            <li><b className="text-foreground">No <code className={CODE}>|</code> inside</b> a question or answer: it separates them. Use <code className={CODE}>/</code>.</li>
-            <li><b className="text-foreground">Optional words</b> go in square brackets: <code className={CODE}>Decomposition [reaction]</code>. A short form goes in round brackets after the answer: <code className={CODE}>Central Processing Unit (CPU)</code>.</li>
-            <li><b className="text-foreground">No repeats:</b> the same question twice in a chapter is left out.</li>
+            <li><B>One fact, one right answer.</B> The question makes sense on its own: no <i>this</i>, <i>the above</i>, <i>of the following</i>, figure or passage. It never contains its answer.</li>
+            <li><B>The answer is exactly what a student types:</B> at most {MAX_ANSWER_WORDS} words, no brackets or notes. Units go in the question (<i>in degrees Celsius</i>).</li>
+            <li><B>Also</B> lists every other answer that is just as right (at most {MAX_ALSO}): a short form (<C>CPU</C>), another name (<C>Calcutta</C>), a number in words (<C>Six</C>). Nothing else counts, but a small spelling slip gets half marks.</li>
+            <li><B>Fill:</B> one <C>___</C> that stands for the whole answer; the rest of the sentence doesn't repeat it.</li>
+            <li><B>Wrong options</B> ({MIN_OPTIONS} to {MAX_OPTIONS}): believable, and the same kind as the answer (a year for a year). Never <i>All of the above</i>.</li>
+            <li><B>Any symbol is fine</B> in a question. If an answer needs one a keyboard doesn't have (<C>x²</C>), add an Also line typed with ordinary keys (<C>x^2</C>).</li>
+            <li><B>At most {MAX_PER_TOPIC} questions per topic</B> and {MAX_PER_CHAPTER} per chapter, no two the same.</li>
           </ul>
         </Card>
       </div>

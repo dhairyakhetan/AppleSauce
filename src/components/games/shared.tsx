@@ -18,13 +18,17 @@ export function ActionIcon({ done, children }: { done: boolean; children: ReactN
 }
 
 /** The rows as they will be stored, grouped under a heading for each chapter and topic. */
-export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, rowClass }: {
+export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, rowClass, games, problem }: {
   rows: R[];
   /** A stable key per row, so rows that leave or arrive don't disturb the others. */
   keyOf?: (r: R, i: number) => string | number;
   /** Buttons or a note shown under a row (the HoD desk). */
   extra?: (r: R) => ReactNode;
   rowClass?: (r: R) => string;
+  /** The games a row can go in, shown under it (Write questions). */
+  games?: (r: R, i: number) => string[];
+  /** A row that needs fixing: marked red (or amber), and not sent. */
+  problem?: (r: R, i: number) => 'error' | 'warn' | undefined;
 }) {
   // rows rise in as they are added: on the first render one after another, briefly; later only a new row
   const first = useRef(true);
@@ -60,16 +64,23 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
         </div>,
       );
     }
+    const bad = problem?.(r, i);
+    const plays = games?.(r, i);
     out.push(
       <div
-        className={cn('animate-fade-slide-up grid grid-cols-[1.75rem_1fr] gap-x-2 gap-y-1 border-b border-border/70 py-2 transition-opacity duration-200 sm:grid-cols-[1.75rem_minmax(0,3fr)_minmax(0,2fr)_auto]', rowClass?.(r))}
+        className={cn('animate-fade-slide-up grid grid-cols-[1.75rem_1fr] gap-x-2 gap-y-1 border-b border-border/70 py-2 transition-opacity duration-200 sm:grid-cols-[1.75rem_minmax(0,3fr)_minmax(0,2fr)_auto]',
+          bad && 'border-l-4 pl-1', bad === 'error' && 'border-l-destructive', bad === 'warn' && 'border-l-brand', rowClass?.(r))}
         style={delay(shown++)}
         key={keyOf(r, i)}
       >
         <span className="pt-0.5 text-right text-[12px] tabular-nums text-warm-meta">{r.question_no}</span>
-        <span className="min-w-0 break-words text-[14px] text-foreground">{r.question}</span>
+        <span className="min-w-0 break-words text-[14px] text-foreground">
+          {r.question}
+          {r.fill && <span className="block text-[12px] text-warm-meta">Fill: {r.fill}</span>}
+        </span>
         <span className="col-start-2 min-w-0 break-words text-[14px] font-semibold text-foreground sm:col-start-auto">
           {r.answer}
+          {r.also?.length > 0 && <span className="block text-[12px] font-normal text-warm-meta">Also: {r.also.join(' · ')}</span>}
           {r.wrong_options?.length > 0 && <span className="block text-[12px] font-normal text-warm-meta">Wrong: {r.wrong_options.join(' · ')}</span>}
         </span>
         {r.difficulty ? (
@@ -78,6 +89,12 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
             {r.difficulty}
           </span>
         ) : <span className="hidden sm:block" />}
+        {(bad || plays) && (
+          <p className="col-span-full pl-9 text-[12px] text-warm-meta sm:col-start-2">
+            {bad ? <span className={bad === 'error' ? 'font-semibold text-destructive' : 'font-semibold text-brand-deep'}>Needs fixing: not sent as it is</span>
+              : plays!.length ? <>Plays in: {plays!.join(' · ')}</> : 'Plays in no game'}
+          </p>
+        )}
         {extra && <div className="col-span-full pl-9 sm:col-start-2">{extra(r)}</div>}
       </div>,
     );

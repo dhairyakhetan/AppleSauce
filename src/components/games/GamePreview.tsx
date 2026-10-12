@@ -29,7 +29,7 @@ const asQuestions = (rows: Row[]): ReviseQuestion[] =>
   }));
 
 export function GamePreview({ rows }: { rows: Row[] }) {
-  const sig = rows.map((r) => `${r.line}|${r.chapter_id}|${r.chapter_no}|${r.chapter}|${r.topic_no}|${r.topic}|${r.question}|${r.answer}`).join('\n');
+  const sig = rows.map((r) => [r.line, r.chapter_id, r.chapter_no, r.chapter, r.topic_no, r.topic, r.question, r.answer, r.also.join(';'), r.fill, r.wrong_options.join(';')].join('|')).join('\n');
   const settled = useSettled(rows, sig);
   const questions = useMemo(() => asQuestions(settled), [settled]);
   const [big, setBig] = useState(false);

@@ -18,31 +18,60 @@ The team writes short questions and answers for revision games. An HoD approves 
 with no AI. It is the question bank site (shikshaq-games.vercel.app) brought into the main site, rebuilt in Shikshaq's
 look.
 
-- **Write questions** (`/games`). Teachers write `Question | Answer` lines under Board, Class, Subject, Chapter and
-  Topic lines. Problems are underlined as they write. Questions can only be written for a chapter and topic on the
-  team's fixed list. Once board, class and subject are filled in, the Chapter box becomes a picker of the listed
-  chapters, and the chapter's topics become buttons that add their Topic line. They check the rows, play a small
-  version of Try the games made from their questions, and send them for approval. Questions an HoD sent back show at
-  the top, with the reason, and "Fix it" puts one back in the box. "Copy chatbot prompt" copies a short prompt made for
-  one chapter: that chapter's lines and its topics, and nothing about the site, sending or any other chapter (everyone
-  on the team copies the same prompt). It uses the chapter in the boxes; when there isn't one of the teacher's own (or
-  the example is loaded), it first asks which chapter, from the list.
-- **Approve questions** (`/games/approve`, HoDs and admins). Batches wait here. Approve or send back one question or a
-  whole batch, with a reason the teacher sees. Every action can be undone for a few seconds. Admins can also download
-  the approved questions as CSV or JSON.
+- **Write questions** (`/games`). Teachers write each question as a block of labelled lines, under Board, Class,
+  Subject, Chapter and Topic lines:
+
+  ```
+  Q: Reaction in which a single reactant breaks down into simpler products
+  A: Decomposition reaction
+  Also: Decomposition
+  Fill: A reaction in which a single reactant breaks down into simpler products is called a ___.
+  Wrong: Combination reaction; Displacement reaction; Neutralisation reaction
+  Level: easy
+  ```
+
+  Every version each game needs is written out, so nothing is guessed: `Also` lines are the other answers that count,
+  `Fill` is the fill-in-the-blank sentence, `Wrong` the multiple-choice options. Only the label at the start of a line
+  means anything, so a question can hold any symbol (`|`, brackets, `;`, `_`). Every question is checked strictly as
+  it is written, and each problem is underlined and says exactly what to change (the answer is in the question, "of the
+  following", a note in brackets, an answer students can't type, a Fill line without its `___`, too few wrong options,
+  a wrong option that counts as the answer, more than 30 questions in a topic or 80 in a chapter, and so on). The table
+  shows which games each question can be used in. Questions can only be written for a chapter and topic on the team's
+  fixed list. Once board, class and subject are filled in, the Chapter box becomes a picker of the listed chapters, and
+  the chapter's topics become buttons that add their Topic line. Teachers play a small version of Try the games made
+  from their questions, and send them for approval.
+- **Sending with problems.** Send then shows "There are errors in the questions", with two ways on: "Remove those and
+  send" (the questions with problems leave the box, with Undo, and the rest are sent), or "Copy prompt to fix them": a
+  prompt for the chatbot listing each question turned away and what is wrong with it, then the whole text, and last,
+  to write the entire text again in one code block.
+- **The chatbot prompt** ("Copy chatbot prompt") is made for one chapter: that chapter's lines and its topics, and
+  nothing about the site, sending or any other chapter (everyone on the team copies the same prompt). It states every
+  rule the checker applies, the block format with an example, 20 to 30 questions per topic (at most 30, and 80 in the
+  chapter), and to reply in one code block that can be copied with one click. It uses the chapter in the boxes; when
+  there isn't one of the teacher's own (or the example is loaded), it first asks which chapter, from the list. Tested
+  with stand-in chatbots (below).
+- **Sent back.** Questions an HoD sent back show at the top, with the reason, and "Fix it" puts one back in the box.
+- **Approve questions** (`/games/approve`, HoDs and admins). Batches wait here, with the sender's name and email (a
+  person can change their own name, not their email). Approve or send back one question or a whole batch, with a
+  reason the teacher sees. Every action can be undone for a few seconds. Admins can also download the approved
+  questions as CSV or JSON.
 - **Only what each role needs.** No IDs, codes, column lists or explanatory paragraphs on any page; members see Write
   questions and Try the games, HoDs also Approve questions, admins also Team, and anyone else a one-line page.
 - **Try the games** (`/games/play`). Pick a class, subject and chapter; every topic is in by default, and tapping one
   leaves it out. Then play the puzzles students will get. Every puzzle is checked before it is shown.
-- **Multiple choice.** A question can carry up to 5 wrong options after its answer (`Question | Answer | Wrong; Wrong;
-  Wrong`), kept in a new `wrong_options` column. A question without them still plays as multiple choice, with other
-  answers from the round as its options. True/false questions play only as multiple choice.
-- **Typed answers are checked the way a teacher would** (fill in the blank), for every subject: case, spaces and
-  punctuation don't matter; words in `[brackets]` are optional (`Decomposition [reaction]`); a short form in round
-  brackets after the answer counts (`Central Processing Unit (CPU)`); words the question already says, "a/the" and
-  titles (Lord, Dr, Mahatma...) can be left out; numbers count by value (`1/2` and `0.5`, `eight` and `8`); a small spelling slip
-  gets half a point and is shown in amber with the right spelling. A wrong answer turns into the right one in place,
-  without a jump.
+- **The games use only what was written.** Multiple choice uses only the writer's own wrong options (a True/False
+  question needs none); fill in the blank uses only the Fill sentence (or a question with `___` in it). A crossword
+  takes answers up to 25 letters (longer than 15 go down, so the grid stays 15 wide for phones) and tries every answer
+  rather than 12 picked first; a word search takes up to 15 letters and leaves out a word that won't fit instead of
+  giving up. Where the answer is too long, an Also answer that fits is used. Word search filler letters come from the
+  hidden words' own letters, and never spell a rude word (English, Hindi or Bengali in English letters) in any
+  direction.
+- **Typed answers are marked strictly** (fill in the blank): right only if it is the answer or an Also answer, where
+  case, spaces, punctuation between words, the kind of dash and a leading a/an/the don't matter. Numbers count as
+  written (3.5 is not 35, -5 is not 5). A small spelling slip (a letter missing, extra or two swapped, in a word of five
+  letters or more, not the first letter) gets half a point and is shown in amber with the right spelling; a letter
+  changed for another doesn't (Alkene for Alkane is wrong), nor does typing another answer from the round. A wrong
+  answer turns into the right one in place, without a jump.
 - **Team** (`/games/team`, admins). Add someone by their Google email as member, HoD or admin, change roles, remove
   people. The moderator can't be removed or demoted.
 - **Account menu.** A "Games team" group with Write questions (and Approve questions for HoDs and admins), only for
@@ -53,7 +82,9 @@ look.
 **The database part is two scripts, run by hand, not part of the deploy** (`supabase/games/install.sql` and
 `supabase/games/list.sql`). Everything goes in a new `games` schema. Nothing that already exists is changed, and the
 install script checks that itself. Until the scripts are run, nobody sees the games team's link, and `/games` says it
-couldn't load. Dummy mode (`?dummy=1`, test builds only) runs all four parts against made-up data.
+couldn't load. Dummy mode (`?dummy=1`, test builds only) runs all four parts against made-up questions: six chapters
+in Science, Geography, History and Mathematics, written the way the prompt asks (a test checks that every one passes
+the checker and makes every game).
 
 ---
 
@@ -70,6 +101,11 @@ Run these in the Supabase dashboard's SQL editor. Neither script touches anythin
 2. Paste the whole file into the SQL editor and run it. This is a **dry run**: it builds everything, checks it, then
    undoes it. It must end with an error that starts **"Dry run passed"**. Nothing is kept.
    - If it says anything else, stop and send me the message. Nothing was kept.
+   - If the editor warns that tables will be made "without RLS", or that the query has "destructive operations",
+     choose to run it as written: the script turns row-level security on for every table itself (and checks it), and
+     the only `delete`s are inside its own functions.
+   - If it stops saying something outside `games` would change, and names something you don't recognise, Supabase
+     itself may have changed it during that second. Run it again; if it stops again, send me the message.
 3. On the **DRY RUN** line, change `'yes'` to `'no'`. Run the whole file again. This time it is kept.
 4. **Settings, then Data API** (API settings): add `games` to **Exposed schemas**, and save.
 
@@ -127,7 +163,16 @@ Why, measured on Supabase's own sign-in server (GoTrue v2.197, run locally with 
 
 This is in `games.proven_email()`. The providers that count are in `games.settings.sign_in_providers`, which is
 `{google}` by default. It works the same whether "Confirm email" is on or off, so that setting no longer matters for
-the games team.
+the games team. Also checked:
+
+- **A code sent by text message** is recorded the same way as an email link (`otp`). So on an account that has a
+  phone, a code proves nothing about the email, and only Google counts. (This matters only if phone sign-in is ever
+  turned on.)
+- **Changing an account's email** can't be used to take someone else's: Supabase sends a confirmation to the new
+  address for every email change on a normal account (checked in its source, `internal/api/user.go`).
+- **Keep "Allow manual linking" off** (Authentication settings; it is off by default). With it on, and "Confirm
+  email" off, someone could make a password account with a teacher's email and link their own Google account to it.
+- **Names can be changed by their owners**, so the HoD desk shows each batch's email under the name.
 
 ---
 
@@ -162,28 +207,28 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the moderator line and the outside-change check (above). Tables: settings, team, boards, subjects, chapters, topics, batches, questions, question_bank. The site calls functions only. |
 | `supabase/games/list.sql` | Loads the fixed list of chapters and topics from pasted rows, with a dry run. It only adds. |
 | `src/pages/Games.tsx` | The page: checks who you are (including the "sign in with Google" page for a password sign-in), loads the list of chapters, the links between the four parts, the "not for you" pages, and the real/dummy switch (the same pattern as `pages/Hod.tsx`). A part stays mounted once opened. |
-| `src/components/games/WriteQuestions.tsx` | Write questions: the four detail boxes (kept in step with the text; Chapter becomes a picker from the list), topic buttons, the Questions box with underlined problems, the check panel, the sent-back panel, the preview, Send, the guide, and the phone's "jump to results" button. |
+| `src/components/games/WriteQuestions.tsx` | Write questions: the four detail boxes (kept in step with the text; Chapter becomes a picker from the list), topic buttons, the Questions box with underlined problems, the check panel (each question with the games it can go in, or marked as needing a fix), the sent-back panel, the preview, Send and its "There are errors in the questions" popup, the guide, and the phone's "jump to results" button. |
 | `src/components/games/Revise.tsx` | The game picker and player: class, subject, chapter, topics (all in by default; tap one to leave it out) and a tab per game. Try the games uses it full size; the preview uses a small version. |
 | `src/components/games/GamePreview.tsx` | "3. See how it plays": the small `Revise` made from the questions on screen. A game these questions can't make is greyed out with what it needs. "Full size" opens the full one. |
 | `src/components/games/ApproveQuestions.tsx` | Approve questions: waiting, approved and sent-back tabs, batches, the reason box, undo, older approved questions a page at a time, download of the bank (admins). |
 | `src/components/games/TryGames.tsx` | Try the games: loads the bank into `Revise`. |
 | `src/components/games/Team.tsx` | Team: add, change and remove people. |
 | `src/components/games/GameView.tsx` | The five games, playable (also in a compact size for the preview). |
-| `src/components/games/Guide.tsx` | "How to write your questions", for people: the format and what makes a good question. The limits come from the code. |
+| `src/components/games/Guide.tsx` | "How to write your questions", for people: the block format and what makes a good question, the same rules as the checker and the prompt. The limits come from the code. |
 | `src/components/games/shared.tsx` | Shared parts on screen: the table of rows grouped by chapter and topic, loading, failure and empty states, and the icon that turns into a check mark. |
 | `src/components/games/helpers.ts` | Plain helpers: button looks, dates, saving and copying, "Undo" (Shikshaq's toasts), the games' names. |
 | `src/components/games/games.css` | Only what utility classes can't do: the underline layer behind the Questions box and the puzzle grids. Uses Shikshaq's colour variables only, and loads with the games pages only. |
 | `src/lib/games/rows.ts` | The question row, its CSV, JSON and Sheets exports, the bank's statuses, roles, and the list's chapter and topic types. |
-| `src/lib/games/format.ts` | The formatter: reads the pasted text into rows, with every problem and its line. As on the games site, plus wrong options for multiple choice. |
+| `src/lib/games/format.ts` | The strict checker: reads the Questions box (detail lines and question blocks) into rows, with every problem on the line to fix, and which question each problem belongs to. Replaces the games site's formatter, which read many loose shapes. |
 | `src/lib/games/details.ts` | Boards, classes, subjects, chapters, topics and the IDs. Unchanged from the games site. |
 | `src/lib/games/catalog.ts` | Checks the Questions box against the list of chapters and topics, on the line to fix, the way the database will. |
-| `src/lib/games/prompt.ts` | What "Copy chatbot prompt" copies: the instructions for one chapter on the list, with its lines and topics. |
+| `src/lib/games/prompt.ts` | What "Copy chatbot prompt" copies (the rules for one chapter on the list, with its lines and topics), and the prompt that asks a chatbot to fix the questions turned away. |
 | `src/lib/games/api.ts` | Every database call, as one `GamesApi` object. `realGamesApi` calls the `games` schema's functions through Shikshaq's own Supabase client. |
 | `src/lib/games/engine/` | The games engine (`index`, `shared`, `crossword`, `wordsearch`, `matching`, `fill`, `choice`), and `answers.ts`, which decides whether a typed answer is right, half right (a spelling slip) or wrong. Each game has a maker and a separate checker, and a puzzle is only shown after its checker passes it. |
 | `src/hooks/useGamesRoleBadge.ts` | The account menu's check: your role on the games team, or none. Cached for 30 minutes, no retries. Any failure means no link. |
-| `src/dummy/games-fake-api.ts` | Dummy mode's made-up database. It keeps the real one's rules: the list, repeats skipped, numbering within a topic, sent-back questions not taken back unchanged, who may do what, the password case. |
+| `src/dummy/games-fake-api.ts` | Dummy mode's made-up database and questions (six chapters across subjects, each question written in full). It keeps the real one's rules: the list, repeats skipped, numbering within a topic, sent-back questions not taken back unchanged, who may do what, the password case. |
 | `src/dummy/GamesDummy.tsx` | Dummy mode's wrapper and its purple bar. Reached only through the test-build-only lazy import, so it is compiled out of the live site. |
-| Tests | `src/lib/games/database.test.ts` (both SQL scripts on an in-memory Postgres: the dry run, the moderator line, every kind of outside change caught, who can call what, the sign-in rule, the list, sending, numbering, approving, the bank, paging; 31 tests), `src/lib/games/catalog.test.ts` (the list check), `src/lib/games/format.test.ts` (the formatter), `src/lib/games/prompt.test.ts` (the chatbot prompt agrees with the code), `src/lib/games/engine/engine.test.ts` and `engine-stress.test.ts` (every checker catches broken puzzles; thousands of puzzles checked), `src/dummy/games-fake-api.test.ts` (the dummy database keeps the rules). |
+| Tests | `src/lib/games/database.test.ts` (both SQL scripts on an in-memory Postgres: the dry run, the moderator line, every kind of outside change caught, who can call what, the sign-in rule, the list, sending, numbering, approving, the bank, paging; 36 tests), `src/lib/games/catalog.test.ts` (the list check), `src/lib/games/format.test.ts` (every check of the checker, each on its line), `src/lib/games/prompt.test.ts` (both prompts agree with the checker), `src/lib/games/engine/answers.test.ts` (marking, with the wrong answers that used to pass), `engine.test.ts` and `engine-stress.test.ts` (every checker catches broken puzzles; thousands of puzzles checked; no rude word in 400 word searches), `src/dummy/games-fake-api.test.ts` (the dummy database keeps the rules, and every made-up question passes the checker). |
 
 ## Changed Shikshaq files
 
@@ -214,14 +259,17 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
   - The preview ("3. See how it plays"): a small version of Try the games, made from the questions being written.
   - The fixed list of chapters and topics, with the chapter picker and topic buttons.
   - The password sign-in rule.
-  - Multiple choice (a fifth game and the `wrong_options` column) and the answer checking described above. On the
-    games site a typed answer had to match letter for letter.
+  - The block format and the strict checker, with the send popup and the fix prompt.
+  - Multiple choice (a fifth game), and the `also`, `fill` and `wrong_options` columns: each version of a question is
+    written out, and the games use only those. On the games site the games guessed (the blank was cut out of the
+    question or put at its end), and a typed answer had to match letter for letter.
+  - Crossword: answers up to 25 letters, going down when longer than 15; every answer tried. Word search: up to 15
+    letters, a word that won't fit left out, filler from the words' letters and never a rude word.
 - **Who gets in**: only emails on the team's list, from a Google or email-link sign-in. On the games site anyone signed
   in with Google was a member.
 - **Chatbot instructions**: no longer hidden in the page (on shikshaq.in that would be hidden text on every page). All
-  of it now travels in the copied prompt, which is made for one chapter: about 3,800 characters instead of the games
-  site's 14,800, with no lists of boards and subjects and no guessing which chapter or textbook is meant. It also asks
-  for some multiple-choice questions, and explains optional words and short forms.
+  of it now travels in the copied prompt, which is made for one chapter: about 5,000 characters instead of the games
+  site's 14,800, with no lists of boards and subjects and no guessing which chapter or textbook is meant.
 - **The database layer**: `db.ts` split into `rows.ts` (no database) and `api.ts` (the calls). The calls use Shikshaq's
   Supabase client and the `games` schema's functions instead of the games site's own Supabase project and its tables.
 - **Lint**: `[\s\-]` became `[\s-]` in `engine/shared.ts`. It behaves the same, and Shikshaq's lint treats the escape
@@ -233,10 +281,11 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | --- | --- |
 | `npx tsc -b` | Clean. The games files were also checked with `strict` and unused-code checks on: clean. |
 | `npx eslint .` | 0 errors, 212 warnings, the same 212 as before this change. The games files have none. |
-| `npm test` | 147 files, 2,206 tests, all pass (140 files and 2,085 tests before). |
-| Both SQL scripts on Supabase's own Postgres 17 (local) | Install: as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
-| Real network calls, local Supabase, real OAuth sign-in | The site's calls go to `/rest/v1/rpc/<function>` with the `games` profile, and return 200. A member wrote questions with the chapter picker and a topic button. An off-list topic was underlined and held back. One question was sent as batch `B20261012-01`. The HoD approved it, and Try the games played it from the bank. A password session got `reauth` from `games.my_role()` and the "Sign in with Google" page. Signed out: refused. Tables can't be read directly. |
-| Live-shaped build (`vite build` without `VITE_PREVIEW_TOOLS`) | Builds. No dummy code, made-up data or preview tools in it. The games pages are a separate download (142 kB script, 4 kB styles), fetched only when `/games` opens. |
+| `npm test` | 148 files, 2,287 tests, all pass (140 files and 2,085 tests before). |
+| Stand-in chatbots (AI agents given only the copied prompt, as a teacher would paste it) | Four chapters: Science (Heat, no material), History (From Trade to Territory, with notes), Mathematics (Basic Geometrical Ideas, no material) and Science with no topics (Nutrition in Animals); two smaller and two larger models. 181 questions in all, each reply one code block. Three were turned away: one was the checker's mistake ("Zero" with an Also "0" and numbers as options; fixed), and two repeated the answer as an Also line with a space ("End point" for "Endpoint"; the prompt now says not to). Every topic made all five games, in at most 25 ms. The fix prompt was given to a smaller model in a new chat, with a messy hand-written text (13 problems in 6 questions: a one-line question, a note in brackets, a degree sign, Yes as an answer, a repeated Also, a)/b) options, a made-up level). After two rounds of tightening the fix prompt (a short list of the rules, and that every question has all its lines), all 6 came back passing in one reply, in one code block. |
+| Both SQL scripts on Supabase's own Postgres 17 (local) | Install (the current script, run again after the last changes): as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions, with the `also`, `fill` and `wrong_options` columns; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
+| Real network calls, local Supabase, real OAuth sign-in | The site's calls go to `/rest/v1/rpc/<function>` with the `games` profile, and return 200. After the last changes: a question with other answers, a fill-in sentence and wrong options went in whole; a sentence with two blanks and an other answer repeating the answer were refused with their messages; the HoD saw the sender's name and email; approved, the bank held every part. A member wrote questions with the chapter picker and a topic button. An off-list topic was underlined and held back. One question was sent as batch `B20261012-01`. The HoD approved it, and Try the games played it from the bank. A password session got `reauth` from `games.my_role()` and the "Sign in with Google" page. Signed out: refused. Tables can't be read directly. |
+| Live-shaped build (`vite build` without `VITE_PREVIEW_TOOLS`) | Builds. No dummy code, made-up data or preview tools in it. The games pages are a separate download (149 kB script, 4 kB styles), fetched only when `/games` opens. |
 | Browser, dummy mode, desktop (1280 px) and phone (390 px) | All four parts and every role work, including the password case. No sideways scrolling on a phone, and no page errors. |
 
 `npm run build` (the full one) needs Shikshaq's live Supabase keys for its sitemap step, as before, so it was not run

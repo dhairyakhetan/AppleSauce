@@ -1,9 +1,8 @@
 /**
  * Matching: questions on one side, answers on the other, both shuffled. A pair is correct when both sides have the same id.
- * Two questions with the same answer would make it ambiguous, so only one of them is used. Answers show as students
- * see them (square brackets taken off: "Decomposition [reaction]" shows as "Decomposition reaction").
+ * Two questions with the same answer would make it ambiguous, so only one of them is used.
  */
-import { loose, shownAnswer, shuffle, type Item } from './shared';
+import { loose, shuffle, type Item } from './shared';
 
 export const MATCHING = { min: 3, max: 8 } as const;
 
@@ -19,7 +18,7 @@ export function makeMatching(items: Item[], r: () => number): Matching | null {
   const chosen: Item[] = [];
   for (const it of shuffle(items, r)) {
     if (chosen.length === MATCHING.max) break;
-    const a = loose(shownAnswer(it.answer));
+    const a = loose(it.answer);
     const q = loose(it.question);
     if (!a || !q || answers.has(a) || questions.has(q)) continue;
     answers.add(a);
@@ -33,7 +32,7 @@ export function makeMatching(items: Item[], r: () => number): Matching | null {
   return {
     type: 'matching',
     left: left.map((it) => ({ id: it.id, text: it.question })),
-    right: right.map((it) => ({ id: it.id, text: shownAnswer(it.answer) })),
+    right: right.map((it) => ({ id: it.id, text: it.answer })),
   };
 }
 
@@ -50,7 +49,7 @@ export function checkMatching(g: Matching, items: Item[]): string[] {
   if (new Set(rightIds).size !== g.right.length) out.push('an answer appears twice');
   if ([...leftIds].sort().join('\u0000') !== [...rightIds].sort().join('\u0000')) out.push('the answers do not belong to the questions shown');
   for (const x of g.left) if (byId.get(x.id)?.question !== x.text) out.push(`question ${x.id} is not the bank's text`);
-  for (const x of g.right) { const it = byId.get(x.id); if (!it || shownAnswer(it.answer) !== x.text) out.push(`answer ${x.id} is not the bank's text`); }
+  for (const x of g.right) { const it = byId.get(x.id); if (!it || it.answer !== x.text) out.push(`answer ${x.id} is not the bank's text`); }
   const shownAnswers = g.right.map((x) => loose(x.text));
   if (new Set(shownAnswers).size !== shownAnswers.length) out.push('two answers are the same, so a question has two right matches');
   const shownQuestions = g.left.map((x) => loose(x.text));

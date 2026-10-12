@@ -6,15 +6,16 @@ import type { Crossword } from '@/lib/games/engine/crossword';
 import type { FillIn } from '@/lib/games/engine/fill';
 import type { Matching } from '@/lib/games/engine/matching';
 import { mark, type Mark } from '@/lib/games/engine/answers';
-import { loose, shownAnswer } from '@/lib/games/engine/shared';
+import { loose } from '@/lib/games/engine/shared';
 import type { WordSearch } from '@/lib/games/engine/wordsearch';
 import { cn } from '@/lib/utils';
 import { btn, chip, plural } from './helpers';
 import './games.css';
 
-/* The four games, playable: matching (tap a question, then its answer), fill in the blank (type into the gap), word
-   search (drag across the letters, or tap the first and last letter) and crossword (tap a square and type). Each takes
-   a puzzle already made and checked by src/lib/games/engine. `compact`: the small version in the formatter's preview. */
+/* The five games, playable: matching (tap a question, then its answer), fill in the blank (type into the gap), multiple
+   choice (tap an option), word search (drag across the letters, or tap the first and last letter) and crossword (tap a
+   square and type). Each takes a puzzle already made and checked by src/lib/games/engine. `compact`: the small version
+   in the Write questions preview. */
 
 type Props = { onNext: () => void; compact?: boolean };
 
@@ -115,11 +116,10 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
   /** right: a point; almost: a spelling slip, half a point; shown: the answer was revealed, no point. */
   const [state, setState] = useState<Record<string, Mark | 'shown'>>({});
   const [tries, setTries] = useState<Record<string, number>>({});
-  const answers = g.rows.map((r) => r.answer);
   const check = (r: FillIn['rows'][number]) => {
     const v = typed[r.id] ?? '';
     if (!v.trim() || (state[r.id] && state[r.id] !== 'wrong')) return;
-    const m = mark(v, r.answer, { question: `${r.before} ${r.after}`, others: answers });
+    const m = mark(v, r, g.rows.filter((o) => o.id !== r.id));
     setState((s) => ({ ...s, [r.id]: m }));
     if (m === 'wrong') setTries((t) => ({ ...t, [r.id]: (t[r.id] ?? 0) + 1 }));
   };
@@ -128,7 +128,7 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
 
   return (
     <>
-      <How compact={compact}>Type the missing word or words, then press Enter.</How>
+      <How compact={compact}>Type the missing word or words, then press Enter (or Check all).</How>
       <Progress done={solved} total={g.rows.length}>
         <button type="button" className={chip('quiet')} onClick={() => g.rows.forEach(check)}>Check all</button>
       </Progress>
@@ -136,8 +136,8 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
         {g.rows.map((r) => {
           const st = state[r.id];
           const locked = !!st && st !== 'wrong';
-          const shown = shownAnswer(r.answer);
-          // a shorter answer that counts, or a slip: the full answer, spelt right, beside it
+          const shown = r.answer;
+          // another answer that counts, or a slip: the answer, spelt right, beside it
           const full = (st === 'right' || st === 'almost') && loose(typed[r.id] ?? '') !== loose(shown);
           return (
             <li key={r.id}>
@@ -157,7 +157,6 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
                 value={st === 'shown' ? shown : typed[r.id] ?? ''} readOnly={locked}
                 onChange={(e) => { setTyped((t) => ({ ...t, [r.id]: e.target.value })); if (st === 'wrong') setState((s) => { const n = { ...s }; delete n[r.id]; return n; }); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') check(r); }}
-                onBlur={() => check(r)}
               />
               <span>{r.after}</span>
               {st === 'right' && <Check className="ml-1 inline size-5 animate-pop align-middle text-success" aria-label="Right" />}
@@ -384,24 +383,29 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
   const keys = (e: KeyboardEvent) => {
     if (/^[a-z]$/i.test(e.key) && !e.ctrlKey && !e.metaKey) { e.preventDefault(); type(e.key.toUpperCase()); }
     else if (e.key === 'Backspace') {
-      e.preventDefault();
-      if (letters[cur.r][cur.c]) { type(''); return; }
       // on an empty square, go back one and clear that one
-      const cells = cellsOfClue(clue);
-      const prev = cells[cells.findIndex(([y, x]) => y === cur.r && x === cur.c) - 1];
-      if (!prev) return;
-      setCur({ r: prev[0], c: prev[1], dir: clue.dir });
-      setLetters((L) => L.map((row, r) => row.map((v, c) => (r === prev[0] && c === prev[1] ? '' : v))));
+      e.preventDefault();
+      back();
     } else if (e.key.startsWith('Arrow')) {
       e.preventDefault();
       const [dr, dc] = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key as 'ArrowUp']!;
       const r = cur.r + dr, c = cur.c + dc;
       if (g.grid[r]?.[c] && g.grid[r][c] !== '#') setCur({ r, c, dir: dr ? 'down' : 'across' });
-    } else if (e.key === 'Enter' || e.key === 'Tab') {
+    } else if (e.key === 'Enter') {
+      // the next clue (Shift: the one before). Tab is left alone, so the keyboard can leave the crossword
       e.preventDefault();
       const i = g.clues.indexOf(clue);
       jump(g.clues[(i + (e.shiftKey ? g.clues.length - 1 : 1)) % g.clues.length]);
     }
+  };
+  /** Backspace from an Android keyboard: it sends no key, only the hidden box's one space being deleted. */
+  const back = () => {
+    if (letters[cur.r][cur.c]) { type(''); return; }
+    const cells = cellsOfClue(clue);
+    const prev = cells[cells.findIndex(([y, x]) => y === cur.r && x === cur.c) - 1];
+    if (!prev) return;
+    setCur({ r: prev[0], c: prev[1], dir: clue.dir });
+    setLetters((L) => L.map((row, r) => row.map((v, c) => (r === prev[0] && c === prev[1] ? '' : v))));
   };
 
   const filled = g.clues.filter((cl) => cellsOfClue(cl).every(([y, x]) => letters[y][x] === g.grid[y][x])).length;
@@ -434,9 +438,15 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
               );
             }))}
           </div>
-          <input ref={input} className="games-cw-input" aria-label="Type a letter" autoCapitalize="characters" autoComplete="off" spellCheck={false} value=""
+          {/* holds one space, so a phone keyboard's Backspace has something to delete (and tells us) */}
+          <input ref={input} className="games-cw-input" aria-label="Type a letter" autoCapitalize="characters" autoComplete="off" spellCheck={false} value=" "
             onKeyDown={keys}
-            onChange={(e) => { const ch = e.target.value.slice(-1); if (/^[a-z]$/i.test(ch)) type(ch.toUpperCase()); }} />
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) { back(); return; }
+              const ch = v.replace(/\s/g, '').slice(-1);
+              if (/^[a-z]$/i.test(ch)) type(ch.toUpperCase());
+            }} />
         </div>
         <div className={cn('flex min-w-[220px] flex-1 flex-col gap-3', compact ? 'text-[13px]' : 'text-[15px]')}>
           {(['across', 'down'] as const).map((dir) => (

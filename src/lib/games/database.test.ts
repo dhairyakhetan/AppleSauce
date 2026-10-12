@@ -38,11 +38,11 @@ const ids: Record<string, string> = {};
 /** How the session was signed in: Google, an email link, a password, or another OAuth provider. */
 type Via = 'google' | 'link' | 'password' | 'github';
 /** A signed-in person's token, as Supabase gives it. `providers` defaults to what that sign-in would leave. */
-function claims(email: string, { via = 'google', name, providers }: { via?: Via; name?: string | null; providers?: string[] } = {}) {
+function claims(email: string, { via = 'google', name, providers, phone = '' }: { via?: Via; name?: string | null; providers?: string[]; phone?: string } = {}) {
   ids[email] ??= `00000000-0000-0000-0000-${String(Object.keys(ids).length + 1).padStart(12, '0')}`;
   const method = { google: 'oauth', github: 'oauth', link: 'otp', password: 'password' }[via];
   return {
-    sub: ids[email], email, role: 'authenticated', aal: 'aal1',
+    sub: ids[email], email, phone, role: 'authenticated', aal: 'aal1',
     amr: [{ method, timestamp: 1_791_756_427 }],
     app_metadata: { provider: via === 'link' || via === 'password' ? 'email' : via, providers: providers ?? [via === 'link' || via === 'password' ? 'email' : via] },
     user_metadata: name === null ? {} : { full_name: name ?? email.split('@')[0] },
@@ -68,6 +68,10 @@ async function value(email: string, sql: string, params?: unknown[], opts?: Opts
   return Object.values(r.rows![0])[0] as Json;
 }
 const admin = async (sql: string, params?: unknown[]) => (await db.query<Json>(sql, params)).rows;
+/** As the database owner, catching a refusal. */
+const adminTry = async (sql: string): Promise<Result> => {
+  try { return { rows: (await db.query<Json>(sql)).rows }; } catch (e) { return { error: (e as Error).message }; }
+};
 const refused = (r: Result, why: RegExp) => expect(r.error ?? 'it was allowed').toMatch(why);
 /** Runs a script that should fail, ends its transaction, and gives the error. */
 async function failure(on: PGlite, script: string): Promise<string> {
@@ -183,6 +187,10 @@ describe('who can call what, and how the sign-in counts', () => {
     // the account has Google linked, but this session was signed in with its password: still not proven
     expect(await value('ann@x.in', 'select games.my_role()', [], { via: 'password', providers: ['email', 'google'] })).toBe('reauth');
     refused(await send('ann@x.in', [Q('Sneaky?', 'Yes')], { via: 'password', providers: ['email', 'google'] }), /Sign in with Google/);
+    // a code sent by text message is recorded like an email link: on an account with a phone it proves nothing
+    expect(await value('ann@x.in', 'select games.my_role()', [], { via: 'link', providers: ['email', 'phone'] })).toBe('reauth');
+    expect(await value('ann@x.in', 'select games.my_role()', [], { via: 'link', phone: '919800000000' })).toBe('reauth');
+    expect(await value('ann@x.in', 'select games.my_role()', [], { providers: ['google', 'phone'], phone: '919800000000' })).toBe('member'); // Google still counts
     expect(await value('stranger@x.in', 'select games.my_role()')).toBeNull(); // not on the team
     expect(await count(`games.team where email = 'stranger@x.in'`)).toBe(0); // and not added by asking
   });
@@ -287,6 +295,20 @@ describe('the fixed list and sending', () => {
     refused(await send('zed@x.in', [Q('Too long?', 'A', { wrong_options: ['x'.repeat(101)] })]), /empty or longer than 100/);
   });
 
+  it('keeps the other answers and the fill-in sentence, and refuses broken ones', async () => {
+    const r = await sent('zed@x.in', [Q('Brain of the computer?', 'Central Processing Unit', { also: [' CPU ', 'Processor'], fill: ' The ___ is the brain of the computer. ' })]);
+    const [row] = await admin('select also, fill from games.questions where question_id = any($1)', [r.question_ids]);
+    expect(row).toEqual({ also: ['CPU', 'Processor'], fill: 'The ___ is the brain of the computer.' });
+    refused(await send('zed@x.in', [Q('Six others?', 'A', { also: ['b', 'c', 'd', 'e', 'f', 'g'] })]), /more than 5 other answers/);
+    refused(await send('zed@x.in', [Q('Same as the answer?', 'Nitrogen', { also: ['nitrogen.'] })]), /repeats the answer/);
+    refused(await send('zed@x.in', [Q('Twice?', 'A', { also: ['B', 'b'] })]), /repeats the answer or another/);
+    refused(await send('zed@x.in', [Q('No blank?', 'A', { fill: 'There is no blank here.' })]), /exactly one ___/);
+    refused(await send('zed@x.in', [Q('Two blanks?', 'A', { fill: 'One ___ and two ___.' })]), /exactly one ___/);
+    expect(await sent('zed@x.in', [Q('Long blank?', 'A', { fill: 'One long ______ blank.' })])).toMatchObject({ sent: 1 });
+    // the table itself refuses a sentence with two blanks, whoever writes it
+    refused(await adminTry(`update games.questions set fill = 'a ___ b ___' where question_id = '${r.question_ids[0]}'`), /check constraint/);
+  });
+
   it('names the batch after the person, never their email', async () => {
     await sent('noname@x.in', [Q('Nameless?', 'Ok')], { name: null });
     expect((await admin(`select teacher from games.batches where teacher_email = 'noname@x.in'`))[0].teacher).toBe('A teacher');
@@ -350,6 +372,16 @@ describe('approving, sending back, and the bank', () => {
     expect(bank.find((b: Json) => b.question_id === got[0])).toMatchObject({ question: 'Bulk question 0?', answer: 'Answer 0', chapter: 'Chemical Reactions', teacher: 'bulk' });
     expect((await decide('hod@x.in', got, 'approved')).rows![0].r.changed).toEqual([]); // approving again changes nothing
     refused(await as('stranger@x.in', 'select games.bank()'), /Only people on the games team/);
+  });
+
+  it('the bank keeps the other answers and the fill-in sentence; changing only the sentence counts as a change', async () => {
+    const [one] = (await sent('fay@x.in', [Q('Powerhouse of the cell?', 'Mitochondria', { also: ['Mitochondrion'], fill: 'The ___ release energy in a cell.' })])).question_ids;
+    await decide('hod@x.in', [one], 'approved');
+    expect((await value('fay@x.in', 'select games.bank()')).find((b: Json) => b.question_id === one)).toMatchObject({ also: ['Mitochondrion'], fill: 'The ___ release energy in a cell.' });
+    const [bad] = (await sent('fay@x.in', [Q('Green pigment in leaves?', 'Chlorophyll', { fill: 'Leaves are green because of ___ in their cells.' })])).question_ids;
+    await decide('hod@x.in', [bad], 'rejected', 'Say where in the cell.');
+    expect(await sent('fay@x.in', [Q('Green pigment in leaves?', 'Chlorophyll', { fill: 'Leaves are green because of ___ in their cells.' })])).toMatchObject({ sent: 0, sent_back: 1 });
+    expect(await sent('fay@x.in', [Q('Green pigment in leaves?', 'Chlorophyll', { fill: 'Leaves are green because of ___ in their chloroplasts.' })])).toMatchObject({ sent: 1, sent_back: 0 });
   });
 
   it('a multiple-choice question goes into the bank with its wrong options; changing only them counts as a change', async () => {

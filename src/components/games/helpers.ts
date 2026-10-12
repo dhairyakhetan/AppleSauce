@@ -1,8 +1,8 @@
 import { toast } from 'sonner';
-import type { GameType, Item } from '@/lib/games/engine';
+import { usableIn, type GameType, type Item } from '@/lib/games/engine';
 import { CROSSWORD } from '@/lib/games/engine/crossword';
 import { MATCHING } from '@/lib/games/engine/matching';
-import { gridWord, loose, shownAnswer } from '@/lib/games/engine/shared';
+import { loose } from '@/lib/games/engine/shared';
 import { WORDSEARCH } from '@/lib/games/engine/wordsearch';
 import { cn } from '@/lib/utils';
 
@@ -75,24 +75,22 @@ export const GAME_NAMES: Record<GameType, string> = { crossword: 'Crossword', wo
 /** Why a game can't be made from these questions, in a sentence; null when it can. */
 export function whyNot(type: GameType, items: Item[], made: boolean): string | null {
   if (made) return null;
-  const letters = (min: number, max: number) => new Set(items.map((i) => gridWord(i.answer)).filter((w): w is string => !!w && w.length >= min && w.length <= max)).size;
+  const n = items.filter((it) => usableIn(it).includes(type)).length;
+  const have = n === 0 ? 'None of these does.' : `Only ${n} ${n === 1 ? 'does' : 'do'}.`;
   if (type === 'crossword') {
-    const n = letters(CROSSWORD.minLetters, CROSSWORD.maxLetters);
     return n < CROSSWORD.min
-      ? `Needs ${CROSSWORD.min} answers made only of letters, ${CROSSWORD.minLetters} to ${CROSSWORD.maxLetters} long. ${n === 0 ? 'None of these is.' : `Only ${n} ${n === 1 ? 'is' : 'are'}.`}`
+      ? `Needs ${CROSSWORD.min} answers made only of letters, ${CROSSWORD.minLetters} to ${CROSSWORD.maxLetters} long (an Also answer counts). ${have}`
       : "These answers don't cross each other well enough yet. A few more answers will help.";
   }
   if (type === 'wordsearch') {
-    const n = letters(WORDSEARCH.minLetters, WORDSEARCH.maxLetters);
     return n < WORDSEARCH.min
-      ? `Needs ${WORDSEARCH.min} answers made only of letters, ${WORDSEARCH.minLetters} to ${WORDSEARCH.maxLetters} long. ${n === 0 ? 'None of these is.' : `Only ${n} ${n === 1 ? 'is' : 'are'}.`}`
+      ? `Needs ${WORDSEARCH.min} answers made only of letters, ${WORDSEARCH.minLetters} to ${WORDSEARCH.maxLetters} long (an Also answer counts). ${have}`
       : "These answers don't fit in a word search together yet. A few more answers will help.";
   }
   if (type === 'matching') {
-    const n = new Set(items.map((i) => loose(shownAnswer(i.answer)))).size;
-    return `Needs ${MATCHING.min} questions with different answers. ${n === 1 ? 'There is 1.' : `There are ${n}.`}`;
+    const k = new Set(items.filter((it) => usableIn(it).includes('matching')).map((i) => loose(i.answer))).size;
+    return `Needs ${MATCHING.min} questions with different answers. ${k === 1 ? 'There is 1.' : `There are ${k}.`}`;
   }
-  if (type === 'choice') return 'Needs a question with wrong options, or three questions with different answers.';
-  return 'Needs at least one question.';
+  if (type === 'fill') return 'Needs a question with a Fill: line (a sentence with ___ where the answer goes).';
+  return 'Needs a question with a Wrong: line (wrong options), or a True/False question.';
 }
-

@@ -297,16 +297,29 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `details.ts` boards, subjects and IDs, `catalog.ts` the list check,
   `prompt.ts` what "Copy chatbot prompt" copies, `engine/` the games: each has a
   maker and a separate checker, and a puzzle is only shown after its checker
-  passes it), `components/games/` (the four parts, `Revise.tsx` the game
+  passes it; `answers.ts` marks typed answers), `components/games/` (the four parts, `Revise.tsx` the game
   picker and player used full size by Try the games and small by the preview,
   the guide; `games.css` is only what utility classes can't say, in Shikshaq's
   colour variables).
-- **Questions and answers are never reworded.** Only numbering, labels,
-  bullets, Markdown and spaces are removed.
+- **The format is one block per question** (`Q:`, `A:`, `Also:`, `Fill:`,
+  `Wrong:`, `Level:`), and `lib/games/format.ts` checks it strictly: every
+  problem is on the line to fix and says what to change, and a question with
+  any problem (red or amber) isn't sent. Send then offers "Remove those and
+  send" or "Copy prompt to fix them" (`fixPrompt` in `prompt.ts`).
+- **Nothing is guessed from a question.** Each game uses only what was written
+  for it: `Also` lines are the only other answers that count, `Fill` is the
+  only fill-in sentence, `Wrong` the only multiple-choice options
+  (`engine/index.ts` `usableIn`). Marking (`engine/answers.ts`) is strict on
+  purpose: no synonym, unit, title or number-word lists. The user asked for the
+  work to fall on the writer, not on sorting answers.
+- **Questions and answers are never reworded.** Only a bullet or number before
+  a label, Markdown bold around it, quotes or bold around a whole part, and
+  extra spaces are removed.
 - **The chatbot prompt is made for one chapter** on the list (its lines and
-  topics, nothing else; short on purpose). `lib/games/prompt.test.ts` fails if
-  its lines, IDs, limits, difficulties or the page's labels drift from the code.
-  Change `prompt.ts` with the rule.
+  topics, nothing else) and states every rule the checker applies.
+  `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples
+  drift from the checker. Change `prompt.ts`, `Guide.tsx` and `format.ts`
+  together. Stand-in chatbots were run on it (see CHANGES.md).
 
 ## Testing and CI
 

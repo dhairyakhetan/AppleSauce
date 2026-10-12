@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 
-import { createFakeGamesApi } from '@/dummy/games-fake-api';
+import { createFakeGamesApi, DUMMY_LIST, DUMMY_TEXTS } from '@/dummy/games-fake-api';
+import { checkList } from '@/lib/games/catalog';
+import { GAME_TYPES, makeGame } from '@/lib/games/engine';
 import { format } from '@/lib/games/format';
 
 /* Dummy mode's stand-in for the `games` schema keeps the database's rules, so what people try in dummy mode is what
-   the real pages will do. */
+   the real pages will do. Its made-up questions are written the way the prompt asks, so they pass the checker. */
 
 const rows = (text: string) => format(text).rows;
 const HEAT = `Board: CBSE
@@ -15,35 +17,56 @@ Subject: Science
 Chapter 4: Heat
 Topic 2: Transfer of Heat
 `;
+const q = (question: string, answer: string, more = '') => `\nQ: ${question}\nA: ${answer}\n${more}`;
+
+describe('the made-up questions', () => {
+  it.each(Object.entries(DUMMY_TEXTS))('%s passes the checker and the list, and makes every game', (_name, text) => {
+    const { rows: rs, issues } = format(text);
+    expect(issues).toEqual([]);
+    expect(checkList(text, rs, DUMMY_LIST).issues).toEqual([]);
+    if (text.includes('Level: hard')) {
+      const items = rs.map((r, i) => ({ id: String(i), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }));
+      if (rs.length >= 8) for (const t of GAME_TYPES) expect(makeGame(t, items, 1), t).not.toBeNull();
+    }
+  });
+});
 
 describe('the dummy games database', () => {
   it('numbers new questions after the ones already in the topic, and skips repeats', async () => {
     const api = createFakeGamesApi(false);
     // already approved (case, spaces and a full stop at the end don't count), and the same question twice in one send
     const r = await api.sendBatch([
-      ...rows(`${HEAT}Material that lets heat pass through it easily. | Conductor\nLiquid that rises in a thermometer | Mercury`),
-      ...rows(`${HEAT}liquid that rises in a  thermometer | Mercury`),
+      ...rows(`${HEAT}${q('Material that lets heat pass through it easily.', 'Conductor')}${q('Liquid that rises in a thermometer', 'Mercury')}`),
+      ...rows(`${HEAT}${q('liquid that rises in a  thermometer', 'Mercury')}`),
     ]);
     expect(r).toMatchObject({ sent: 1, already: 2, sentBack: 0 });
     expect(r.batchIds).toHaveLength(1);
-    const waiting = (await api.loadForHod()).questions.filter((q) => q.status === 'pending' && q.chapter_id === 'CBSE07SCI04');
-    expect(waiting.map((q) => q.id)).toEqual(['CBSE07SCI04T02Q007']); // 5 approved and 1 sent back before it
+    const waiting = (await api.loadForHod()).questions.filter((x) => x.status === 'pending' && x.chapter_id === 'CBSE07SCI04');
+    expect(waiting.map((x) => x.id)).toEqual(['CBSE07SCI04T02Q010']); // 8 approved and 1 sent back before it
   });
 
-  it("doesn't take back a sent-back question unchanged, and points to why", async () => {
+  it("doesn't take back a sent-back question unchanged (other answers, fill-in and options included), and points to why", async () => {
     const api = createFakeGamesApi(false);
-    const [back] = await api.mySentBack();
-    const r = await api.sendBatch(rows(`${HEAT}${back.question} | ${back.answer}`));
-    expect(r).toMatchObject({ sent: 0, sentBack: 1, sentBackIds: [back.id], batchIds: [] });
-    const fixed = await api.sendBatch(rows(`${HEAT}Heat flows through a solid from its hotter end to its colder end by this process | Conduction`));
-    expect(fixed.sent).toBe(1);
+    const back = (await api.mySentBack()).find((x) => x.topic_no === 2)!;
+    const again = `${HEAT}${q(back.question, back.answer, `Fill: ${back.fill}\nWrong: ${back.wrong_options.join('; ')}`)}`;
+    expect(await api.sendBatch(rows(again))).toMatchObject({ sent: 0, sentBack: 1, sentBackIds: [back.id], batchIds: [] });
+    // a changed fill-in sentence is a changed question
+    const changed = again.replace(back.fill!, 'Heat moves from hot to cold by ___.');
+    expect((await api.sendBatch(rows(changed))).sent).toBe(1);
+  });
+
+  it('keeps the other answers and the fill-in sentence', async () => {
+    const api = createFakeGamesApi(false);
+    await api.sendBatch(rows(`${HEAT}${q('Process by which heat moves through a solid', 'Conduction', 'Also: Thermal conduction\nFill: Heat moves through a solid by ___.\n')}`));
+    const sent = (await api.loadForHod()).questions.find((x) => x.question === 'Process by which heat moves through a solid')!;
+    expect(sent).toMatchObject({ also: ['Thermal conduction'], fill: 'Heat moves through a solid by ___.' });
   });
 
   it('refuses the whole send when a question is off the list of chapters and topics', async () => {
     const api = createFakeGamesApi(false);
     const before = (await api.loadForHod()).questions.length;
-    const off = rows('Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 9: Weather\nWind from the sea by day | Sea breeze');
-    await expect(api.sendBatch([...rows(`${HEAT}Heat flowing through a solid | Conduction`), ...off])).rejects.toThrow(/topic 9/i);
+    const off = rows(`Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 9: Weather${q('Wind from the sea by day', 'Sea breeze')}`);
+    await expect(api.sendBatch([...rows(`${HEAT}${q('Heat flowing through a solid', 'Conduction')}`), ...off])).rejects.toThrow(/topic 9/i);
     expect((await api.loadForHod()).questions).toHaveLength(before);
     expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI04')?.topics.map((t) => t.topic_no)).toEqual([1, 2, 3]);
   });
@@ -64,7 +87,7 @@ describe('the dummy games database', () => {
   it('approves, sends back with a reason, and keeps a sent-back question back while its copy waits', async () => {
     const api = createFakeGamesApi(false);
     const bank = await api.loadForHod();
-    const pending = bank.questions.filter((q) => q.status === 'pending');
+    const pending = bank.questions.filter((x) => x.status === 'pending');
     const before = await api.approvedCount();
     const r = await api.saveStatus([pending[0].id], 'approved');
     expect(r.changed).toEqual([pending[0].id]);
@@ -73,8 +96,8 @@ describe('the dummy games database', () => {
     // the same thing twice changes nothing
     expect((await api.saveStatus([pending[0].id], 'approved')).changed).toEqual([]);
 
-    const [back] = await api.mySentBack();
-    await api.sendBatch(rows(`${HEAT}${back.question} | A different answer`));
+    const back = (await api.mySentBack()).find((x) => x.topic_no === 2)!;
+    await api.sendBatch(rows(`${HEAT}${q(back.question, 'A different answer')}`));
     const kept = await api.saveStatus([back.id], 'pending');
     expect(kept).toMatchObject({ changed: [], skipped: [back.id] });
   });
