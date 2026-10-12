@@ -44,9 +44,7 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
       out.push(
         <div className="animate-fade-slide-up flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 pt-3 first:pt-0" style={delay(shown++)} key={`c${i}`}>
           <span className="text-[15px] font-bold text-foreground">{title}</span>
-          <span className="text-[12px] text-warm-meta">
-            {meta}{meta && ' · '}{r.chapter_id ? <code className="font-mono text-[12px] text-warm-secondary">{r.chapter_id}</code> : 'no chapter ID yet'}
-          </span>
+          {meta && <span className="text-[12px] text-warm-meta">{meta}</span>}
         </div>,
       );
     }
@@ -55,11 +53,10 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
       topic = tp;
       const has = r.topic || r.topic_no !== null;
       out.push(
-        <div className="animate-fade-slide-up mt-1 flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border pb-1 pt-2" style={delay(shown++)} key={`t${i}`}>
+        <div className="animate-fade-slide-up mt-1 border-b border-border pb-1 pt-2" style={delay(shown++)} key={`t${i}`}>
           <span className={cn('text-[12px] font-bold uppercase tracking-[0.06em]', has ? 'text-warm-secondary' : 'text-warm-label')}>
             {has ? [r.topic_no !== null && `Topic ${r.topic_no}`, r.topic].filter(Boolean).join(': ') : 'No topic'}
           </span>
-          {r.topic_id && <code className="font-mono text-[11px] text-warm-meta">{r.topic_id}</code>}
         </div>,
       );
     }

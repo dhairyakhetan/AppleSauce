@@ -1,23 +1,23 @@
 import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDown, Copy, Download, Send } from 'lucide-react';
+import { ArrowDown, Copy, Send } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
-import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, detailsId, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
+import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, sameName } from '@/lib/games/catalog';
-import { asText, baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from '@/lib/games/format';
+import { asText, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from '@/lib/games/format';
 import { chatbotPrompt } from '@/lib/games/prompt';
-import { COLUMNS, toCSV, toJSON, toTSV, type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
+import { type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
-import { btn, chip, copyText, day, download, FIELD, LINKISH, offerUndo, plural } from './helpers';
+import { btn, chip, copyText, day, FIELD, LINKISH, offerUndo, plural } from './helpers';
 import { ActionIcon, RowsTable } from './shared';
 import './games.css';
 
 /* Write questions: people on the games team write questions in one format (Question | Answer, under detail and Topic
    lines; other common layouts are read too, quietly), check them, see a game made from them, and send them for
-   approval or download them. The example's questions can't be sent while the example is loaded. Questions sent back
+   approval. Only what writing and sending needs is on the page: no IDs, no exports. The example's questions can't be sent while the example is loaded. Questions sent back
    by an HoD show at the top, with the reason, and can be put back in the box to fix. */
 
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
@@ -37,10 +37,8 @@ export interface Alerts { list?: SentBack[]; error?: string }
 /** The fixed list of chapters and topics (no list while loading). */
 export interface Catalog { list?: ListChapter[]; error?: string }
 
-export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
+export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
   api: GamesApi;
-  /** The name batches are sent under. */
-  teacher: string;
   /** An HoD or admin, who can open Approve questions. */
   canApprove: boolean;
   /** Questions sent back to this person (no list while loading). */
@@ -55,7 +53,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   onRetryCatalog: () => void;
 }) {
   const [raw, setRaw] = useState('');
-  /** The text as it was last sent or downloaded: leaving the page with anything else asks first, as it isn't saved. */
+  /** The text as it was last sent: leaving the page with anything else asks first, as it isn't saved. */
   const [kept, setKept] = useState('');
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
@@ -99,14 +97,12 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
     setTypingLine(line);
   };
   const details = readDetails(raw);
-  const id = detailsId(details);
   const gaps = missing(rows);
   // a chapter the list gives no topics needs no Topic line
   const topicless = new Set(catalog.list?.filter((c) => !c.topics.length).map((c) => c.chapter_id));
   const noTopic = rows.filter((r) => !r.topic && r.topic_no === null && !(r.chapter_id && topicless.has(r.chapter_id))).length;
   const chapters = new Set(rows.map((r) => r.chapter_id ?? [r.board, r.class, r.subject, r.chapter_no, r.chapter].join('|'))).size;
   const topics = new Set(rows.filter((r) => r.topic || r.topic_no !== null).map((r) => [r.chapter_id, r.board, r.class, r.subject, r.chapter_no, r.chapter, r.topic_no, r.topic].join('|'))).size;
-  const name = baseName(rows);
 
   // one note per count, so "no board, class or subject" is one line rather than three
   const have = (n: number) => plural(n, 'question has', 'questions have');
@@ -115,7 +111,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
     if (gaps[k]) byCount.set(gaps[k], [...(byCount.get(gaps[k]) ?? []), what]);
   }
   const notes = [
-    ...[...byCount].map(([n, what]) => `${have(n)} no ${what.length > 1 ? `${what.slice(0, -1).join(', ')} or ${what[what.length - 1]}` : what[0]}, so no chapter ID. Fill in the boxes above.`),
+    ...[...byCount].map(([n, what]) => `${have(n)} no ${what.length > 1 ? `${what.slice(0, -1).join(', ')} or ${what[what.length - 1]}` : what[0]}. Fill in the boxes above.`),
     noTopic > 0 && `${have(noTopic)} no topic. Add a line such as "Topic 1: Name" above them.`,
   ].filter(Boolean) as string[];
 
@@ -124,13 +120,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
     setDone(what);
     setTimeout(() => setDone((c) => (c === what ? '' : c)), 1800);
   };
-  const copy = async (what: string, value: string) => { if (await copyText(value)) { flash(what); if (what === 'sheets') setKept(raw); } };
-  const save = (what: 'csv' | 'json') => {
-    if (what === 'csv') download(`${name}.csv`, toCSV(rows), 'text/csv');
-    else download(`${name}.json`, toJSON(rows), 'application/json');
-    setKept(raw);
-    flash(what);
-  };
+  const copy = async (what: string, value: string) => { if (await copyText(value)) flash(what); };
 
   /**
    * "Try an example" was pressed and its text is still here. Its questions are only for trying the page, so they aren't
@@ -175,15 +165,13 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
     box.current?.focus({ preventScroll: true });
   };
 
-  /** Sends the questions to the HoD (not the example's). A question needs a chapter ID and a chapter name to be sent. */
+  /** Sends the questions for approval (not the example's). A question needs a chapter ID and a chapter name to be sent,
+   * and to be on the list; Check says what is missing from the others. */
   const examples = rows.filter(fromExample).length;
-  const complete = own.filter((r) => r.chapter_id && r.chapter);
-  const sendable = listCheck ? complete.filter((r) => !listCheck.blocked.has(r.line)) : [];
+  const sendable = listCheck ? own.filter((r) => r.chapter_id && r.chapter && !listCheck.blocked.has(r.line)) : [];
   const ready = sendable.length;
-  const offList = listCheck ? complete.length - sendable.length : 0;
-  const noId = own.filter((r) => !r.chapter_id).length;
-  const noName = own.filter((r) => r.chapter_id && !r.chapter).length;
-  // the text lives only on this page: closing or reloading it with questions not yet sent or downloaded asks first
+  const notReady = listCheck ? own.length - ready : 0;
+  // the text lives only on this page: closing or reloading it with questions not yet sent asks first
   const unsaved = own.length > 0 && raw !== kept;
   useEffect(() => {
     if (!unsaved) return;
@@ -221,7 +209,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   /** The chatbot prompt is made for one chapter: the one in the boxes, when it is on the list and the example's
    * questions aren't in the box; otherwise the button asks which. */
   const promptChapter = examples ? undefined : chosen;
-  const copyPrompt = (ch: ListChapter) => copy('prompt', chatbotPrompt(`${location.origin}/games`, ch));
+  const copyPrompt = (ch: ListChapter) => copy('prompt', chatbotPrompt(ch));
 
   /** A topic chip. When the topic the cursor is under has no questions yet, its Topic line is swapped for this one;
    * otherwise this Topic line goes after the line the cursor is on (or replaces it when it is empty). Either way the
@@ -279,10 +267,6 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="max-w-prose text-[14px] text-warm-secondary">
-        Write one question per line: the question, a bar <code className="rounded bg-muted px-1 font-mono text-foreground">|</code>, then the answer. They come out as clean rows for the question bank, each linked to its chapter by an ID, and you can try the game they make before you send them.{' '}
-        <button type="button" className={LINKISH} onClick={() => scrollToEl(document.getElementById('guide'))}>How to write your questions</button>
-      </p>
 
       <SentBackPanel panelRef={backPanel} alerts={alerts} open={backOpen} setOpen={setBackOpen} focus={backFocus} onSeen={onSeen} onRetry={onRetryAlerts} onFix={fix} />
 
@@ -336,20 +320,16 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
               );
             })}
           </div>
-          <p className="text-[13px] text-warm-secondary">
-            {id ? <>Chapter ID <code className="rounded-md bg-card px-1.5 py-0.5 font-mono font-semibold text-foreground">{id}</code>. </> : 'Board, class, subject and chapter number make the chapter ID. '}
-            These boxes are the lines at the top of the Questions box; editing either changes both.
-          </p>
           {chosen && (chosen.topics.length ? (
             <div className="flex flex-col gap-1.5">
-              <p className="text-[12px] font-semibold text-warm-secondary">Topics of this chapter on the list: press one to add its Topic line below the cursor. A topic with no questions yet is swapped for it.</p>
+              <p className="text-[12px] font-semibold text-warm-secondary">Add a topic</p>
               <div className="flex flex-wrap gap-2">
                 {chosen.topics.map((t) => (
                   <button key={t.topic_id} type="button" className={chip('card')} onClick={() => addTopic(t)}>Topic {t.topic_no}: {t.name}</button>
                 ))}
               </div>
             </div>
-          ) : <p className="text-[13px] text-warm-secondary">This chapter has no topics on the list, so write its questions without a Topic line.</p>)}
+          ) : <p className="text-[13px] text-warm-secondary">This chapter has no topics: write its questions straight under it.</p>)}
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
@@ -361,14 +341,13 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
           </div>
 
           <div className="flex flex-col gap-2 rounded-2xl bg-card p-4">
-            <p className="text-[14px] text-warm-prose"><b className="text-foreground">Starting from notes?</b> Copy this prompt into ChatGPT, Gemini or Claude, add your notes (or nothing, to write from the textbook), then paste its reply into Questions. It is made for one chapter and its topics, so the chatbot writes only what fits them.</p>
+            <p className="text-[14px] text-warm-prose"><b className="text-foreground">Starting from notes?</b> Paste this prompt and your notes into ChatGPT, Gemini or Claude, then paste its reply into Questions.</p>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <button type="button" className={btn('quiet', 'w-fit')} onClick={() => (promptChapter ? void copyPrompt(promptChapter) : setPicking(true))}>
                 <ActionIcon done={done === 'prompt'}><Copy /></ActionIcon>Copy chatbot prompt
               </button>
-              {promptChapter
-                ? <span className="text-[13px] text-warm-secondary">For chapter {promptChapter.chapter_no}: {promptChapter.name}. <button type="button" className={LINKISH} onClick={() => setPicking(true)}>Another chapter</button></span>
-                : <span className="text-[13px] text-warm-secondary">It asks which chapter first.</span>}
+              {promptChapter && <span className="text-[13px] text-warm-secondary">For chapter {promptChapter.chapter_no}: {promptChapter.name}. <button type="button" className={LINKISH} onClick={() => setPicking(true)}>Another chapter</button></span>}
+              <span className="sr-only" aria-live="polite">{done === 'prompt' ? 'Prompt copied.' : ''}</span>
             </div>
           </div>
           <ChapterPicker open={picking} setOpen={setPicking} catalog={catalog} start={examples ? undefined : details}
@@ -377,10 +356,8 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
 
         <section className={SECTION} aria-labelledby="out-h" ref={results} tabIndex={-1}>
           <h2 id="out-h" className="text-[15px] font-bold text-foreground">2. Check</h2>
-          <p className="text-[15px] text-foreground" role="status" aria-live="polite">
-            {rows.length
-              ? <><b>{plural(rows.length, 'question')}</b> in {plural(chapters, 'chapter')} and {plural(topics, 'topic')}</>
-              : 'Nothing to check yet.'}
+          <p className="text-[15px] text-foreground empty:hidden" role="status" aria-live="polite">
+            {rows.length > 0 && <><b>{plural(rows.length, 'question')}</b> in {plural(chapters, 'chapter')} and {plural(topics, 'topic')}</>}
           </p>
 
           {issues.length > 0 && (
@@ -399,22 +376,8 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
           {notes.length > 0 && <ul className="flex list-disc flex-col gap-0.5 pl-5 text-[14px] text-warm-prose">{notes.map((n) => <li key={n}>{n}</li>)}</ul>}
 
           <div className="rounded-2xl bg-card p-3 sm:p-4">
-            {rows.length ? <RowsTable key={batch} rows={rows} /> : <p className="py-6 text-center text-[14px] text-warm-secondary">Your questions will appear here, grouped by chapter and topic.</p>}
+            {rows.length ? <RowsTable key={batch} rows={rows} /> : <p className="py-6 text-center text-[14px] text-warm-secondary">Your questions will appear here.</p>}
           </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={btn('card')} disabled={!rows.length} onClick={() => save('csv')}>
-              <ActionIcon done={done === 'csv'}><Download /></ActionIcon>Download CSV
-            </button>
-            <button type="button" className={btn('card')} disabled={!rows.length} onClick={() => save('json')}>
-              <ActionIcon done={done === 'json'}><Download /></ActionIcon>Download JSON
-            </button>
-            <button type="button" className={btn('card')} disabled={!rows.length} onClick={() => copy('sheets', toTSV(rows))}>
-              <ActionIcon done={done === 'sheets'}><Copy /></ActionIcon>Copy for Sheets
-            </button>
-          </div>
-          <p className="sr-only" aria-live="polite">{done === 'csv' || done === 'json' ? 'Downloaded.' : done ? 'Copied.' : ''}</p>
-          <p className="text-[12px] text-warm-meta">One row per question, with the columns <code className="font-mono">{COLUMNS.join(', ')}</code>.</p>
         </section>
       </div>
 
@@ -424,20 +387,14 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
         </div>
         <form className={SECTION} onSubmit={(e) => { e.preventDefault(); void send(); }}>
           <h2 className="text-[15px] font-bold text-foreground">4. Send for approval</h2>
-          <p className="text-[14px] text-warm-secondary">An HoD checks the questions. Only approved ones go into the question bank and the games.</p>
           {examples > 0 && (
             <p className="rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] text-foreground" role="status">
-              {examples === rows.length
-                ? <><b>This is the example.</b> Its questions can't be sent. Write or paste your own questions in their place.</>
-                : <><b>{plural(examples, 'question is', 'questions are')} from the example</b>, so {examples === 1 ? "it won't" : "they won't"} be sent. Only your own questions are sent.</>}
+              {examples === rows.length ? "The example's questions can't be sent." : `${plural(examples, 'question is', 'questions are')} from the example and won't be sent.`}
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="submit" className={btn('brand')} disabled={!ready || sending}>
-              <ActionIcon done={done === 'send'}><Send /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
-            </button>
-            <p className="text-[13px] text-warm-secondary">Sending as <b className="text-foreground">{teacher}</b>.</p>
-          </div>
+          <button type="submit" className={btn('brand', 'w-fit')} disabled={!ready || sending}>
+            <ActionIcon done={done === 'send'}><Send /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
+          </button>
           {catalog.error && !catalog.list && (
             <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">
               <b>Couldn't load the list of chapters,</b> so nothing can be sent yet. {catalog.error}{' '}
@@ -446,12 +403,10 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
           )}
           {!catalog.list && !catalog.error && <p className="text-[13px] text-warm-secondary">Loading the list of chapters…</p>}
           {catalog.list && !catalog.list.length && <p className="text-[13px] text-warm-secondary">The list of chapters is empty, so nothing can be sent yet. Ask an admin to add it.</p>}
-          {offList > 0 && <p className="text-[13px] text-warm-secondary">{plural(offList, "question doesn't", "questions don't")} match the list of chapters and topics and can't be sent yet. The lines in red say what to change.</p>}
-          {noId > 0 && <p className="text-[13px] text-warm-secondary">{plural(noId, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
-          {noName > 0 && <p className="text-[13px] text-warm-secondary">{plural(noName, 'question has', 'questions have')} no chapter name and can't be sent yet. Write it after the chapter number, for example "3: Acids".</p>}
+          {notReady > 0 && <p className="text-[13px] text-warm-secondary">{plural(notReady, "question can't", "questions can't")} be sent yet: Check says why.</p>}
           {sent && (
             <p className={cn('animate-fade-slide-up rounded-2xl px-4 py-3 text-[14px] text-foreground', sent.sent ? 'bg-mint' : 'bg-brand-subtle')}>
-              {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as {sent.batchIds.length > 1 ? 'batches' : 'batch'} <b>{sent.batchIds.join(', ')}</b>. </> : 'Nothing new to send. '}
+              {sent.sent ? <>Sent {plural(sent.sent, 'question')} for approval. </> : 'Nothing new to send. '}
               {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
               {sent.sentBack > 0 && <>{plural(sent.sentBack, 'question was', 'questions were')} sent back to you before and {sent.sentBack === 1 ? "hasn't" : "haven't"} changed, so {sent.sentBack === 1 ? "it wasn't" : "they weren't"} sent again. <button type="button" className={LINKISH} onClick={() => seeWhy(sent.sentBackIds)}>See why</button> </>}
               {canApprove && sent.sent > 0 && <Link className={LINKISH} to="/games/approve">Open Approve questions</Link>}
@@ -518,7 +473,7 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onRetry
         </h2>
         <button type="button" className={btn('card')} aria-expanded={open} aria-controls="back-list" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'See why'}</button>
       </div>
-      {!open && <p className="mt-1 text-[14px] text-warm-prose">{waitingFix ? `${plural(waitingFix, 'needs', 'need')} fixing. ` : 'All of them have been sent again. '}Each one has the HoD's reason.</p>}
+      {!open && <p className="mt-1 text-[14px] text-warm-prose">{waitingFix ? `${plural(waitingFix, 'needs', 'need')} fixing.` : 'All of them have been sent again.'}</p>}
       {open && (
         <ul id="back-list" className="mt-3 flex flex-col gap-2">
           {list.map((a) => (

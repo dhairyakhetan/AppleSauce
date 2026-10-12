@@ -9,8 +9,11 @@
  * On the games site these lived hidden in the page for chatbots that fetch it. On shikshaq.in that would put hidden
  * text on every page of the main site, and chatbots can't sign in anyway, so all of it travels in the prompt.
  *
- * prompt.test.ts fails if this and the code disagree (the lines, IDs, limits, difficulties and the page's labels), so
- * change the two together.
+ * Everyone on the team (member, HoD, admin) copies the same prompt, and the teacher is already on the page, so it says
+ * nothing about the site, signing in or sending: only the chapter, the rules and the format.
+ *
+ * prompt.test.ts fails if this and the code disagree (the lines, IDs, limits and difficulties), so change the two
+ * together.
  */
 import { MAX_ANSWER, MAX_QUESTION } from './format';
 import { DIFFICULTIES, type ListChapter } from './rows';
@@ -30,12 +33,12 @@ export const topicLines = (ch: ListChapter) => ch.topics.map((t) => `Topic ${t.t
 export const formatExample = (ch: ListChapter) =>
   [chapterLines(ch), ...ch.topics.slice(0, 1).map((t) => `Topic ${t.topic_no}: ${t.name}`), 'A question | Its answer | easy', 'Another question | Its answer'].join('\n');
 
-/** The instructions for one chapter, with the page's address (where the teacher pastes the reply) filled in. */
-export function chatbotInstructions(site: string, ch: ListChapter): string {
+/** The instructions for one chapter. Everyone on the team copies the same prompt, so nothing in it depends on who. */
+export function chatbotInstructions(ch: ListChapter): string {
   const topics = ch.topics.length > 0;
-  return `# Writing revision questions for Shikshaq
+  return `# Revision questions for one chapter
 
-You are helping a teacher write short questions and answers for revision games (crossword, word search, matching, fill in the blank). The teacher will paste your reply into Shikshaq's question formatter, so write it in the exact format below. If the teacher asks for something different, follow the teacher.
+Write short questions and answers for revision games (crossword, word search, matching, fill in the blank), in the exact format below: the teacher pastes your reply into a page that reads it line by line. If the teacher asks for something different, follow the teacher.
 
 ## The chapter
 
@@ -74,13 +77,10 @@ ${block(formatExample(ch))}
 
 ## Your reply
 
-1. One sentence: how many questions you wrote.
-2. All the lines in one code block, with nothing else inside it. At most 150 question lines: if there are more, give the first 150 and tell the teacher to reply "continue", and start the next block with the same chapter lines.
-3. This sentence: "Copy the block, open ${site}, sign in with Google and paste it into the Questions box. Check the table, then press Send to send the questions to your HoD for approval."
-4. Short notes, only if they apply: which answers you filled in yourself, or that you wrote from general knowledge and the teacher should check them.
+All the lines in one code block, with nothing else inside it. At most 150 question lines: if there are more, give the first 150, say to reply "continue", and start the next block with the same chapter lines. After the block, a short note only if it applies: which answers you filled in yourself, or that you wrote from general knowledge and they should be checked.
 `;
 }
 
 /** The whole prompt for one chapter: the instructions, then a place for the teacher's material. */
-export const chatbotPrompt = (site: string, ch: ListChapter) =>
-  `${chatbotInstructions(site, ch)}\n---\n\nMaterial (my notes or questions; if there is nothing here, write from the textbook):\n`;
+export const chatbotPrompt = (ch: ListChapter) =>
+  `${chatbotInstructions(ch)}\n---\n\nMaterial (my notes or questions; if there is nothing here, write from the textbook):\n`;

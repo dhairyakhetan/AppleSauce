@@ -8,7 +8,6 @@ import type { ListChapter } from './rows';
    reads what it writes. The prompt is made for one chapter on the list, so it carries that chapter's lines and topics
    and nothing about any other. */
 
-const SITE = 'https://shikshaq.in/games';
 const HEAT: ListChapter = {
   chapter_id: 'CBSE07SCI04', board: 'CBSE', class: 7, subject: 'Science', chapter_no: 4, name: 'Heat',
   topics: [
@@ -17,7 +16,7 @@ const HEAT: ListChapter = {
   ],
 };
 const NO_TOPICS: ListChapter = { chapter_id: 'ICSE06GEO02', board: 'ICSE', class: 6, subject: 'Geography', chapter_no: 2, name: 'Landforms of the Earth', topics: [] };
-const text = chatbotInstructions(SITE, HEAT);
+const text = chatbotInstructions(HEAT);
 const read = (path: string) => readFileSync(path, 'utf8');
 
 describe('the chatbot prompt agrees with the code', () => {
@@ -41,7 +40,7 @@ describe('the chatbot prompt agrees with the code', () => {
   });
 
   it('for a chapter with no topics, asks for no Topic lines', () => {
-    const plain = chatbotInstructions(SITE, NO_TOPICS);
+    const plain = chatbotInstructions(NO_TOPICS);
     expect(plain).toContain('This chapter has no topics: write no Topic lines.');
     expect(plain).not.toMatch(/^Topic \d/m);
     const { rows, issues } = format(formatExample(NO_TOPICS));
@@ -51,24 +50,17 @@ describe('the chatbot prompt agrees with the code', () => {
 
   it('carries nothing about other boards, subjects or chapters, and stays short', () => {
     for (const other of ['ICSE', 'Maharashtra', 'Physics', 'NCERT', 'Boards:', 'Subjects:']) expect(text).not.toContain(other);
-    expect(chatbotPrompt(SITE, HEAT).length).toBeLessThan(4500);
+    expect(chatbotPrompt(HEAT).length).toBeLessThan(4000);
+  });
+
+  it('is the same for everyone, and says nothing about the site, signing in or sending', () => {
+    expect(text).not.toMatch(/https?:|localhost|shikshaq\.in|sign in|Google|Send|HoD|approv|Questions box/i);
   });
 
   it('states the limits and the difficulties the site enforces', () => {
     expect(text).toContain(`at most ${MAX_ANSWER} characters and ideally 1 to 3 words`);
     expect(text).toContain(`is at most ${MAX_QUESTION} characters`);
     expect(text).toContain('" | " and easy, medium or hard');
-  });
-
-  it('names the address, the box and the button the teacher really sees', () => {
-    const page = read('src/components/games/WriteQuestions.tsx');
-    expect(page).toMatch(/>\s*Questions\s*</);
-    expect(text).toContain('paste it into the Questions box');
-    expect(page).toContain("'Send'");
-    expect(text).toContain('press Send to send the questions to your HoD');
-    expect(text).toContain(`open ${SITE}, sign in with Google`);
-    expect(read('src/pages/Auth.tsx')).toMatch(/Google/);
-    expect(page).toContain('chatbotPrompt(`${location.origin}/games`, ch)');
   });
 
   it('follows its own rules: no answer inside its question, and no yes/no answers', () => {
@@ -79,8 +71,8 @@ describe('the chatbot prompt agrees with the code', () => {
   });
 
   it("ends with a place for the teacher's material", () => {
-    expect(chatbotPrompt(SITE, HEAT).startsWith(text)).toBe(true);
-    expect(chatbotPrompt(SITE, HEAT).trimEnd()).toMatch(/Material \(my notes or questions; if there is nothing here, write from the textbook\):$/);
+    expect(chatbotPrompt(HEAT).startsWith(text)).toBe(true);
+    expect(chatbotPrompt(HEAT).trimEnd()).toMatch(/Material \(my notes or questions; if there is nothing here, write from the textbook\):$/);
   });
 });
 

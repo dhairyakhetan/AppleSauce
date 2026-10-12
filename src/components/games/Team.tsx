@@ -4,13 +4,13 @@ import type { GamesApi } from '@/lib/games/api';
 import { looksLikeEmail } from '@/lib/email-shape';
 import { ROLE_NAMES, type GamesRole, type Person } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
-import { btn, chip, day, offerUndo } from './helpers';
+import { btn, chip, offerUndo } from './helpers';
 import { Empty, Loading } from './shared';
 
 /* The games team: who may open the games pages, and what they may do there. Only emails on this list get in; signing
    in to Shikshaq doesn't add anyone. Admins add someone by email (they needn't have signed in yet), change a role, or
    take someone off; the moderator stays an admin and can't be removed. The database checks all of it. A change shows the
-   next time the person opens or refreshes a games page. */
+   next time the person opens or refreshes a games page. The page shows only what managing the list needs. */
 
 const ROLE_HINT: Record<GamesRole, string> = {
   member: 'writes questions and sends them for approval',
@@ -62,7 +62,7 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="max-w-prose text-[14px] text-warm-secondary">
-        Only people on this list see the games team's pages. A <b className="text-foreground">member</b> {ROLE_HINT.member}; an <b className="text-foreground">HoD</b> {ROLE_HINT.hod}; an <b className="text-foreground">admin</b> {ROLE_HINT.admin}. They sign in to Shikshaq with Google, using the email added here. A change shows the next time they open or refresh the page.
+        A <b className="text-foreground">member</b> {ROLE_HINT.member}; an <b className="text-foreground">HoD</b> {ROLE_HINT.hod}; an <b className="text-foreground">admin</b> {ROLE_HINT.admin}.
       </p>
 
       <section aria-labelledby="add-h" className="flex flex-col gap-3 rounded-[24px] bg-muted p-4 sm:p-6">
@@ -81,7 +81,7 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
               <option value="admin">Admin</option>
             </select>
           </label>
-          <button type="submit" className={btn('brand')} disabled={!email.trim() || busy}><UserPlus aria-hidden /> Add to the games team</button>
+          <button type="submit" className={btn('brand')} disabled={!email.trim() || busy}><UserPlus aria-hidden /> Add</button>
         </form>
         {note && <p className="rounded-2xl bg-mint px-4 py-3 text-[14px] text-foreground" role="status">{note}</p>}
         {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">{error}</p>}
@@ -97,9 +97,7 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
                 <li key={p.email} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted px-4 py-3">
                   <div className="min-w-0">
                     <p className="truncate text-[14px] font-semibold text-foreground">{p.name ?? p.email}</p>
-                    <p className="truncate text-[12px] text-warm-meta">
-                      {p.name && `${p.email} · `}{p.last_seen_at ? `last here ${day(p.last_seen_at)}` : "hasn't opened the games pages yet"}
-                    </p>
+                    {p.name && <p className="truncate text-[12px] text-warm-meta">{p.email}</p>}
                   </div>
                   {locked ? (
                     <span className={cn('rounded-full px-3 py-1.5 text-[13px] font-semibold', p.role === 'admin' ? 'bg-brand-subtle text-brand-deep' : 'bg-card text-warm-secondary')}>

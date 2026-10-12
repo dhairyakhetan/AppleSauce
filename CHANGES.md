@@ -20,15 +20,17 @@ It is the question bank site (shikshaq-games.vercel.app) brought into the main s
 - **Write questions** (`/games`). Teachers write `Question | Answer` lines under Board, Class, Subject, Chapter and
   Topic lines. Problems are underlined as they write. Questions can only be written for a chapter and topic on the
   team's fixed list. Once board, class and subject are filled in, the Chapter box becomes a picker of the listed
-  chapters, and the chapter's topics become buttons that add their Topic line. They check the rows (each linked to its
-  chapter and topic by an ID), play a small version of Try the games made from their questions, and send them for
-  approval or download them. Questions an HoD sent back show at the top, with the reason, and "Fix it" puts one back
-  in the box. "Copy chatbot prompt" copies a short prompt made for one chapter: that chapter's lines and its topics,
-  and nothing about any other. It uses the chapter in the boxes; when there isn't one of the teacher's own (or the
-  example is loaded), it first asks which chapter, from the list.
+  chapters, and the chapter's topics become buttons that add their Topic line. They check the rows, play a small
+  version of Try the games made from their questions, and send them for approval. Questions an HoD sent back show at
+  the top, with the reason, and "Fix it" puts one back in the box. "Copy chatbot prompt" copies a short prompt made for
+  one chapter: that chapter's lines and its topics, and nothing about the site, sending or any other chapter (everyone
+  on the team copies the same prompt). It uses the chapter in the boxes; when there isn't one of the teacher's own (or
+  the example is loaded), it first asks which chapter, from the list.
 - **Approve questions** (`/games/approve`, HoDs and admins). Batches wait here. Approve or send back one question or a
-  whole batch, with a reason the teacher sees. Every action can be undone for a few seconds. The approved tab is the
-  question bank, and downloads as CSV or JSON.
+  whole batch, with a reason the teacher sees. Every action can be undone for a few seconds. Admins can also download
+  the approved questions as CSV or JSON.
+- **Only what each role needs.** No IDs, codes, column lists or explanatory paragraphs on any page; members see Write
+  questions and Try the games, HoDs also Approve questions, admins also Team, and anyone else a one-line page.
 - **Try the games** (`/games/play`). Pick a class, subject and chapter; every topic is in by default, and tapping one
   leaves it out. Then play the puzzles students will get. Every puzzle is checked before it is shown.
 - **Team** (`/games/team`, admins). Add someone by their Google email as member, HoD or admin, change roles, remove
@@ -150,14 +152,14 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the moderator line and the outside-change check (above). Tables: settings, team, boards, subjects, chapters, topics, batches, questions, question_bank. The site calls functions only. |
 | `supabase/games/list.sql` | Loads the fixed list of chapters and topics from pasted rows, with a dry run. It only adds. |
 | `src/pages/Games.tsx` | The page: checks who you are (including the "sign in with Google" page for a password sign-in), loads the list of chapters, the links between the four parts, the "not for you" pages, and the real/dummy switch (the same pattern as `pages/Hod.tsx`). A part stays mounted once opened. |
-| `src/components/games/WriteQuestions.tsx` | Write questions: the four detail boxes (kept in step with the text; Chapter becomes a picker from the list), topic buttons, the Questions box with underlined problems, the check panel, downloads, the sent-back panel, the preview, Send, the guide, and the phone's "jump to results" button. |
+| `src/components/games/WriteQuestions.tsx` | Write questions: the four detail boxes (kept in step with the text; Chapter becomes a picker from the list), topic buttons, the Questions box with underlined problems, the check panel, the sent-back panel, the preview, Send, the guide, and the phone's "jump to results" button. |
 | `src/components/games/Revise.tsx` | The game picker and player: class, subject, chapter, topics (all in by default; tap one to leave it out) and a tab per game. Try the games uses it full size; the preview uses a small version. |
 | `src/components/games/GamePreview.tsx` | "3. See how it plays": the small `Revise` made from the questions on screen. A game these questions can't make is greyed out with what it needs. "Full size" opens the full one. |
-| `src/components/games/ApproveQuestions.tsx` | Approve questions: waiting, approved and sent-back tabs, batches, the reason box, undo, older approved questions a page at a time, download of the bank. |
+| `src/components/games/ApproveQuestions.tsx` | Approve questions: waiting, approved and sent-back tabs, batches, the reason box, undo, older approved questions a page at a time, download of the bank (admins). |
 | `src/components/games/TryGames.tsx` | Try the games: loads the bank into `Revise`. |
 | `src/components/games/Team.tsx` | Team: add, change and remove people. |
 | `src/components/games/GameView.tsx` | The four games, playable (also in a compact size for the preview). |
-| `src/components/games/Guide.tsx` | "How to write your questions", for people. The board and subject lists and the limits come from the code. |
+| `src/components/games/Guide.tsx` | "How to write your questions", for people: the format and what makes a good question. The limits come from the code. |
 | `src/components/games/shared.tsx` | Shared parts on screen: the table of rows grouped by chapter and topic, loading, failure and empty states, and the icon that turns into a check mark. |
 | `src/components/games/helpers.ts` | Plain helpers: button looks, dates, saving and copying, "Undo" (Shikshaq's toasts), the games' names. |
 | `src/components/games/games.css` | Only what utility classes can't do: the underline layer behind the Questions box and the puzzle grids. Uses Shikshaq's colour variables only, and loads with the games pages only. |

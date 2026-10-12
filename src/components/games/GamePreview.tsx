@@ -37,11 +37,7 @@ export function GamePreview({ rows }: { rows: Row[] }) {
   return (
     <section aria-labelledby="preview-h" className="flex flex-col gap-3">
       <h2 id="preview-h" className="text-[15px] font-bold text-foreground">3. See how it plays</h2>
-      <p className="text-[14px] text-warm-secondary">
-        {rows.length
-          ? 'This is Try the games, made from your questions right now: what a student would get. Every topic is in; tap one to leave it out.'
-          : 'Try the games, made from your questions, shows here as you write.'}
-      </p>
+      {!rows.length && <p className="text-[14px] text-warm-secondary">A game made from your questions shows here.</p>}
       {questions.length > 0 && (
         <Revise compact questions={questions}
           extra={() => <button type="button" className={chip('card')} onClick={() => setBig(true)}><Maximize2 aria-hidden /> Full size</button>} />
@@ -49,7 +45,7 @@ export function GamePreview({ rows }: { rows: Row[] }) {
       <Dialog open={big} onOpenChange={setBig}>
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl bg-card">
           <DialogTitle>See how it plays</DialogTitle>
-          <DialogDescription>Full size, as students see it on Try the games.</DialogDescription>
+          <DialogDescription className="sr-only">Full size, as students see it.</DialogDescription>
           {big && <Revise questions={questions} />}
         </DialogContent>
       </Dialog>

@@ -11,7 +11,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { useAuth } from '@/lib/auth-context';
 import { isDummyMode } from '@/lib/dummy-mode';
 import { realGamesApi, type GamesApi } from '@/lib/games/api';
-import { ROLE_NAMES, type GamesRole, type ListChapter, type RoleCheck } from '@/lib/games/rows';
+import type { GamesRole, ListChapter, RoleCheck } from '@/lib/games/rows';
 import { PREVIEW_TOOLS } from '@/lib/preview-tools';
 import { cn } from '@/lib/utils';
 
@@ -86,11 +86,10 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   /** Dummy mode has no sign-in, so who "you" are is given here. */
   me?: { name: string; email: string };
 }) {
-  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const part = partOf(pathname);
-  const name = dummy ? me?.name ?? '' : profile?.full_name || String(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '') || user?.email || '';
   const email = dummy ? me?.email ?? '' : user?.email ?? '';
 
   const [role, setRole] = useState<{ role?: RoleCheck; error?: string }>({});
@@ -177,10 +176,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   if (reauth) {
     return (
       <NotForYou banner={banner} title="Sign in with Google to open the games team">
-        <p>
-          You signed in with a password. The games team's pages need a Google sign-in (or an email sign-in link), because
-          that is what proves the email is yours. Only people on the team's list get in.
-        </p>
+        <p>You signed in with a password, which doesn't count here.</p>
         {dummy ? <p className="mt-3">In dummy mode, switch who you are in the bar above.</p> : (
           <button type="button" className={btn('dark', 'mt-5')}
             onClick={async () => { await signOut(); navigate('/auth?redirect=' + encodeURIComponent(pathname)); }}>
@@ -193,7 +189,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   if (r === null) {
     return (
       <NotForYou banner={banner} title="This page is for the games team">
-        <p>Only people on the games team's list can open it. If you should have it, ask a games admin to add your Google email{email ? <> (you are signed in as <b className="text-foreground">{email}</b>)</> : null}, then sign in with Google.</p>
+        <p>Ask a games admin to add {email ? <b className="text-foreground">{email}</b> : 'your Google email'}.</p>
         <Link to="/" className={btn('quiet', 'mt-5')}>Back to the site</Link>
       </NotForYou>
     );
@@ -201,15 +197,14 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   if (!here) {
     return (
       <NotForYou banner={banner} title={part === 'team' ? 'This part is for games admins' : 'This part is for HoDs and admins'}>
-        <p>You are on the games team as {ROLE_NAMES[r]}, which can't open {label}. If you should have it, ask a games admin.</p>
-        <Link to="/games" className={btn('quiet', 'mt-5')}>Go to Write questions</Link>
+        <Link to="/games" className={btn('quiet', 'mt-3')}>Go to Write questions</Link>
       </NotForYou>
     );
   }
 
   const parts: Record<Part, () => ReactNode> = {
-    write: () => <WriteQuestions api={api} teacher={name} canApprove={r !== 'member'} alerts={alerts} onSeen={seen} onRetryAlerts={() => setAlertsTry((n) => n + 1)} onSent={sent} catalog={catalog} onRetryCatalog={() => setCatalogTry((n) => n + 1)} />,
-    approve: () => <ApproveQuestions api={api} onWaiting={setWaiting} />,
+    write: () => <WriteQuestions api={api} canApprove={r !== 'member'} alerts={alerts} onSeen={seen} onRetryAlerts={() => setAlertsTry((n) => n + 1)} onSent={sent} catalog={catalog} onRetryCatalog={() => setCatalogTry((n) => n + 1)} />,
+    approve: () => <ApproveQuestions api={api} onWaiting={setWaiting} canDownload={r === 'admin'} />,
     play: () => <TryGames api={api} />,
     team: () => <Team api={api} me={email} />,
   };
@@ -217,10 +212,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   return (
     <Shell banner={banner}>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-warm-secondary">Games team · {ROLE_NAMES[r]}</p>
-          <h1 className="text-lg font-bold text-foreground">{label}</h1>
-        </div>
+        <h1 className="text-lg font-bold text-foreground">{label}</h1>
         <nav aria-label="Games team" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-muted p-1 sm:rounded-full">
           {GAMES_PARTS.filter((x) => x.may(r)).map((x) => {
             const count = x.key === 'approve' ? waiting : x.key === 'write' ? unseen : 0;

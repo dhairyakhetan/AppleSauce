@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
-import { Link } from 'react-router-dom';
 import { Check, Download } from 'lucide-react';
 import { nextTabKey } from '@/components/admin/AdminTabs';
 import { APPROVED_PAGE, type GamesApi, type SaveResult } from '@/lib/games/api';
@@ -24,8 +23,8 @@ const merge = (b: Bank, more: Bank): Bank => {
 /** Puts these questions back as they were. */
 const restore = (b: Bank, qs: BankQuestion[]): Bank => ({ ...b, questions: b.questions.map((q) => qs.find((o) => o.id === q.id) ?? q) });
 
-/** `onWaiting` puts the number waiting on the Approve link. */
-export function ApproveQuestions({ api, onWaiting }: { api: GamesApi; onWaiting: (n: number) => void }) {
+/** `onWaiting` puts the number waiting on the Approve link. `canDownload`: admins can download the question bank. */
+export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesApi; onWaiting: (n: number) => void; canDownload: boolean }) {
   const [bank, setBank] = useState<Bank | null>(null); // the page's copy: waiting, sent back, and the approved pages loaded
   const [error, setError] = useState('');
   const [approvedTotal, setApprovedTotal] = useState<number | null>(null);
@@ -168,7 +167,6 @@ export function ApproveQuestions({ api, onWaiting }: { api: GamesApi; onWaiting:
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="max-w-prose text-[14px] text-warm-secondary">Questions the team sends from Write questions wait here. Only approved questions go into the question bank and the games.</p>
       {saveError && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">{saveError}</p>}
 
       <div role="tablist" aria-label="Questions" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-muted p-1 sm:w-fit sm:rounded-full">
@@ -190,7 +188,7 @@ export function ApproveQuestions({ api, onWaiting }: { api: GamesApi; onWaiting:
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-[15px] font-bold text-foreground">{plural(qs.length, 'question')} from {b.by}</h2>
-                <p className="text-[12px] text-warm-meta">Batch {b.id} · sent {when(b.at)}{b.email && ` · ${b.email}`}</p>
+                <p className="text-[12px] text-warm-meta">Sent {when(b.at)}</p>
               </div>
               {back?.where !== `batch:${b.id}` && (
                 <div className="flex flex-wrap gap-2">
@@ -206,23 +204,17 @@ export function ApproveQuestions({ api, onWaiting }: { api: GamesApi; onWaiting:
           </section>
         )) : (
           <Empty>
-            <p><b className="text-foreground">Nothing is waiting.</b> Questions the team sends from Write questions appear here.</p>
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <button type="button" className={btn('dark')} onClick={refresh}>Check for new questions</button>
-              <Link className={btn('card')} to="/games">Go to Write questions</Link>
-            </div>
+            <p>Nothing is waiting.</p>
+            <button type="button" className={btn('dark', 'mt-3')} onClick={refresh}>Check for new questions</button>
           </Empty>
         ))}
 
         {tab !== 'pending' && (shown.length ? (
           <section className="flex flex-col gap-3 rounded-[24px] bg-muted p-4 sm:p-6">
-            {tab === 'approved' && (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[14px] text-warm-secondary">This is the question bank: what the games use. Newest first.</p>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className={btn('card')} disabled={downloading} onClick={() => downloadBank(true)}><Download aria-hidden /> Download CSV</button>
-                  <button type="button" className={btn('card')} disabled={downloading} onClick={() => downloadBank(false)}><Download aria-hidden /> Download JSON</button>
-                </div>
+            {tab === 'approved' && canDownload && (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={btn('card')} disabled={downloading} onClick={() => downloadBank(true)}><Download aria-hidden /> Download CSV</button>
+                <button type="button" className={btn('card')} disabled={downloading} onClick={() => downloadBank(false)}><Download aria-hidden /> Download JSON</button>
               </div>
             )}
             <div className="rounded-2xl bg-card p-3 sm:p-4">
