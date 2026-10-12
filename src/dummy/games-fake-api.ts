@@ -29,8 +29,9 @@ Chapter 4: Heat
 Topic 1: Hot and Cold
 Device used to measure how hot or cold something is | Thermometer | easy
 Scale of temperature marked on the thermometers we use every day | Celsius | easy
-Normal temperature of the human body, in degrees Celsius | 37 | medium
-Thermometer that a doctor uses to check for fever | Clinical thermometer | medium
+Normal temperature of the human body, in degrees Celsius | 37 | 35; 40; 98.6 | medium
+Thermometer that a doctor uses to check for fever | Clinical thermometer | Laboratory thermometer; Maximum-minimum thermometer | medium
+Mercury is used in thermometers because it expands evenly when heated | True | False | easy
 Topic 2: Transfer of Heat
 Transfer of heat through a solid from its hotter end to its colder end | Conduction | medium
 Transfer of heat by the movement of a heated liquid or gas | Convection | medium
@@ -50,7 +51,7 @@ Chapter 2: Landforms of the Earth
 Topic 1: Mountains
 Very high landform that rises steeply to a narrow peak | Mountain | easy
 Long chain of mountains joined together | Range | easy
-Highest mountain range in the world | Himalayas | easy
+Highest mountain range in the world | [the] Himalayas | Alps; Andes; Rockies | easy
 Mountains formed when layers of rock are pushed and folded | Fold mountains | medium
 Topic 2: Plateaus and Plains
 Raised flat land that stands above the land around it | Plateau | easy
@@ -172,7 +173,8 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
     }
     seen.add(key);
     const back = s.questions.filter((x) => x.chapter_id === cid && x.status === 'rejected' && x.teacherEmail === who.email
-      && norm(x.question) === norm(r.question) && norm(x.answer) === norm(r.answer));
+      && norm(x.question) === norm(r.question) && norm(x.answer) === norm(r.answer)
+      && JSON.stringify(x.wrong_options ?? []) === JSON.stringify((r.wrong_options ?? []).map((o) => o.trim())));
     if (back.length) {
       out.sentBack++;
       out.sentBackIds.push(...back.map((x) => x.id));
@@ -182,7 +184,7 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
     const n = Math.max(0, ...s.questions.filter((x) => x.chapter_id === cid && (x.topic_no ?? 0) === tno).map((x) => x.question_no)) + 1;
     const id = `${cid}T${pad2(tno)}Q${String(n).padStart(3, '0')}`;
     s.questions.push({
-      ...r, line: 0, question: r.question.trim(), answer: r.answer.trim(), topic_id: r.topic_no === null ? null : `${cid}T${pad2(tno)}`, question_no: n,
+      ...r, line: 0, question: r.question.trim(), answer: r.answer.trim(), wrong_options: (r.wrong_options ?? []).map((o) => o.trim()), topic_id: r.topic_no === null ? null : `${cid}T${pad2(tno)}`, question_no: n,
       id, batch: batch.id, status: 'pending', note: '', reviewedAt: null, teacherEmail: who.email, reviewedBy: null, seenAt: null,
     });
     out.ids.push(id);
@@ -207,13 +209,19 @@ function onTheList(catalog: ListChapter[], r: Row): { problem?: string; row: Row
   return { row: { ...r, chapter: ch.name, topic: tp.name } };
 }
 
-/** The board and subject must be on the site's lists and match the chapter ID's codes. */
+/** The board and subject must be on the site's lists and match the chapter ID's codes; wrong options as the database
+ * checks them. */
 function codesProblem(r: Row): string | null {
   const board = checkBoard(r.board).code;
   const subject = checkSubject(r.subject).code;
   if (!board) return `The board "${r.board}" isn't on the site's list.`;
   if (!subject) return `The subject "${r.subject}" isn't on the site's list.`;
   if (!r.chapter_id?.startsWith(`${board}${pad2(r.class ?? 0)}${subject}`)) return 'A chapter ID doesn\'t match its board, class and subject.';
+  const wrong = (r.wrong_options ?? []).map((o) => o.trim());
+  if (wrong.length > 5) return `A question has more than 5 wrong options: "${r.question}".`;
+  if (wrong.some((o) => !o || o.length > 100)) return `A wrong option is empty or longer than 100 characters: "${r.question}".`;
+  if (wrong.some((o) => norm(o) === norm(r.answer))) return `A wrong option is the same as the answer: "${r.question}".`;
+  if (new Set(wrong.map(norm)).size < wrong.length) return `A question has the same wrong option twice: "${r.question}".`;
   return null;
 }
 

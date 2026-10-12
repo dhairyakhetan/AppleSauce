@@ -34,7 +34,13 @@ interface Context {
   boardLine: number; chapterLine: number; topicLine: number;
 }
 
-type Field = 'board' | 'class' | 'subject' | 'chapter' | 'chapter_no' | 'topic' | 'topic_no' | 'difficulty' | 'question' | 'answer' | 'skip';
+/** `extra`: a part after the answer that is the difficulty if it reads as one, else the wrong options. */
+type Field = 'board' | 'class' | 'subject' | 'chapter' | 'chapter_no' | 'topic' | 'topic_no' | 'difficulty' | 'question' | 'answer' | 'options' | 'extra' | 'skip';
+
+/** Multiple choice: at most this many wrong options, separated by ";". */
+export const MAX_OPTIONS = 5;
+/** Options that stop making sense once the options are shuffled. */
+const POSITIONAL = /^(?:all|none|both|neither)\b.*\b(?:above|these|of them|a and b|options?)\b|^(?:both|neither)\s+\(?[a-d]\)?\s+(?:and|nor)\s+\(?[a-d]\)?$/i;
 
 const DIFF: Record<string, Difficulty> = {
   easy: 'easy', e: 'easy', '1': 'easy', low: 'easy', simple: 'easy', basic: 'easy',
@@ -56,6 +62,7 @@ const HEADERS: Record<string, Field> = {
   'chapter no': 'chapter_no', 'chapter number': 'chapter_no', 'ch no': 'chapter_no',
   topic: 'topic', 'topic name': 'topic', 'topic no': 'topic_no', 'topic number': 'topic_no',
   difficulty: 'difficulty', level: 'difficulty',
+  options: 'options', 'wrong options': 'options', 'wrong answers': 'options', choices: 'options', distractors: 'options', 'incorrect options': 'options',
   '#': 'skip', no: 'skip', 'sl no': 'skip', 's no': 'skip', sr: 'skip', 'sr no': 'skip', 'question no': 'skip', 'q no': 'skip',
   'chapter id': 'skip', 'topic id': 'skip', id: 'skip',
 };
@@ -119,7 +126,7 @@ function cellsOf(line: string, delim: string): string[] {
   return line.split('\t');
 }
 
-const DEFAULT_FIELDS: Field[] = ['question', 'answer', 'difficulty'];
+const DEFAULT_FIELDS: Field[] = ['question', 'answer', 'extra', 'extra'];
 export const NO_ANSWER = 'This question has no answer.';
 const CANNOT_READ = 'Couldn\'t find a question and an answer. Put " | " between them.';
 
@@ -173,12 +180,21 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       : { topic_no: c.no, topic: c.name, topicLine: line };
   };
 
-  const add = (line: number, q0: string, a0: string, over: Partial<Context> = {}) => {
+  const add = (line: number, q0: string, a0: string, over: Partial<Context> = {}, options0 = '') => {
     const q = tidy(q0);
     const a = tidy(a0);
     if (!q || !a) return issue(line, 'error', `The ${q ? 'answer' : 'question'} is empty.`);
     if (q.length > MAX_QUESTION) return issue(line, 'error', `The question is longer than ${MAX_QUESTION} characters.`);
     if (a.length > MAX_ANSWER) return issue(line, 'error', `The answer is longer than ${MAX_ANSWER} characters. Puzzles need short answers.`);
+    // multiple choice: the wrong options, separated by ";"
+    const wrong = options0.split(';').map(tidy).filter(Boolean);
+    const plain = (s: string) => s.replace(/[[\]]/g, '').replace(/[\s.!?;:,]+$/, '').replace(/\s+/g, ' ').toLowerCase();
+    if (wrong.length > MAX_OPTIONS) return issue(line, 'error', `At most ${MAX_OPTIONS} wrong options. Separate them with ";".`);
+    if (wrong.some((o) => o.length > MAX_ANSWER)) return issue(line, 'error', `A wrong option is longer than ${MAX_ANSWER} characters.`);
+    if (wrong.some((o) => plain(o) === plain(a))) return issue(line, 'error', 'A wrong option is the same as the answer.');
+    if (new Set(wrong.map(plain)).size < wrong.length) return issue(line, 'error', 'The same wrong option is written twice.');
+    const positional = wrong.find((o) => POSITIONAL.test(o));
+    if (positional) return issue(line, 'error', `"${positional}" doesn't work: the options are shuffled. Write a real option instead.`);
     const c = { ...ctx, ...over };
     const cid = chapterId(c.boardCode, c.class, c.subjectCode, c.chapter_no);
     const chapterKey = cid ?? [c.board, c.class, c.subject, c.chapter_no, c.chapter].join('\u0000').toLowerCase();
@@ -214,7 +230,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     counts.set(countKey, n);
     rows.push({
       chapter_id: cid, topic_id: tid, board: c.board, class: c.class, subject: c.subject, chapter_no: c.chapter_no, chapter: c.chapter,
-      topic_no: topicNo, topic: c.topic, question_no: n, question: q, answer: a, difficulty: c.difficulty, line,
+      topic_no: topicNo, topic: c.topic, question_no: n, question: q, answer: a, wrong_options: wrong, difficulty: c.difficulty, line,
     });
   };
 
@@ -222,7 +238,13 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
   const fromCells = (line: number, cells: string[], fields: Field[]) => {
     if (cells.slice(fields.length).some((c) => c.trim())) return issue(line, 'error', 'This line has more parts than expected. Add a header row such as "Topic | Question | Answer".');
     const v: Partial<Record<Field, string>> = {};
-    fields.forEach((f, i) => { if (f !== 'skip' && cells[i]?.trim()) v[f] = cells[i]; });
+    fields.forEach((f, i) => {
+      if (f === 'skip' || !cells[i]?.trim()) return;
+      // after the answer: the difficulty if it reads as one, else the wrong options of a multiple-choice question
+      const as: Field = f !== 'extra' ? f : toDifficulty(cells[i]) !== undefined && v.difficulty === undefined ? 'difficulty' : 'options';
+      if (as === 'options' && v.options !== undefined) v.options += `;${cells[i]}`;
+      else v[as] = cells[i];
+    });
     const over: Partial<Context> = {};
     // in a fixed order, so a chapter column clears the topic before a topic column sets it
     for (const k of ORDER) if (v[k] !== undefined) Object.assign(over, detail(k, v[k], line, k === 'difficulty' ? line : v[k]));
@@ -233,7 +255,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       else warnOnce(`${k}\u0000${v[k]}`, line, `"${tidy(v[k])}" is not a ${k === 'chapter_no' ? 'chapter' : 'topic'} number from 1 to ${MAX_NO}.`);
     }
     if (v.chapter_no !== undefined && v.topic === undefined && v.topic_no === undefined) Object.assign(over, { topic: '', topic_no: null });
-    add(line, v.question ?? '', v.answer ?? '', over);
+    add(line, v.question ?? '', v.answer ?? '', over, v.options ?? '');
   };
 
   const setMeta = (key: MetaKey, value: string, line: number) => {
@@ -282,8 +304,8 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       if (cells.length >= 2 && fields.includes('question') && fields.includes('answer') && fields.every((f, k) => f || !cells[k])) {
         dropPending();
         headers[hDelim] = fields.map((f) => f ?? 'skip');
-        // a difficulty may follow the named columns even when the header doesn't name it
-        if (!fields.includes('difficulty')) headers[hDelim].push('difficulty');
+        // a difficulty or wrong options may follow the named columns even when the header doesn't name them
+        if (!fields.includes('difficulty') || !fields.includes('options')) headers[hDelim].push('extra', 'extra');
         return;
       }
     }
@@ -352,7 +374,7 @@ export function lineLevels(issues: Issue[]): Map<number, Level> {
   return out;
 }
 
-type Written = Pick<Row, 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'difficulty'>;
+type Written = Pick<Row, 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'difficulty'> & { wrong_options?: string[] };
 
 /**
  * Rows written back in the one format: a detail line whenever a detail changes, a Topic line for each topic, then
@@ -376,8 +398,9 @@ export function asText(rows: Written[]): string {
     const chapter = r.chapter_no !== null ? `Chapter ${r.chapter_no}: ${r.chapter}` : `Chapter: ${r.chapter}`;
     if (last.chapter !== chapter || (!topic && last.topic)) { put('chapter', chapter, true); delete last.topic; }
     if (topic) put('topic', topic);
-    const sep = /[|\t]/.test(r.question + r.answer) ? '\t' : ' | '; // a bar inside a part: tabs keep the parts apart
-    out.push([r.question, r.answer, ...(r.difficulty ? [r.difficulty] : [])].join(sep));
+    const wrong = r.wrong_options ?? [];
+    const sep = /[|\t]/.test(r.question + r.answer + wrong.join('')) ? '\t' : ' | '; // a bar inside a part: tabs keep the parts apart
+    out.push([r.question, r.answer, ...(wrong.length ? [wrong.join('; ')] : []), ...(r.difficulty ? [r.difficulty] : [])].join(sep));
   }
   return out.join('\n') + '\n';
 }

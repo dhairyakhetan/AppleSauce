@@ -11,7 +11,7 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 
 /** The columns of a row, in order. These are the column names of the CSV and the keys of the JSON. */
-export const COLUMNS = ['chapter_id', 'topic_id', 'board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'difficulty'] as const;
+export const COLUMNS = ['chapter_id', 'topic_id', 'board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'wrong_options', 'difficulty'] as const;
 
 export interface Row {
   /** Board code + class + subject code + chapter number, such as CBSE10SCI01. Null until all four are known. */
@@ -28,7 +28,10 @@ export interface Row {
   /** Position of the question within its topic (within its chapter when there is no topic), from 1. */
   question_no: number;
   question: string;
+  /** Square brackets mark words a student may leave out: "Decomposition [reaction]". */
   answer: string;
+  /** Multiple choice: the wrong options shown beside the answer (up to 5). Empty for an ordinary question. */
+  wrong_options: string[];
   difficulty: Difficulty | null;
   /** The line of the pasted text the question came from. Not exported. */
   line: number;
@@ -36,20 +39,20 @@ export interface Row {
 
 // ---------------------------------------------------------------- rows as files
 
-type Record_ = Record<(typeof COLUMNS)[number], string | number | null>;
+type Record_ = Record<(typeof COLUMNS)[number], string | number | string[] | null>;
 
-/** A row as the database sees it: the columns only, with an empty value as null. */
+/** A row as the database sees it: the columns only, with an empty value as null (and no wrong options as []). */
 export function toRecord(r: Row): Record_ {
   const out = {} as Record_;
   for (const c of COLUMNS) out[c] = r[c] === '' ? null : r[c];
   return out;
 }
 
-/** A header row, then one line per question. */
+/** A header row, then one line per question. Wrong options go in one cell, separated by "; ". */
 function table(rows: Row[], sep: string, cell: (v: string) => string): string {
   const line = (r: Row) => {
     const rec = toRecord(r);
-    return COLUMNS.map((c) => cell(String(rec[c] ?? ''))).join(sep);
+    return COLUMNS.map((c) => { const v = rec[c]; return cell(Array.isArray(v) ? v.join('; ') : String(v ?? '')); }).join(sep);
   };
   return [COLUMNS.join(sep), ...rows.map(line)].join('\n');
 }

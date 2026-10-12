@@ -7,21 +7,22 @@
  * the next game is tried. A student can't be shown a broken puzzle: at worst, a different game.
  */
 import { rng, usable, type Item } from './shared';
+import { checkChoice, choiceOnly, makeChoice, type Choice } from './choice';
 import { checkCrossword, makeCrossword, type Crossword } from './crossword';
 import { checkFill, makeFill, type FillIn } from './fill';
 import { checkMatching, makeMatching, type Matching } from './matching';
 import { checkWordSearch, makeWordSearch, type WordSearch } from './wordsearch';
 
 export type { Item } from './shared';
-export { sameAnswer } from './shared';
-export { seedOf } from './shared';
+export { seedOf, shownAnswer } from './shared';
+export { mark, sameAnswer, type Mark } from './answers';
 
-export type Game = Matching | FillIn | WordSearch | Crossword;
+export type Game = Matching | FillIn | WordSearch | Crossword | Choice;
 export type GameType = Game['type'];
-export const GAME_TYPES: GameType[] = ['crossword', 'wordsearch', 'matching', 'fill'];
+export const GAME_TYPES: GameType[] = ['crossword', 'wordsearch', 'matching', 'fill', 'choice'];
 
 const MAKE: { [T in GameType]: (items: Item[], r: () => number) => Extract<Game, { type: T }> | null } = {
-  matching: makeMatching, fill: makeFill, wordsearch: makeWordSearch, crossword: makeCrossword,
+  matching: makeMatching, fill: makeFill, wordsearch: makeWordSearch, crossword: makeCrossword, choice: makeChoice,
 };
 
 /** Everything wrong with a puzzle; empty when it is correct. */
@@ -31,15 +32,19 @@ export function checkGame(g: Game, items: Item[]): string[] {
     case 'fill': return checkFill(g, items);
     case 'wordsearch': return checkWordSearch(g, items);
     case 'crossword': return checkCrossword(g, items);
+    case 'choice': return checkChoice(g, items);
   }
 }
 
 /** How many times a game is made again, with a new seed, before giving up on it. */
 export const TRIES = 12;
 
+/** The questions a game can use: true/false questions only go in multiple choice. */
+export const poolFor = (type: GameType, items: Item[]) => usable(items).filter((it) => type === 'choice' || !choiceOnly(it));
+
 /** One game from these questions, checked; null if this game can't be made from them. */
 export function makeGame<T extends GameType>(type: T, items: Item[], seed: number): Extract<Game, { type: T }> | null {
-  const pool = usable(items);
+  const pool = poolFor(type, items);
   for (let t = 0; t < TRIES; t++) {
     const g = MAKE[type](pool, rng(seed + t * 0x9e3779b9));
     if (!g) continue;

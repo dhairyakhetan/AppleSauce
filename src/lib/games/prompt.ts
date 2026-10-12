@@ -15,7 +15,7 @@
  * prompt.test.ts fails if this and the code disagree (the lines, IDs, limits and difficulties), so change the two
  * together.
  */
-import { MAX_ANSWER, MAX_QUESTION } from './format';
+import { MAX_ANSWER, MAX_OPTIONS, MAX_QUESTION } from './format';
 import { DIFFICULTIES, type ListChapter } from './rows';
 
 const FENCE = '```';
@@ -31,14 +31,15 @@ export const topicLines = (ch: ListChapter) => ch.topics.map((t) => `Topic ${t.t
 
 /** The format, shown with this chapter's own lines. */
 export const formatExample = (ch: ListChapter) =>
-  [chapterLines(ch), ...ch.topics.slice(0, 1).map((t) => `Topic ${t.topic_no}: ${t.name}`), 'A question | Its answer | easy', 'Another question | Its answer'].join('\n');
+  [chapterLines(ch), ...ch.topics.slice(0, 1).map((t) => `Topic ${t.topic_no}: ${t.name}`),
+    'A question | Its answer | easy', 'Another question | Its answer', 'A multiple-choice question | Its answer | A wrong option; Another wrong option; A third wrong option | medium'].join('\n');
 
 /** The instructions for one chapter. Everyone on the team copies the same prompt, so nothing in it depends on who. */
 export function chatbotInstructions(ch: ListChapter): string {
   const topics = ch.topics.length > 0;
   return `# Revision questions for one chapter
 
-Write short questions and answers for revision games (crossword, word search, matching, fill in the blank), in the exact format below: the teacher pastes your reply into a page that reads it line by line. If the teacher asks for something different, follow the teacher.
+Write short questions and answers for revision games (crossword, word search, matching, fill in the blank, multiple choice), in the exact format below: the teacher pastes your reply into a page that reads it line by line. If the teacher asks for something different, follow the teacher.
 
 ## The chapter
 
@@ -66,13 +67,22 @@ ${block(topicLines(ch))}`
 - The answer must not appear in its question. No yes/no questions, and no either-or questions that give the answer away.
 - For fill in the blank, write ___ where the answer goes: The ___ is the powerhouse of the cell | Mitochondria
 - Prefer answers that are words rather than numbers: crosswords and word searches need letters.
+- If part of an answer can be left out and still be right, put that part in square brackets: Decomposition [reaction], [Jawaharlal] Nehru, [x =] 5.
+- If an answer has a well-known short form, add it in round brackets after it: Central Processing Unit (CPU). Either one then counts.
 - About 5 to 10 questions ${topics ? 'per topic' : 'in all'}, no two the same. Keep the teacher's language.
+
+## Multiple choice
+
+- Make about one question in three multiple choice, unless the teacher says otherwise.
+- After the answer, add " | " and 3 wrong options, separated by ";" (at most ${MAX_OPTIONS}). Each must be clearly wrong but believable, and the same kind of thing as the answer: a planet for a planet, a year for a year.
+- Never "All of the above", "None of these" or "Both a and b": the options are shuffled. No ";" inside an option.
+- A true/false question is a statement, then True or False as the answer, then the other one as the only wrong option.
 
 ## The format
 
 ${block(formatExample(ch))}
 
-- One question per line: the question, " | ", the answer. To add a difficulty, add " | " and ${or(DIFFICULTIES)}.
+- One question per line: the question, " | ", the answer. For multiple choice, add " | " and the wrong options. To add a difficulty, add " | " and ${or(DIFFICULTIES)} at the end.
 - No | inside a question or an answer (use /). No numbering, bullets, bold, headings, quotation marks or tables.
 
 ## Your reply

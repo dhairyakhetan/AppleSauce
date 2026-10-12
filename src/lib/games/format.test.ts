@@ -85,7 +85,7 @@ describe('reading questions and answers', () => {
       `${'q'.repeat(MAX_QUESTION + 1)} | a`,
       `q | ${'a'.repeat(MAX_ANSWER + 1)}`,
       ' | answer',
-      'a | b | c | d',
+      'a | b | c | d | e',
       'What is the capital of France? | Paris',
       'What is the capital of France? | Paris',
       'What is the capital of Spain?',
@@ -149,8 +149,8 @@ describe('details: board, class, subject, chapter, topic, difficulty', () => {
     expect(noNumber.issues).toEqual([{ line: 4, level: 'warn', text: 'Add the chapter number, for example "3: Acids". It is part of the chapter ID.' }]);
   });
 
-  it('accepts difficulty as a third part or a line, and warns about unknown values', () => {
-    const { rows, issues } = format('q1 | a | Hard\nDifficulty: medium\nq2 | a\nq3 | a | e\nq4 | a | tricky');
+  it('accepts difficulty as a third part or a line, and warns about unknown values on a Difficulty line', () => {
+    const { rows, issues } = format('q1 | a | Hard\nDifficulty: medium\nq2 | a\nq3 | a | e\nDifficulty: tricky\nq4 | a');
     expect(rows.map((r) => r.difficulty)).toEqual(['hard', 'medium', 'easy', 'medium']);
     expect(issues).toEqual([{ line: 5, level: 'warn', text: '"tricky" is not easy, medium or hard, so no difficulty was set.' }]);
   });
@@ -220,7 +220,7 @@ describe('output for the database', () => {
     expect(toRecord(rows[0])).toEqual({
       chapter_id: 'CBSE10SCI01', topic_id: 'CBSE10SCI01T01', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1,
       chapter: 'Chemical Reactions and Equations', topic_no: 1, topic: 'Chemical Equations', question_no: 1,
-      question: 'Equation with the same number of atoms of each element on both sides?', answer: 'Balanced equation', difficulty: null,
+      question: 'Equation with the same number of atoms of each element on both sides?', answer: 'Balanced equation', wrong_options: [], difficulty: null,
     });
     expect(JSON.parse(toJSON(rows))).toHaveLength(7);
   });
@@ -228,8 +228,8 @@ describe('output for the database', () => {
   it('writes CSV with proper quoting and no byte-order mark', () => {
     const csv = toCSV(format('He said "hi", then left | Hi, there').rows);
     expect(csv.charCodeAt(0)).not.toBe(0xfeff);
-    expect(csv.split('\n')[0]).toBe('chapter_id,topic_id,board,class,subject,chapter_no,chapter,topic_no,topic,question_no,question,answer,difficulty');
-    expect(csv.split('\n')[1]).toBe(',,,,,,,,,1,"He said ""hi"", then left","Hi, there",');
+    expect(csv.split('\n')[0]).toBe('chapter_id,topic_id,board,class,subject,chapter_no,chapter,topic_no,topic,question_no,question,answer,wrong_options,difficulty');
+    expect(csv.split('\n')[1]).toBe(',,,,,,,,,1,"He said ""hi"", then left","Hi, there",,');
   });
 
   it('reads its own CSV and spreadsheet copy back into the same rows', () => {
@@ -253,7 +253,7 @@ describe('output for the database', () => {
   it('writes a spreadsheet copy with the same columns', () => {
     const lines = toTSV(rows).split('\n');
     expect(lines).toHaveLength(8);
-    expect(lines[1].split('\t')).toHaveLength(13);
+    expect(lines[1].split('\t')).toHaveLength(14);
   });
 
   it('names files after the chapter ID', () => {
@@ -263,9 +263,57 @@ describe('output for the database', () => {
   });
 });
 
+describe('multiple choice', () => {
+  it('reads the wrong options after the answer, separated by ";", with the difficulty before or after them', () => {
+    const { rows, issues } = format([
+      'Gas filled in chip packets | Nitrogen | Oxygen; Hydrogen; Carbon dioxide | easy',
+      'Largest planet | Jupiter | hard | Saturn ; Mars',
+      'The Sun is a star | True | False',
+      'Capital of India | [New] Delhi | Mumbai; Kolkata',
+    ].join('\n'));
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => [r.answer, r.wrong_options, r.difficulty])).toEqual([
+      ['Nitrogen', ['Oxygen', 'Hydrogen', 'Carbon dioxide'], 'easy'],
+      ['Jupiter', ['Saturn', 'Mars'], 'hard'],
+      ['True', ['False'], null],
+      ['[New] Delhi', ['Mumbai', 'Kolkata'], null],
+    ]);
+    expect(format('Boiling point of water | 100 °C').rows[0].wrong_options).toEqual([]);
+  });
+
+  it('leaves out a question whose options are broken, saying why', () => {
+    const { rows, issues } = format([
+      'q1 | a | b; c; d; e; f; g',
+      'q2 | Nitrogen | Oxygen; nitrogen.',
+      'q3 | a | b; B',
+      'q4 | a | b; c; All of the above',
+      'q5 | a | b; None of these',
+      'q6 | a | Both A and B; c',
+    ].join('\n'));
+    expect(rows).toEqual([]);
+    expect(issues.map((x) => [x.line, x.text])).toEqual([
+      [1, 'At most 5 wrong options. Separate them with ";".'],
+      [2, 'A wrong option is the same as the answer.'],
+      [3, 'The same wrong option is written twice.'],
+      [4, '"All of the above" doesn\'t work: the options are shuffled. Write a real option instead.'],
+      [5, '"None of these" doesn\'t work: the options are shuffled. Write a real option instead.'],
+      [6, '"Both A and B" doesn\'t work: the options are shuffled. Write a real option instead.'],
+    ]);
+  });
+
+  it('reads an options column from a spreadsheet, and writes the options back out', () => {
+    const sheet = format('Question\tAnswer\tWrong options\tDifficulty\nLargest planet\tJupiter\tSaturn; Mars\tmedium');
+    expect(sheet.rows[0]).toMatchObject({ answer: 'Jupiter', wrong_options: ['Saturn', 'Mars'], difficulty: 'medium' });
+    const strip = (rs: typeof sheet.rows) => rs.map(({ line: _line, ...r }) => r);
+    const mcq = format('Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Matter\nGas in chip packets | Nitrogen | Oxygen; Hydrogen | easy').rows;
+    expect(strip(format(asText(mcq)).rows)).toEqual(strip(mcq));
+    expect(strip(format(toCSV(mcq)).rows)).toEqual(strip(mcq));
+  });
+});
+
 describe('letting people finish writing before flagging', () => {
   // 1 bad class, 2 no answer (a topic line follows), 4 unreadable, 5 too many parts
-  const { issues } = format('Class: 13\nWhat is H2O?\nTopic 1: Water\njust some words\nQ1 | A1 | x | y');
+  const { issues } = format('Class: 13\nWhat is H2O?\nTopic 1: Water\njust some words\nQ1 | A1 | x | y | z');
   const lines = (xs: typeof issues) => xs.map((x) => x.line);
 
   it('shows everything when nobody is typing', () => {

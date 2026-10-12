@@ -68,7 +68,10 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
       >
         <span className="pt-0.5 text-right text-[12px] tabular-nums text-warm-meta">{r.question_no}</span>
         <span className="min-w-0 break-words text-[14px] text-foreground">{r.question}</span>
-        <span className="col-start-2 min-w-0 break-words text-[14px] font-semibold text-foreground sm:col-start-auto">{r.answer}</span>
+        <span className="col-start-2 min-w-0 break-words text-[14px] font-semibold text-foreground sm:col-start-auto">
+          {r.answer}
+          {r.wrong_options?.length > 0 && <span className="block text-[12px] font-normal text-warm-meta">Wrong: {r.wrong_options.join(' · ')}</span>}
+        </span>
         {r.difficulty ? (
           <span className={cn('col-start-2 h-fit w-fit self-start rounded-full px-2 py-0.5 text-[11px] font-semibold sm:col-start-auto',
             r.difficulty === 'easy' ? 'bg-success-subtle-bg text-success-subtle-text' : r.difficulty === 'medium' ? 'bg-brand-subtle text-brand-deep' : 'bg-brand-blue-subtle text-brand-blue-deep')}>

@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import type { GameType, Item } from '@/lib/games/engine';
 import { CROSSWORD } from '@/lib/games/engine/crossword';
 import { MATCHING } from '@/lib/games/engine/matching';
-import { gridWord, loose } from '@/lib/games/engine/shared';
+import { gridWord, loose, shownAnswer } from '@/lib/games/engine/shared';
 import { WORDSEARCH } from '@/lib/games/engine/wordsearch';
 import { cn } from '@/lib/utils';
 
@@ -70,7 +70,7 @@ export function offerUndo(what: string, restore: () => void) {
   toast(`${what}.`, { duration: 7000, action: { label: 'Undo', onClick: restore } });
 }
 
-export const GAME_NAMES: Record<GameType, string> = { crossword: 'Crossword', wordsearch: 'Word search', matching: 'Matching', fill: 'Fill in the blank' };
+export const GAME_NAMES: Record<GameType, string> = { crossword: 'Crossword', wordsearch: 'Word search', matching: 'Matching', fill: 'Fill in the blank', choice: 'Multiple choice' };
 
 /** Why a game can't be made from these questions, in a sentence; null when it can. */
 export function whyNot(type: GameType, items: Item[], made: boolean): string | null {
@@ -89,9 +89,10 @@ export function whyNot(type: GameType, items: Item[], made: boolean): string | n
       : "These answers don't fit in a word search together yet. A few more answers will help.";
   }
   if (type === 'matching') {
-    const n = new Set(items.map((i) => loose(i.answer))).size;
+    const n = new Set(items.map((i) => loose(shownAnswer(i.answer)))).size;
     return `Needs ${MATCHING.min} questions with different answers. ${n === 1 ? 'There is 1.' : `There are ${n}.`}`;
   }
+  if (type === 'choice') return 'Needs a question with wrong options, or three questions with different answers.';
   return 'Needs at least one question.';
 }
 

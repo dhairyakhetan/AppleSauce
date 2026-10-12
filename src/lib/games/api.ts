@@ -83,7 +83,7 @@ interface DbQuestion extends Omit<Row, 'line'> {
   approved_at?: string; teacher?: string; teacher_email?: string | null; sent_at?: string;
 }
 const fromDb = (r: DbQuestion): BankQuestion => ({
-  ...r, line: 0, id: r.question_id, batch: r.batch_id ?? '', status: r.status ?? 'approved', note: r.note ?? '', reviewedAt: r.reviewed_at ?? r.approved_at ?? null,
+  ...r, line: 0, wrong_options: r.wrong_options ?? [], id: r.question_id, batch: r.batch_id ?? '', status: r.status ?? 'approved', note: r.note ?? '', reviewedAt: r.reviewed_at ?? r.approved_at ?? null,
 });
 
 /** Questions from the HoD desk's functions, with their batches. */

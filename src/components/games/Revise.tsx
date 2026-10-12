@@ -16,7 +16,7 @@ import { chip, GAME_NAMES, plural, whyNot } from './helpers';
    it). */
 
 /** What a puzzle needs to know about a question. */
-export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer'>;
+export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer'> & { wrong_options?: string[] };
 
 interface Topic { key: string; no: number | null; name: string; count: number }
 interface Chapter { id: string; cls: number | null; subject: string; no: number | null; name: string; topics: Topic[]; questions: ReviseQuestion[] }
@@ -76,7 +76,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
   const chosen = left.length ? left : known;
   const chosenKey = chosen.join('\u0000');
   const items: Item[] = useMemo(
-    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map((q) => ({ id: q.id, question: q.question, answer: q.answer })),
+    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map((q) => ({ id: q.id, question: q.question, answer: q.answer, wrong: q.wrong_options ?? [] })),
     [chapter, chosenKey],
   );
   const seed = seedOf(`${chapter?.id}|${chosenKey}|${round}`);

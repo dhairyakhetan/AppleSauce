@@ -27,6 +27,7 @@ export function Guide() {
           <ol className="flex list-decimal flex-col gap-1.5 pl-5">
             <li><b className="text-foreground">Fill in Board, Class, Subject and Chapter.</b></li>
             <li><b className="text-foreground">Add a topic, then one question per line:</b> the question, a bar <code className={CODE}>|</code>, then the answer. To say how hard it is, add another bar and <i>easy</i>, <i>medium</i> or <i>hard</i>.</li>
+            <li><b className="text-foreground">Multiple choice:</b> after the answer, add a bar and the wrong options, separated by <code className={CODE}>;</code>.</li>
             <li><b className="text-foreground">Fix anything underlined</b>, then send.</li>
           </ol>
           <pre data-testid="guide-sample" className="mt-1 overflow-x-auto whitespace-pre rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
@@ -37,7 +38,8 @@ Topic 1: Chemical Equations
 Law that requires a chemical equation to be balanced | Law of conservation of mass | medium
 Equation with the same number of atoms of each element on both sides | Balanced equation
 Topic 2: Types of Chemical Reactions
-Reaction in which a single reactant breaks down into simpler products | Decomposition reaction | easy`}</pre>
+Reaction in which a single reactant breaks down into simpler products | Decomposition reaction | easy
+Gas given off when zinc reacts with dilute sulphuric acid | Hydrogen | Oxygen; Chlorine; Nitrogen | medium`}</pre>
         </Card>
 
         <Card title="Writing good questions">
@@ -47,6 +49,7 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
             <li><b className="text-foreground">Questions that stand alone:</b> no <i>this</i>, <i>the above</i> or <i>as mentioned</i>. At most {MAX_QUESTION} characters.</li>
             <li><b className="text-foreground">Fill in the blank:</b> write <code className={CODE}>___</code> where the answer goes: <code className={CODE}>The ___ is the powerhouse of the cell | Mitochondria</code>.</li>
             <li><b className="text-foreground">No <code className={CODE}>|</code> inside</b> a question or answer: it separates them. Use <code className={CODE}>/</code>.</li>
+            <li><b className="text-foreground">Optional words</b> go in square brackets: <code className={CODE}>Decomposition [reaction]</code>. A short form goes in round brackets after the answer: <code className={CODE}>Central Processing Unit (CPU)</code>.</li>
             <li><b className="text-foreground">No repeats:</b> the same question twice in a chapter is left out.</li>
           </ul>
         </Card>

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { format, MAX_ANSWER, MAX_QUESTION, missing } from './format';
+import { mark } from './engine/answers';
+import { format, MAX_ANSWER, MAX_OPTIONS, MAX_QUESTION, missing } from './format';
 import { chapterLines, chatbotInstructions, chatbotPrompt, formatExample, topicLines } from './prompt';
 import type { ListChapter } from './rows';
 
@@ -36,7 +37,11 @@ describe('the chatbot prompt agrees with the code', () => {
     const { rows, issues } = format(formatExample(HEAT));
     expect(issues).toEqual([]);
     expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
-    expect(rows.map((r) => [r.topic_id, r.difficulty])).toEqual([['CBSE07SCI04T01', 'easy'], ['CBSE07SCI04T01', null]]);
+    expect(rows.map((r) => [r.topic_id, r.difficulty, r.wrong_options])).toEqual([
+      ['CBSE07SCI04T01', 'easy', []],
+      ['CBSE07SCI04T01', null, []],
+      ['CBSE07SCI04T01', 'medium', ['A wrong option', 'Another wrong option', 'A third wrong option']],
+    ]);
   });
 
   it('for a chapter with no topics, asks for no Topic lines', () => {
@@ -55,6 +60,16 @@ describe('the chatbot prompt agrees with the code', () => {
 
   it('is the same for everyone, and says nothing about the site, signing in or sending', () => {
     expect(text).not.toMatch(/https?:|localhost|shikshaq\.in|sign in|Google|Send|HoD|approv|Questions box/i);
+  });
+
+  it('explains multiple choice, optional words and short forms the way the site reads them', () => {
+    expect(text).toContain(`at most ${MAX_OPTIONS})`);
+    expect(text).toMatch(/separated by ";"/);
+    const { rows, issues } = format(`${chapterLines(HEAT)}\nTopic 1: Hot and Cold\nThe Sun is hot | True | False\nUnit of temperature | [degree] Celsius (C) | Kelvin; Newton; Joule | easy`);
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => [r.answer, r.wrong_options])).toEqual([['True', ['False']], ['[degree] Celsius (C)', ['Kelvin', 'Newton', 'Joule']]]);
+    expect(mark('Celsius', rows[1].answer)).toBe('right');
+    expect(mark('C', rows[1].answer)).toBe('right');
   });
 
   it('states the limits and the difficulties the site enforces', () => {

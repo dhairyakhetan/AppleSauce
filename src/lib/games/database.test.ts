@@ -276,6 +276,17 @@ describe('the fixed list and sending', () => {
     expect(days).toEqual(days.map((_, i) => `B${day}-${String(i + 1).padStart(2, '0')}`)); // no gaps
   });
 
+  it('keeps the wrong options of a multiple-choice question, and refuses broken ones', async () => {
+    const r = await sent('zed@x.in', [Q('Gas in chip packets?', 'Nitrogen', { wrong_options: [' Oxygen ', 'Hydrogen', 'Carbon dioxide'] }), Q('Plain one?', 'Yes')]);
+    const rows = await admin('select question, wrong_options from games.questions where question_id = any($1) order by question', [r.question_ids]);
+    expect(rows).toEqual([{ question: 'Gas in chip packets?', wrong_options: ['Oxygen', 'Hydrogen', 'Carbon dioxide'] }, { question: 'Plain one?', wrong_options: [] }]);
+    refused(await send('zed@x.in', [Q('Six wrong?', 'A', { wrong_options: ['b', 'c', 'd', 'e', 'f', 'g'] })]), /more than 5 wrong options/);
+    refused(await send('zed@x.in', [Q('Same as the answer?', 'Nitrogen', { wrong_options: ['nitrogen.'] })]), /same as the answer/);
+    refused(await send('zed@x.in', [Q('Twice?', 'A', { wrong_options: ['B', 'b'] })]), /same wrong option twice/);
+    refused(await send('zed@x.in', [Q('Empty?', 'A', { wrong_options: ['  '] })]), /empty or longer than 100/);
+    refused(await send('zed@x.in', [Q('Too long?', 'A', { wrong_options: ['x'.repeat(101)] })]), /empty or longer than 100/);
+  });
+
   it('names the batch after the person, never their email', async () => {
     await sent('noname@x.in', [Q('Nameless?', 'Ok')], { name: null });
     expect((await admin(`select teacher from games.batches where teacher_email = 'noname@x.in'`))[0].teacher).toBe('A teacher');
@@ -339,6 +350,16 @@ describe('approving, sending back, and the bank', () => {
     expect(bank.find((b: Json) => b.question_id === got[0])).toMatchObject({ question: 'Bulk question 0?', answer: 'Answer 0', chapter: 'Chemical Reactions', teacher: 'bulk' });
     expect((await decide('hod@x.in', got, 'approved')).rows![0].r.changed).toEqual([]); // approving again changes nothing
     refused(await as('stranger@x.in', 'select games.bank()'), /Only people on the games team/);
+  });
+
+  it('a multiple-choice question goes into the bank with its wrong options; changing only them counts as a change', async () => {
+    const [mcq] = (await sent('fay@x.in', [Q('Largest planet?', 'Jupiter', { wrong_options: ['Saturn', 'Mars'] })])).question_ids;
+    await decide('hod@x.in', [mcq], 'approved');
+    expect((await value('fay@x.in', 'select games.bank()')).find((b: Json) => b.question_id === mcq).wrong_options).toEqual(['Saturn', 'Mars']);
+    const [bad] = (await sent('fay@x.in', [Q('Smallest planet?', 'Mercury', { wrong_options: ['Pluto'] })])).question_ids;
+    await decide('hod@x.in', [bad], 'rejected', 'Pluto is not a planet any more.');
+    expect(await sent('fay@x.in', [Q('Smallest planet?', 'Mercury', { wrong_options: ['Pluto'] })])).toMatchObject({ sent: 0, sent_back: 1 });
+    expect(await sent('fay@x.in', [Q('Smallest planet?', 'Mercury', { wrong_options: ['Mars', 'Venus'] })])).toMatchObject({ sent: 1, sent_back: 0 });
   });
 
   it('pages through approved questions, newest first, with no repeats', async () => {

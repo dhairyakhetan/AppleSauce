@@ -4,8 +4,9 @@
  * and how often a game can't be made. `npm test` runs a few hundred sets per kind; `npm run stress` runs many more.
  */
 import { describe, expect, it } from 'vitest';
-import { rng, shuffle, usable, type Item } from './shared';
-import { checkGame, GAME_TYPES, makeGame, makePuzzle, TRIES, type Game, type GameType } from './index';
+import { rng, shuffle, type Item } from './shared';
+import { checkGame, GAME_TYPES, makeGame, makePuzzle, poolFor, TRIES, type Game, type GameType } from './index';
+import { makeChoice } from './choice';
 import { makeCrossword } from './crossword';
 import { makeFill } from './fill';
 import { makeMatching } from './matching';
@@ -48,10 +49,21 @@ const KINDS: Record<string, (r: () => number) => Item[]> = {
   'long answers (12-15 letters)': (r) => asItems(Array.from({ length: 3 + Math.floor(r() * 6) }, () => randomWord(r, 12 + Math.floor(r() * 4))), r),
   'duplicates and blanks': (r) => [...asItems(pickN(VOCAB, 6, r), r), ...asItems(pickN(VOCAB, 3, r), r).map((it, i) => ({ ...it, id: `d${i}` })), { id: 'e1', question: '', answer: 'x' }, { id: 'e2', question: 'Q', answer: ' ' }],
   'nothing for grids': (r) => asItems(pickN(OTHER, 5, r), r),
+  'multiple choice, true/false and messy options': (r) => sample(VOCAB, 3 + Math.floor(r() * 8), r).map((a, i) => ({
+    id: `m${i}`, question: `Question ${i} about this`,
+    answer: r() < 0.2 ? (r() < 0.5 ? 'True' : 'False') : a,
+    // some options repeat each other or the answer, as a careless paste might
+    wrong: r() < 0.7 ? [...sample(VOCAB, 1 + Math.floor(r() * 4), r), ...(r() < 0.2 ? [a, a.toUpperCase()] : [])] : undefined,
+  })),
+  'long multi-word answers (16-25 letters)': (r) => asItems(Array.from({ length: 4 + Math.floor(r() * 8) }, () => {
+    let s = '';
+    while (s.replace(/ /g, '').length < 16) s = `${s} ${VOCAB[Math.floor(r() * VOCAB.length)]}`.trim();
+    return s.replace(/ /g, '').length <= 25 ? s : s.split(' ').slice(0, 2).join(' ');
+  }), r),
 };
 
 const MAKERS: Record<GameType, (items: Item[], r: () => number) => Game | null> = {
-  matching: makeMatching, fill: makeFill, wordsearch: makeWordSearch, crossword: makeCrossword,
+  matching: makeMatching, fill: makeFill, wordsearch: makeWordSearch, crossword: makeCrossword, choice: makeChoice,
 };
 
 interface Stat { sets: number; made: number; firstTry: number; retried: number; impossible: number; badFromMaker: number; ms: number }
@@ -63,9 +75,9 @@ describe('stress', () => {
     for (const [kind, gen] of Object.entries(KINDS)) {
       for (let s = 0; s < SETS; s++) {
         const items = gen(r);
-        const pool = usable(items);
         const seed = Math.floor(r() * 2 ** 31);
         for (const type of GAME_TYPES) {
+          const pool = poolFor(type, items);
           const st = stats.get(`${type}|${kind}`) ?? { sets: 0, made: 0, firstTry: 0, retried: 0, impossible: 0, badFromMaker: 0, ms: 0 };
           stats.set(`${type}|${kind}`, st);
           st.sets++;
@@ -93,7 +105,7 @@ describe('stress', () => {
           }
         }
         // some game can always be made when there is at least one usable question
-        if (pool.length) expect(makePuzzle(items, seed), kind).not.toBeNull();
+        if (poolFor('fill', items).length) expect(makePuzzle(items, seed), kind).not.toBeNull();
       }
     }
 

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { enumeration, gridWord, rng, sameAnswer, type Item } from './shared';
+import { sameAnswer } from './answers';
+import { enumeration, gridWord, rng, type Item } from './shared';
 import { checkCrossword, makeCrossword, type Crossword } from './crossword';
 import { checkFill, type FillIn } from './fill';
+import { checkChoice, type Choice } from './choice';
 import { checkGame, makeGame, makePuzzle, seedOf } from './index';
 import { checkMatching, makeMatching, type Matching } from './matching';
 import { checkWordSearch, makeWordSearch, occurrences, type WordSearch } from './wordsearch';
@@ -110,6 +112,26 @@ describe('making games from real questions', () => {
     expect(makeGame('crossword', noShared, 1)).toBeNull(); // they can't cross: no crossword rather than a wrong one
   });
 
+  it('multiple choice: the teacher\'s wrong options first, else other answers alike, the answer once', () => {
+    const mcq = [...CHEM, { id: 'm1', question: 'Gas in chip packets', answer: 'Nitrogen', wrong: ['Oxygen', 'Hydrogen', 'oxygen', 'NITROGEN'] }].filter((it) => it.id !== 'q3');
+    for (const s of seeds) {
+      const g = makeGame('choice', mcq, s)!;
+      expect(checkChoice(g, mcq)).toEqual([]);
+      const m = g.rows.find((r) => r.id === 'm1')!;
+      expect(m, 'teacher questions always come in').toBeDefined();
+      expect([...m.options].sort()).toEqual(['Hydrogen', 'Nitrogen', 'Oxygen']); // repeats of an option or of the answer dropped
+      for (const r of g.rows) expect(r.options.filter((o) => o === r.answer)).toHaveLength(1);
+    }
+    // numbers get numbers to choose from
+    const nums = items([['Boiling point of water in °C', '100'], ['Days in a leap year', '366'], ['Sides of a hexagon', '6'], ['Capital of France', 'Paris'], ['Capital of Italy', 'Rome']]);
+    const n = makeGame('choice', nums, 3)!.rows.find((r) => r.answer === '366')!;
+    expect(n.options.filter((o) => /\d/.test(o)).length).toBe(3);
+    // true/false gets its opposite; true/false never goes in the other games
+    const tf = items([['The Sun is a star', 'True'], ['Water boils at 50 °C', 'False'], ['Iron rusts in moist air', 'Yes']]);
+    for (const r of makeGame('choice', tf, 1)!.rows) expect(r.options).toHaveLength(2);
+    expect(makeGame('matching', tf, 1)).toBeNull();
+  });
+
   it('leaves answers out of grids when they can\'t go in one', () => {
     const g = makeGame('crossword', CHEM, 9)!;
     expect(g.clues.some((c) => c.id === 'q14')).toBe(false); // "(g)"
@@ -119,7 +141,8 @@ describe('making games from real questions', () => {
   it('falls back to the next game, and only gives up when nothing can be made', () => {
     const hindi = items([['पानी का सूत्र', 'एच टू ओ'], ['नमक', 'सोडियम क्लोराइड'], ['लोहा', 'आयरन']]);
     expect(makePuzzle(hindi, 1)?.type).toBe('matching');
-    expect(makePuzzle(items([['Only one?', 'Yes']]), 1)?.type).toBe('fill');
+    expect(makePuzzle(items([['SI unit of force?', 'Newton']]), 1)?.type).toBe('fill');
+    expect(makePuzzle(items([['The Sun is a star', 'True']]), 1)?.type).toBe('choice'); // true/false only goes in multiple choice
     expect(makePuzzle([], 1)).toBeNull();
     expect(makePuzzle(CHEM, 1, ['wordsearch', 'crossword'])?.type).toBe('wordsearch');
   });
@@ -232,7 +255,24 @@ describe('checkers catch every kind of broken puzzle', () => {
     expect(checkCrossword(sideBySide, bank).some((p) => p.includes('accidental word'))).toBe(true);
   });
 
+  it('multiple choice', () => {
+    const pool = [...CHEM, { id: 'm1', question: 'Gas in chip packets', answer: 'Nitrogen', wrong: ['Oxygen', 'Hydrogen'] }];
+    const good = makeGame('choice', pool, 4)!;
+    const i = good.rows.findIndex((r) => r.id === 'm1');
+    caught<Choice>(good, (g) => checkChoice(g, pool), {
+      'answer missing from the options': (g) => { g.rows[0].options = g.rows[0].options.filter((o) => o !== g.rows[0].answer).concat('Zinc'); },
+      'answer twice': (g) => { g.rows[0].options.push(g.rows[0].answer); },
+      'two options the same': (g) => { g.rows[0].options.push(g.rows[0].options.find((o) => o !== g.rows[0].answer)!.toUpperCase()); },
+      'option from nowhere': (g) => { g.rows[i].options[g.rows[i].options.findIndex((o) => o !== 'Nitrogen')] = 'Helium'; },
+      'wrong answer': (g) => { g.rows[0].answer = 'Zinc'; },
+      'question changed': (g) => { g.rows[0].question += '?'; },
+      'unknown question': (g) => { g.rows[0].id = 'nope'; },
+      'repeated question': (g) => { g.rows[1] = g.rows[0]; },
+      'one option only': (g) => { g.rows[0].options = [g.rows[0].answer]; },
+    });
+  });
+
   it('checkGame sends each puzzle to its own checker', () => {
-    for (const type of ['matching', 'fill', 'wordsearch', 'crossword'] as const) expect(checkGame(makeGame(type, CHEM, 11)!, CHEM)).toEqual([]);
+    for (const type of ['matching', 'fill', 'wordsearch', 'crossword', 'choice'] as const) expect(checkGame(makeGame(type, CHEM, 11)!, CHEM)).toEqual([]);
   });
 });

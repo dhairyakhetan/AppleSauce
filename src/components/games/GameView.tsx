@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check } from 'lucide-react';
 import type { Game } from '@/lib/games/engine';
+import type { Choice } from '@/lib/games/engine/choice';
 import type { Crossword } from '@/lib/games/engine/crossword';
 import type { FillIn } from '@/lib/games/engine/fill';
 import type { Matching } from '@/lib/games/engine/matching';
-import { sameAnswer } from '@/lib/games/engine/shared';
+import { mark, type Mark } from '@/lib/games/engine/answers';
+import { loose, shownAnswer } from '@/lib/games/engine/shared';
 import type { WordSearch } from '@/lib/games/engine/wordsearch';
 import { cn } from '@/lib/utils';
 import { btn, chip, plural } from './helpers';
@@ -20,6 +22,7 @@ export function GameView({ game, onNext, compact = false }: { game: Game } & Pro
   const body = game.type === 'matching' ? <MatchingGame g={game} onNext={onNext} compact={compact} />
     : game.type === 'fill' ? <FillGame g={game} onNext={onNext} compact={compact} />
     : game.type === 'wordsearch' ? <WordSearchGame g={game} onNext={onNext} compact={compact} />
+    : game.type === 'choice' ? <ChoiceGame g={game} onNext={onNext} compact={compact} />
     : <CrosswordGame g={game} onNext={onNext} compact={compact} />;
   return <div className={cn('flex flex-col gap-3', compact && 'games-compact')}>{body}</div>;
 }
@@ -104,52 +107,64 @@ function MatchingGame({ g, onNext, compact }: { g: Matching } & Required<Props>)
 
 // ---------------------------------------------------------------- fill in the blank
 
+/** Points as people say them: 4½, ½, 3. */
+const points = (p: number) => (Number.isInteger(p) ? `${p}` : `${Math.floor(p) || ''}½`);
+
 function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
   const [typed, setTyped] = useState<Record<string, string>>({});
-  const [state, setState] = useState<Record<string, 'right' | 'wrong' | 'shown'>>({});
+  /** right: a point; almost: a spelling slip, half a point; shown: the answer was revealed, no point. */
+  const [state, setState] = useState<Record<string, Mark | 'shown'>>({});
   const [tries, setTries] = useState<Record<string, number>>({});
-  const check = (id: string, answer: string) => {
-    const v = typed[id] ?? '';
-    if (!v.trim() || state[id] === 'right' || state[id] === 'shown') return;
-    if (sameAnswer(v, answer)) setState((s) => ({ ...s, [id]: 'right' }));
-    else {
-      setState((s) => ({ ...s, [id]: 'wrong' }));
-      setTries((t) => ({ ...t, [id]: (t[id] ?? 0) + 1 }));
-    }
+  const answers = g.rows.map((r) => r.answer);
+  const check = (r: FillIn['rows'][number]) => {
+    const v = typed[r.id] ?? '';
+    if (!v.trim() || (state[r.id] && state[r.id] !== 'wrong')) return;
+    const m = mark(v, r.answer, { question: `${r.before} ${r.after}`, others: answers });
+    setState((s) => ({ ...s, [r.id]: m }));
+    if (m === 'wrong') setTries((t) => ({ ...t, [r.id]: (t[r.id] ?? 0) + 1 }));
   };
-  const solved = g.rows.filter((r) => state[r.id] === 'right' || state[r.id] === 'shown').length;
-  const right = g.rows.filter((r) => state[r.id] === 'right').length;
+  const solved = g.rows.filter((r) => state[r.id] && state[r.id] !== 'wrong').length;
+  const score = g.rows.reduce((n, r) => n + (state[r.id] === 'right' ? 1 : state[r.id] === 'almost' ? 0.5 : 0), 0);
 
   return (
     <>
       <How compact={compact}>Type the missing word or words, then press Enter.</How>
       <Progress done={solved} total={g.rows.length}>
-        <button type="button" className={chip('quiet')} onClick={() => g.rows.forEach((r) => check(r.id, r.answer))}>Check all</button>
+        <button type="button" className={chip('quiet')} onClick={() => g.rows.forEach(check)}>Check all</button>
       </Progress>
       <ol className={cn('flex list-decimal flex-col gap-3 pl-6 marker:text-warm-meta', compact ? 'text-[14px] leading-9' : 'text-[17px] leading-[2.3]')}>
         {g.rows.map((r) => {
           const st = state[r.id];
-          const locked = st === 'right' || st === 'shown';
+          const locked = !!st && st !== 'wrong';
+          const shown = shownAnswer(r.answer);
+          // a shorter answer that counts, or a slip: the full answer, spelt right, beside it
+          const full = (st === 'right' || st === 'almost') && loose(typed[r.id] ?? '') !== loose(shown);
           return (
             <li key={r.id}>
               <span>{r.before}</span>
               <input
                 type="text" aria-label="Answer" autoComplete="off" autoCapitalize="off" spellCheck={false}
                 className={cn(
-                  'mx-1 inline-block h-10 max-w-full rounded-xl border px-2 text-center align-middle font-bold outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                  // wrong to right (or back to typing) fades from one colour to the next
+                  'mx-1 inline-block h-10 max-w-full rounded-xl border px-2 text-center align-middle font-bold outline-none transition-[background-color,border-color,color] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-brand',
                   compact ? 'h-8 text-[14px]' : 'text-[17px]',
                   st === 'right' ? 'border-success bg-success-subtle-bg text-success-subtle-text'
+                    : st === 'almost' ? 'border-brand bg-brand-subtle text-brand-deep'
                     : st === 'wrong' ? 'border-destructive bg-destructive/10'
                     : st === 'shown' ? 'border-border bg-muted text-warm-secondary' : 'border-border bg-card',
                 )}
-                style={{ width: `${Math.min(26, Math.max(7, r.answer.length + 2))}ch` }}
-                value={st === 'shown' ? r.answer : typed[r.id] ?? ''} readOnly={locked}
+                style={{ width: `${Math.min(26, Math.max(7, shown.length + 2))}ch` }}
+                value={st === 'shown' ? shown : typed[r.id] ?? ''} readOnly={locked}
                 onChange={(e) => { setTyped((t) => ({ ...t, [r.id]: e.target.value })); if (st === 'wrong') setState((s) => { const n = { ...s }; delete n[r.id]; return n; }); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') check(r.id, r.answer); }}
-                onBlur={() => check(r.id, r.answer)}
+                onKeyDown={(e) => { if (e.key === 'Enter') check(r); }}
+                onBlur={() => check(r)}
               />
               <span>{r.after}</span>
-              {st === 'right' && <Check className="ml-1 inline size-5 align-middle text-success" aria-label="Right" />}
+              {st === 'right' && <Check className="ml-1 inline size-5 animate-pop align-middle text-success" aria-label="Right" />}
+              {st === 'almost' && (
+                <span className="ml-1 inline-flex animate-pop items-center gap-1 rounded-full bg-brand-subtle px-2 align-middle text-[13px] font-bold leading-6 text-brand-deep" aria-label="Almost: half a point for a spelling slip">½ Check the spelling</span>
+              )}
+              {full && <span className={cn('ml-2 inline-block animate-fade-slide-up align-middle text-[13px] font-semibold', st === 'almost' ? 'text-brand-deep' : 'text-success-subtle-text')}>{shown}</span>}
               {st === 'wrong' && (tries[r.id] ?? 0) >= 2 && (
                 <button type="button" className={chip('quiet', 'ml-2 align-middle')} onClick={() => setState((s) => ({ ...s, [r.id]: 'shown' }))}>Show answer</button>
               )}
@@ -157,7 +172,60 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
           );
         })}
       </ol>
-      {solved === g.rows.length && <Solved compact={compact} text={`${right} of ${g.rows.length} right without help.`} onNext={onNext} />}
+      {solved === g.rows.length && <Solved compact={compact} text={`${points(score)} of ${g.rows.length} points.`} onNext={onNext} />}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- multiple choice
+
+function ChoiceGame({ g, onNext, compact }: { g: Choice } & Required<Props>) {
+  /** The options tried for each question; a question is done once its answer is among them. */
+  const [tried, setTried] = useState<Record<string, string[]>>({});
+  const pick = (id: string, option: string) => setTried((t) => (t[id]?.includes(option) ? t : { ...t, [id]: [...(t[id] ?? []), option] }));
+  const isDone = (r: Choice['rows'][number]) => (tried[r.id] ?? []).includes(r.answer);
+  const done = g.rows.filter(isDone).length;
+  const firstTime = g.rows.filter((r) => tried[r.id]?.[0] === r.answer).length;
+
+  return (
+    <>
+      <How compact={compact}>Tap the right answer.</How>
+      <Progress done={done} total={g.rows.length} />
+      <ol className={cn('flex list-decimal flex-col pl-6 marker:text-warm-meta', compact ? 'gap-3 text-[14px]' : 'gap-5 text-[16px]')}>
+        {g.rows.map((r) => {
+          const mine = tried[r.id] ?? [];
+          const finished = isDone(r);
+          return (
+            <li key={r.id} className="flex flex-col gap-2">
+              <p className="font-semibold text-foreground">{r.question}</p>
+              <div className={cn('grid gap-2', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2')} role="group" aria-label="Options">
+                {r.options.map((o) => {
+                  const chosen = mine.includes(o);
+                  const right = o === r.answer;
+                  return (
+                    <button key={o} type="button" disabled={finished || chosen} onClick={() => pick(r.id, o)}
+                      aria-pressed={chosen}
+                      className={cn(
+                        // a wrong pick fades to red and stays out; the right one fades to green
+                        'flex w-full items-center justify-between gap-2 rounded-2xl border-2 px-3 text-left font-semibold transition-[background-color,border-color,color,opacity,transform] duration-300 ease-out active:scale-[0.98] disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                        compact ? 'min-h-10 py-1.5 text-[13px]' : 'min-h-[52px] py-2.5 text-[15px]',
+                        chosen && right ? 'border-success bg-success-subtle-bg text-success-subtle-text'
+                          : chosen ? 'border-destructive bg-destructive/10 text-foreground'
+                          : finished ? 'border-transparent bg-card text-warm-secondary opacity-60'
+                          : 'border-transparent bg-card text-foreground shadow-border hover:border-brand-blue',
+                      )}>
+                      <span>{o}</span>
+                      {chosen && right && <Check className="size-5 shrink-0 animate-pop text-success" aria-label="Right" />}
+                      {chosen && !right && <span className="shrink-0 animate-pop text-[12px] font-bold text-destructive">Not this one</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {done === g.rows.length && <Solved compact={compact} text={`${firstTime} of ${g.rows.length} right first time.`} onNext={onNext} />}
     </>
   );
 }
