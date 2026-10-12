@@ -34,6 +34,8 @@ It is the question bank site (shikshaq-games.vercel.app) brought into the main s
   people. The moderator can't be removed or demoted.
 - **Account menu.** A "Games team" group with Write questions (and Approve questions for HoDs and admins), only for
   people on the team.
+- **Top bar.** A "Games" link before About, in the same style as the others, only for people on the team (and in a
+  test build's dummy mode).
 
 **The database part is two scripts, run by hand, not part of the deploy** (`supabase/games/install.sql` and
 `supabase/games/list.sql`). Everything goes in a new `games` schema. Nothing that already exists is changed, and the
@@ -177,7 +179,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `src/App.tsx` | A lazy `Games` page and one route, `/games/*`. `RouteTransition` keys every `/games/...` address as one page. | One route keeps the page (and the text being written) when moving between its parts; without the key change Shikshaq remounted the page on every address change. |
 | `src/lib/role-home.ts` | `Roles` gets an optional `gamesRole`. A `games` team ("Games team") with two links: Write questions, and Approve questions for HoDs and admins. | The account menu's teams come from here. Where people land after signing in (`homeFor`) is unchanged. |
 | `src/components/layout/team-style.ts` | Icons for the two links, and the games team's look (near-black chip). | Every team has its own look; the existing test checks they differ. |
-| `src/components/layout/TopBar.tsx`, `src/components/Navbar.tsx` | Two lines each: read `useGamesRoleBadge()` and pass it to `roleGroups`. | The desktop and phone menus show the games team's links. |
+| `src/components/layout/TopBar.tsx`, `src/components/Navbar.tsx` | Two lines each: read `useGamesRoleBadge()` and pass it to `roleGroups`. TopBar also gets a "Games" link before About, shown only when that role is set (or in dummy mode). | The desktop and phone menus show the games team's links; the desktop bar has the games pages one click away. |
 | `src/lib/dummy-mode.ts` | Four entries in `DUMMY_PAGES`. | The test-build toolbar offers the games pages in dummy mode. |
 | `src/lib/chromeless-routes.ts` | The four games addresses added to `FOOTERLESS_ROUTES`. | Work screens without the footer, like `/hod` and `/checker`. |
 | `src/lib/role-home.test.ts` | Two more tests. | The games links show only for the games team, and resolve to the games route. |
