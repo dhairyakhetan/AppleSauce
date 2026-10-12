@@ -1,7 +1,7 @@
 import { APPROVED_PAGE, BATCH_MAX, type GamesApi, type SaveResult, type SendResult } from '@/lib/games/api';
-import { checkBoard, checkSubject, pad2 } from '@/lib/games/details';
+import { chapterId, checkBoard, checkSubject, pad2, topicId } from '@/lib/games/details';
 import { format } from '@/lib/games/format';
-import type { Bank, BankQuestion, Batch, GamesRole, Person, Row, SentBack, Status } from '@/lib/games/rows';
+import type { Bank, BankQuestion, Batch, ListChapter, Person, RoleCheck, Row, SentBack, Status } from '@/lib/games/rows';
 
 /* The games pages in dummy mode (D75): an in-memory stand-in for the `games` schema, with no sign-in. It keeps the
    same rules as the database: who may do what, duplicates skipped, questions numbered within their topic and never
@@ -14,7 +14,7 @@ import type { Bank, BankQuestion, Batch, GamesRole, Person, Row, SentBack, Statu
 export const DUMMY_ME = { email: 'you@example.com', name: 'You (dummy)' };
 
 interface FakeQuestion extends BankQuestion { teacherEmail: string; reviewedBy: string | null; seenAt: string | null }
-interface State { team: Person[]; batches: Batch[]; questions: FakeQuestion[] }
+interface State { team: Person[]; batches: Batch[]; questions: FakeQuestion[]; catalog: ListChapter[] }
 
 const OWNER = { email: 'asha.rao@example.com', name: 'Asha Rao' };
 const HOD = { email: 'vikram.singh@example.com', name: 'Vikram Singh' };
@@ -97,6 +97,23 @@ Does a black shirt take in more heat than a white one? | Yes | easy`;
 const NOTE_WRONG_WAY = 'Heat flows from hotter to colder, not the other way. Please rewrite the question.';
 const NOTE_YES_NO = 'No yes/no questions: a puzzle needs a word as the answer. Try "Colour of clothes that ...".';
 
+/** A chapter on the made-up list, with its topics numbered from 1. */
+function listed(board: string, cls: number, subject: string, no: number, name: string, topics: string[]): ListChapter {
+  const id = chapterId(checkBoard(board).code, cls, checkSubject(subject).code, no)!;
+  return { chapter_id: id, board, class: cls, subject, chapter_no: no, name, topics: topics.map((t, i) => ({ topic_id: topicId(id, i + 1)!, topic_no: i + 1, name: t })) };
+}
+/** The made-up list of chapters and topics: the ones the made-up questions use, the formatter's example, one with no
+ * questions yet, and one with no topics (its questions go without a Topic line). The real list comes from the database. */
+export const DUMMY_LIST: ListChapter[] = [
+  listed('ICSE', 6, 'Geography', 2, 'Landforms of the Earth', ['Mountains', 'Plateaus and Plains']),
+  listed('CBSE', 7, 'Science', 4, 'Heat', ['Hot and Cold', 'Transfer of Heat', 'Sea and Land Breezes']),
+  listed('CBSE', 7, 'Science', 5, 'Acids, Bases and Salts', ['Acids and Bases', 'Indicators', 'Neutralisation']),
+  listed('CBSE', 8, 'Science', 6, 'Combustion and Flame', ['Combustion', 'Flame']),
+  listed('CBSE', 7, 'Science', 2, 'Nutrition in Animals', []),
+  listed('CBSE', 9, 'Science', 5, 'The Fundamental Unit of Life', ['The Cell', 'Cell Organelles']),
+  listed('CBSE', 10, 'Science', 1, 'Chemical Reactions and Equations', ['Chemical Equations', 'Types of Chemical Reactions', 'Effects of Oxidation in Everyday Life']),
+];
+
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 /** How the database compares two questions: case, extra spaces and punctuation at the end don't matter. */
 const norm = (t: string) => t.trim().replace(/[\s?.!:;,।]+$/u, '').replace(/\s+/g, ' ').toLowerCase();
@@ -114,6 +131,7 @@ function seed(): State {
     ],
     batches: [],
     questions: [],
+    catalog: structuredClone(DUMMY_LIST),
   };
   const put = (text: string, who: { email: string; name: string }, sentAt: string, status: Status, reviewedAt: string | null, note = '') => {
     const ids = add(s, format(text).rows, who, sentAt).ids;
@@ -143,7 +161,9 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
   const batch: Batch = { id: `B${day}-${pad2(seq)}`, by: who.name, email: who.email, at };
   const out = { ids: [] as string[], already: 0, sentBack: 0, sentBackIds: [] as string[] };
   const seen = new Set<string>();
-  for (const r of rows) {
+  for (const r0 of rows) {
+    const { problem, row: r } = onTheList(s.catalog, r0);
+    if (problem) throw new Error(problem);
     const cid = r.chapter_id!;
     const key = `${cid}|${norm(r.question)}`;
     if (seen.has(key) || s.questions.some((x) => x.chapter_id === cid && norm(x.question) === norm(r.question) && x.status !== 'rejected')) {
@@ -171,6 +191,22 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
   return { batchId: out.ids.length ? batch.id : null, ...out };
 }
 
+/** The chapter and topic must be on the list (under its names, which are the ones kept), as in the database. */
+function onTheList(catalog: ListChapter[], r: Row): { problem?: string; row: Row } {
+  const ch = catalog.find((c) => c.chapter_id === r.chapter_id);
+  if (!ch) return { problem: `Chapter ${r.chapter_no} (${r.board}, class ${r.class}, ${r.subject}) isn't on the list of chapters.`, row: r };
+  if (norm(ch.name) !== norm(r.chapter)) return { problem: `Chapter ${ch.chapter_no} is called "${ch.name}" on the list, not "${r.chapter}".`, row: r };
+  if (!ch.topics.length) {
+    if (r.topic_no !== null) return { problem: `Chapter ${ch.chapter_no} ("${ch.name}") has no topics on the list, so its questions go without a topic line.`, row: r };
+    return { row: { ...r, chapter: ch.name, topic: '' } };
+  }
+  if (r.topic_no === null) return { problem: `A question in chapter ${ch.chapter_no} ("${ch.name}") has no topic. Put it under one of the chapter's topics.`, row: r };
+  const tp = ch.topics.find((t) => t.topic_no === r.topic_no);
+  if (!tp) return { problem: `Chapter ${ch.chapter_no} ("${ch.name}") has no topic ${r.topic_no} on the list.`, row: r };
+  if (norm(tp.name) !== norm(r.topic)) return { problem: `Topic ${r.topic_no} of chapter ${ch.chapter_no} is called "${tp.name}" on the list, not "${r.topic}".`, row: r };
+  return { row: { ...r, chapter: ch.name, topic: tp.name } };
+}
+
 /** The board and subject must be on the site's lists and match the chapter ID's codes. */
 function codesProblem(r: Row): string | null {
   const board = checkBoard(r.board).code;
@@ -189,20 +225,22 @@ const byChapterOrder = (a: BankQuestion, b: BankQuestion) =>
 export type FakeGamesApi = GamesApi & {
   /** Puts the made-up questions and team back as they started. */
   reset(): void;
-  /** Which role the dummy "you" has; null takes you off the team. */
-  setRole(role: GamesRole | null): void;
-  role(): GamesRole | null;
+  /** Which role the dummy "you" has; null takes you off the team; 'reauth' is signed in with a password. */
+  setRole(role: RoleCheck): void;
+  role(): RoleCheck;
 };
 
 /** `slow`: each call takes a moment, like the real database, so loading states show (tests pass false). */
 export function createFakeGamesApi(slow = true): FakeGamesApi {
   const wait = (ms = 250) => (slow ? new Promise((done) => setTimeout(done, ms)) : Promise.resolve());
   let s = seed();
+  /** Signed in with a password: on the team or not, nothing counts until they sign in with Google or a link. */
+  let password = false;
   const me = () => s.team.find((p) => p.email === DUMMY_ME.email) ?? null;
-  const roleOf = () => me()?.role ?? null;
+  const roleOf = (): RoleCheck => (password ? 'reauth' : me()?.role ?? null);
   const need = (what: 'team' | 'hod' | 'admin') => {
     const r = roleOf();
-    if (!r) throw new Error('Please sign in first.');
+    if (!r || r === 'reauth') throw new Error('Only people on the games team can do this. Sign in with Google, using the email on the team\'s list.');
     if (what === 'hod' && r === 'member') throw new Error('Only HoDs can see the HoD desk.');
     if (what === 'admin' && r !== 'admin') throw new Error('Only an admin can do this.');
   };
@@ -215,8 +253,10 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
   const waiting = () => s.questions.filter((q) => q.status === 'pending').length;
 
   return {
-    reset() { s = seed(); },
+    reset() { s = seed(); password = false; },
     setRole(role) {
+      password = role === 'reauth';
+      if (role === 'reauth') return;
       const p = me();
       if (!role) s.team = s.team.filter((x) => x !== p);
       else if (p) p.role = role;
@@ -226,9 +266,16 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
 
     async myRole() {
       await wait(150);
+      if (password) return 'reauth';
       const p = me();
       if (p) p.last_seen_at = new Date().toISOString();
       return p?.role ?? null;
+    },
+
+    async loadCatalog() {
+      await wait(150);
+      need('team');
+      return structuredClone(s.catalog);
     },
 
     async sendBatch(rows) {
@@ -238,8 +285,9 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       const out: SendResult = { batchIds: [], sent: 0, already: 0, sentBack: 0, sentBackIds: [] };
       for (let i = 0; i < ready.length; i += BATCH_MAX) {
         const part = ready.slice(i, i + BATCH_MAX);
+        // like the database, a batch with one bad question is refused whole, before anything is kept
         for (const r of part) {
-          const why = codesProblem(r);
+          const why = codesProblem(r) ?? onTheList(s.catalog, r).problem;
           if (why) throw new Error(why);
         }
         const r = add(s, part, DUMMY_ME);

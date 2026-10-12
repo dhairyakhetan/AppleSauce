@@ -99,5 +99,15 @@ export interface SentBack extends BankQuestion { reviewer: string; seen: boolean
 export type GamesRole = 'admin' | 'hod' | 'member';
 export const ROLE_NAMES: Record<GamesRole, string> = { admin: 'Admin', hod: 'HoD', member: 'Member' };
 
+/** What the database says about the signed-in person: their role, null when not on the team, or 'reauth' when they
+ * signed in in a way that doesn't prove their email (a password): they must sign in with Google or an email link. */
+export type RoleCheck = GamesRole | 'reauth' | null;
+
 /** Someone on the games team. `owner`: the admin who runs it, whom nobody can remove or demote. */
 export interface Person { email: string; name: string | null; role: GamesRole; owner: boolean; added_at: string; last_seen_at: string | null }
+
+// ---------------------------------------------------------------- the fixed list of chapters and topics
+
+export interface ListTopic { topic_id: string; topic_no: number; name: string }
+/** A chapter on the list, with its topics. `board` and `subject` are their names, as on the site's lists. */
+export interface ListChapter { chapter_id: string; board: string; class: number; subject: string; chapter_no: number; name: string; topics: ListTopic[] }

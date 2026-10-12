@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest';
+import { chaptersFor, checkList, sameName } from './catalog';
+import { format } from './format';
+import type { ListChapter } from './rows';
+
+/* Questions can only be written for a chapter and topic on the fixed list, under its names. The database refuses the
+   rest; this is what the person sees on the lines before sending. */
+
+const LIST: ListChapter[] = [
+  { chapter_id: 'CBSE07SCI04', board: 'CBSE', class: 7, subject: 'Science', chapter_no: 4, name: 'Heat', topics: [
+    { topic_id: 'CBSE07SCI04T01', topic_no: 1, name: 'Hot and Cold' },
+    { topic_id: 'CBSE07SCI04T02', topic_no: 2, name: 'Transfer of Heat' },
+  ] },
+  { chapter_id: 'CBSE07SCI05', board: 'CBSE', class: 7, subject: 'Science', chapter_no: 5, name: 'Acids, Bases and Salts', topics: [] },
+  { chapter_id: 'CBSE07SCI02', board: 'CBSE', class: 7, subject: 'Science', chapter_no: 2, name: 'Nutrition in Animals', topics: [] },
+];
+const TOP = 'Board: CBSE\nClass: 7\nSubject: Science\n';
+const check = (text: string) => {
+  const { rows } = format(text);
+  return { rows, ...checkList(text, rows, LIST) };
+};
+
+describe('the list of chapters and topics', () => {
+  it('compares names the way the database does', () => {
+    expect(sameName('Transfer of Heat', '  transfer  of heat. ')).toBe(true);
+    expect(sameName('Heat', 'Heating')).toBe(false);
+  });
+
+  it('gives the chapters for the boxes, in order, from names as written there', () => {
+    expect(chaptersFor(LIST, 'cbse', 'Class 7', 'science').map((c) => c.chapter_no)).toEqual([2, 4, 5]);
+    expect(chaptersFor(LIST, 'CBSE', '8', 'Science')).toEqual([]);
+    expect(chaptersFor(LIST, '', '7', 'Science')).toEqual([]);
+  });
+
+  it('passes questions written under a listed chapter and topic', () => {
+    const r = check(`${TOP}Chapter 4: Heat\nTopic 2: Transfer of Heat\nHeat flowing through a solid | Conduction\n`);
+    expect(r.issues).toEqual([]);
+    expect(r.blocked.size).toBe(0);
+    expect(r.rows).toHaveLength(1);
+  });
+
+  it('passes a chapter with no topics only without a Topic line', () => {
+    expect(check(`${TOP}Chapter 5: Acids, Bases and Salts\nTaste of an acid | Sour\n`).issues).toEqual([]);
+    const r = check(`${TOP}Chapter 5: Acids, Bases and Salts\nTopic 1: Acids\nTaste of an acid | Sour\n`);
+    expect(r.issues).toEqual([{ line: 5, level: 'error', text: expect.stringMatching(/no topics on the list/) }]);
+    expect([...r.blocked]).toEqual([6]);
+  });
+
+  it('says on the Chapter line when the chapter is not on the list, and names what is', () => {
+    const r = check(`${TOP}Chapter 9: Light\nTopic 1: Mirrors\nImage in a plane mirror | Virtual\nAnother | One\n`);
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0]).toMatchObject({ line: 4, level: 'error' });
+    expect(r.issues[0].text).toContain('2: Nutrition in Animals; 4: Heat; 5: Acids, Bases and Salts');
+    expect([...r.blocked]).toEqual([6, 7]);
+  });
+
+  it('says when the list has nothing for the board, class and subject', () => {
+    const r = check('Board: CBSE\nClass: 8\nSubject: Science\nChapter 1: Crop Production\nTopic 1: Crops\nA crop grown in winter | Rabi\n');
+    expect(r.issues[0].text).toMatch(/no chapters for CBSE class 8 Science yet/);
+  });
+
+  it('asks for the name on the list when the chapter or topic is called something else', () => {
+    const r = check(`${TOP}Chapter 4: Heating\nTopic 1: Hot and cold things\nUnit of temperature | Celsius\n`);
+    expect(r.issues.map((x) => [x.line, x.text])).toEqual([
+      [4, 'On the list, chapter 4 is called "Heat".'],
+      [5, 'On the list, topic 1 of chapter 4 is called "Hot and Cold".'],
+    ]);
+    expect([...r.blocked]).toEqual([6]);
+  });
+
+  it('needs a listed topic for a chapter that has topics', () => {
+    const missing = check(`${TOP}Chapter 4: Heat\nUnit of temperature | Celsius\n`);
+    expect(missing.issues).toEqual([{ line: 5, level: 'error', text: expect.stringMatching(/needs a Topic line.*1 Hot and Cold, 2 Transfer of Heat/) }]);
+    const wrong = check(`${TOP}Chapter 4: Heat\nTopic 7: Sea Breeze\nWind from the sea by day | Sea breeze\n`);
+    expect(wrong.issues).toEqual([{ line: 5, level: 'error', text: expect.stringMatching(/no topic 7/) }]);
+  });
+
+  it('blocks only the questions with a problem, and reports a shared line once', () => {
+    const r = check(`${TOP}Chapter 4: Heat\nTopic 1: Hot and Cold\nUnit of temperature | Celsius\nTopic 3: Weather\nA | B\nC | D\n`);
+    expect(r.issues).toHaveLength(1);
+    expect([...r.blocked]).toEqual([8, 9]);
+  });
+
+  it('leaves questions with no chapter ID to the formatter', () => {
+    expect(check('Topic 1: Hot and Cold\nUnit of temperature | Celsius\n').issues).toEqual([]);
+  });
+});

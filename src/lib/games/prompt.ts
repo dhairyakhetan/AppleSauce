@@ -10,7 +10,7 @@
  */
 import { ALL_BOARDS, SUBJECTS } from './details';
 import { MAX_ANSWER, MAX_QUESTION } from './format';
-import { COLUMNS } from './rows';
+import { COLUMNS, type ListChapter } from './rows';
 
 /** The template: the format, with every part in it. */
 export const PROMPT_FORMAT = `Board: CBSE
@@ -79,6 +79,7 @@ You do not produce the rows, CSV, JSON, SQL or code. You produce plain lines; th
 - Topics: split the chapter into topics in the textbook's order, numbered from 1, and always write the number. Use the textbook's section headings where it has them. A topic is a part a student can study in one sitting, usually 3 to 8 topics per chapter.
 - Write chapter and topic names with capital letters as in the textbook. The site capitalises them anyway.
 - If the material covers only part of a chapter, write only those topics, but keep their numbers from the textbook.
+- The site has a fixed list of chapters and topics, and refuses questions for any other. If the teacher's material starts with lines from that list (Board, Class, Subject, Chapter and Topic lines), use exactly those numbers and names and only those topics, even if your textbook differs. If the list gives the chapter no topics, write no Topic lines for it.
 
 ## Step 3: Write the questions
 
@@ -147,3 +148,8 @@ ${FENCE}
 /** The whole prompt: the instructions, then a place for the teacher's material. */
 export const chatbotPrompt = (site: string) =>
   `${chatbotInstructions(site)}\n---\n\nMaterial (my notes, my questions, or just the board, class, subject and chapter):\n`;
+
+/** A chapter from the site's list, as lines to go under "Material:", so the chatbot uses its numbers and names. */
+export const listedMaterial = (ch: ListChapter) =>
+  [`Board: ${ch.board}`, `Class: ${ch.class}`, `Subject: ${ch.subject}`, `Chapter ${ch.chapter_no}: ${ch.name}`, ...ch.topics.map((t) => `Topic ${t.topic_no}: ${t.name}`)].join('\n') +
+  `\n(From the site's list${ch.topics.length ? '' : ', which gives this chapter no topics'}. My notes, if any, follow.)\n`;

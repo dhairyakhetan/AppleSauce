@@ -1,12 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { toRecord, type Bank, type BankQuestion, type Batch, type GamesRole, type Person, type Row, type SentBack, type Status } from './rows';
+import { toRecord, type Bank, type BankQuestion, type Batch, type GamesRole, type ListChapter, type Person, type RoleCheck, type Row, type SentBack, type Status } from './rows';
 
 /*
  * Everything the games pages ask the database, as one object, so the same pages run against the real database or,
  * in dummy mode, an in-memory fake (src/dummy/games-fake-api.ts).
  *
- * The real one talks to the `games` schema: its own tables and functions, apart from everything else in the database.
+ * The real one talks to the `games` schema (supabase/games/install.sql), through its functions only, never its tables.
  * It reads nothing of Shikshaq's own tables. Until that schema is installed (and added to the API's exposed schemas)
  * every call fails, so nobody is shown the games team: the account menu's check reads a failure as "not on the team".
  */
@@ -19,8 +19,11 @@ export interface SendResult { batchIds: string[]; sent: number; already: number;
 export interface SaveResult { changed: string[]; skipped: string[]; waiting: number; approved: number }
 
 export interface GamesApi {
-  /** The signed-in person's role on the games team, or null when they aren't on it. Asked every time a page opens. */
-  myRole(): Promise<GamesRole | null>;
+  /** The signed-in person's role on the games team; null when they aren't on it; 'reauth' when this sign-in (a
+   * password) doesn't prove their email. Asked every time a page opens. */
+  myRole(): Promise<RoleCheck>;
+  /** The fixed list of chapters and their topics: questions can only be written for these. */
+  loadCatalog(): Promise<ListChapter[]>;
   /** Sends questions to wait for an HoD: one batch per `BATCH_MAX`. */
   sendBatch(rows: Row[]): Promise<SendResult>;
   /** HoDs and admins: every question waiting or sent back, with its batch. */
@@ -91,7 +94,8 @@ function toBank(rows: DbQuestion[]): Bank {
 }
 
 export const realGamesApi: GamesApi = {
-  myRole: () => ask<GamesRole | null>(db().rpc('my_role')),
+  myRole: () => ask<RoleCheck>(db().rpc('my_role')),
+  loadCatalog: () => ask<ListChapter[]>(db().rpc('catalog')),
 
   async sendBatch(rows) {
     const ready = rows.filter((r) => r.chapter_id && r.chapter).map(toRecord);
@@ -112,24 +116,12 @@ export const realGamesApi: GamesApi = {
   loadForHod: async () => toBank(await ask<DbQuestion[]>(db().rpc('hod_questions'))),
   loadApproved: async (after) =>
     toBank(await ask<DbQuestion[]>(db().rpc('hod_approved', { before_at: after?.reviewedAt ?? null, before_id: after?.id ?? null, take: APPROVED_PAGE }))),
-  approvedCount: async () =>
-    (await ask(db().from('question_bank').select('question_id', { count: 'exact', head: true }).then((r) => ({ data: r.count ?? 0, error: r.error })))) ?? 0,
+  approvedCount: () => ask<number>(db().rpc('bank_count')),
   saveStatus: (ids, status, reason = '') => ask<SaveResult>(db().rpc('hod_set_status', { ids, new_status: status, reason })),
   waitingCount: () => ask<number>(db().rpc('waiting_count')),
 
-  /* The database sends at most 1,000 rows at a time: the first page says how many there are, and the rest are asked
-     for all at once. The question ID makes the order exact, so no page repeats or skips a row. */
-  async loadQuestionBank() {
-    const PAGE = 1000;
-    const page = (from: number) => db().from('question_bank').select('*', { count: from ? undefined : 'exact' })
-      .order('class').order('subject').order('chapter_no').order('topic_no').order('question_no').order('question_id')
-      .range(from, from + PAGE - 1);
-    const [first, total] = await ask(page(0).then((r) => ({ data: [(r.data ?? []) as DbQuestion[], r.count ?? 0] as const, error: r.error })));
-    const step = first.length > 0 && first.length < Math.min(PAGE, total) ? first.length : PAGE;
-    const rest = await Promise.all(Array.from({ length: Math.max(0, Math.ceil(total / step) - 1) }, (_, i) => ask<DbQuestion[]>(page((i + 1) * step))));
-    // a question approved while the pages load can push one onto the next page too: keep it once
-    return [...new Map([first, ...rest].flat().map((r) => [r.question_id, r])).values()].map(fromDb);
-  },
+  /* The whole bank in one answer (a function, not a table read, so there is no 1,000-row page limit), in order. */
+  loadQuestionBank: async () => (await ask<DbQuestion[]>(db().rpc('bank'))).map(fromDb),
 
   mySentBack: async () =>
     (await ask<(DbQuestion & { reviewer: string; seen: boolean; now: SentBack['now'] })[]>(db().rpc('my_sent_back')))

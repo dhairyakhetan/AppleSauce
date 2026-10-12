@@ -2,10 +2,11 @@ import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef
 import { Link } from 'react-router-dom';
 import { ArrowDown, Copy, Download, Send } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
-import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
+import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, detailsId, LABEL, parseNumbered, readDetails, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
+import { chaptersFor, checkList, sameName } from '@/lib/games/catalog';
 import { asText, baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from '@/lib/games/format';
-import { chatbotPrompt } from '@/lib/games/prompt';
-import { COLUMNS, toCSV, toJSON, toTSV, type Row, type SentBack } from '@/lib/games/rows';
+import { chatbotPrompt, listedMaterial } from '@/lib/games/prompt';
+import { COLUMNS, toCSV, toJSON, toTSV, type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
@@ -32,8 +33,10 @@ function scrollToEl(el: HTMLElement | null) {
 }
 
 export interface Alerts { list?: SentBack[]; error?: string }
+/** The fixed list of chapters and topics (no list while loading). */
+export interface Catalog { list?: ListChapter[]; error?: string }
 
-export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRetryAlerts, onSent }: {
+export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
   api: GamesApi;
   /** The name batches are sent under. */
   teacher: string;
@@ -46,6 +49,9 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   onRetryAlerts: () => void;
   /** Questions were sent: the counts elsewhere on the page go up. */
   onSent: () => void;
+  /** Questions can only be sent for a chapter and topic on this list, under its names. */
+  catalog: Catalog;
+  onRetryCatalog: () => void;
 }) {
   const [raw, setRaw] = useState('');
   /** The text as it was last sent or downloaded: leaving the page with anything else asks first, as it isn't saved. */
@@ -79,8 +85,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   }, []);
 
   const text = useDeferredValue(raw);
-  const { rows, issues: all } = useMemo(() => format(text), [text]);
-  const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) });
+  const { rows, issues: formatIssues } = useMemo(() => format(text), [text]);
   /** Moving the cursor to another line ends "still typing" there; arriving on a line shows its problems. */
   const moveCaret = (line: number) => {
     setCaret(line);
@@ -95,7 +100,6 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   const gaps = missing(rows);
   const chapters = new Set(rows.map((r) => r.chapter_id ?? [r.board, r.class, r.subject, r.chapter_no, r.chapter].join('|'))).size;
   const topics = new Set(rows.filter((r) => r.topic || r.topic_no !== null).map((r) => [r.chapter_id, r.board, r.class, r.subject, r.chapter_no, r.chapter, r.topic_no, r.topic].join('|'))).size;
-  const errors = issues.filter((x) => x.level === 'error').length;
   const name = baseName(rows);
 
   // one note per count, so "no board, class or subject" is one line rather than three
@@ -130,6 +134,15 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
   const [example, setExample] = useState(false);
   useEffect(() => { if (!raw.trim()) setExample(false); }, [raw]);
   const fromExample = (r: Row) => example && EXAMPLE_QUESTIONS.has(r.question.toLowerCase());
+  /** Your own questions (not the example's), and those of them the list rules out: they can't be sent. */
+  const own = rows.filter((r) => !fromExample(r));
+  const listCheck = useMemo(() => (catalog.list ? checkList(text, own, catalog.list) : null),
+    // `own` is a new array each render; it changes only with the text and the example
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [text, example, catalog.list]);
+  const all = useMemo(() => (listCheck?.issues.length ? [...formatIssues, ...listCheck.issues].sort((a, b) => a.line - b.line) : formatIssues), [formatIssues, listCheck]);
+  const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) });
+  const errors = issues.filter((x) => x.level === 'error').length;
 
   /** Replacing all the text can always be undone for a few seconds, so there is no "are you sure?". */
   const replaceAll = (next: string, what: string, isExample = false) => {
@@ -158,8 +171,10 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
 
   /** Sends the questions to the HoD (not the example's). A question needs a chapter ID and a chapter name to be sent. */
   const examples = rows.filter(fromExample).length;
-  const own = rows.filter((r) => !fromExample(r));
-  const ready = own.filter((r) => r.chapter_id && r.chapter).length;
+  const complete = own.filter((r) => r.chapter_id && r.chapter);
+  const sendable = listCheck ? complete.filter((r) => !listCheck.blocked.has(r.line)) : [];
+  const ready = sendable.length;
+  const offList = listCheck ? complete.length - sendable.length : 0;
   const noId = own.filter((r) => !r.chapter_id).length;
   const noName = own.filter((r) => r.chapter_id && !r.chapter).length;
   // the text lives only on this page: closing or reloading it with questions not yet sent or downloaded asks first
@@ -175,7 +190,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
     setSent(null);
     setSendError('');
     try {
-      const result = await api.sendBatch(own);
+      const result = await api.sendBatch(sendable);
       setSent(result);
       setKept(raw);
       if (result.sent) { flash('send'); onSent(); }
@@ -192,7 +207,33 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
     requestAnimationFrame(() => scrollToEl(backPanel.current));
   };
 
-  const prompt = chatbotPrompt(`${location.origin}/games`);
+  // the chapter chosen in the boxes, when it is on the list as written there
+  const listed = catalog.list ? chaptersFor(catalog.list, details.board, details.class, details.subject) : [];
+  const typed = parseNumbered(details.chapter, 'chapter');
+  const chosen = listed.find((c) => c.chapter_no === typed.no && sameName(c.name, typed.name));
+  const listHasNone = !!catalog.list && !listed.length && !!checkBoard(details.board).code && checkClass(details.class).value !== null && !!checkSubject(details.subject).code;
+  const prompt = chatbotPrompt(`${location.origin}/games`) + (chosen ? listedMaterial(chosen) : '');
+
+  /** A topic chip: its Topic line goes after the line the cursor is on (or replaces it when it is empty), and the
+   * cursor moves to the line after it, ready for the first question. */
+  const addTopic = (t: ListTopic) => {
+    const lines = raw.split('\n');
+    const topicLine = `Topic ${t.topic_no}: ${t.name}`;
+    let at = caret >= 1 && caret <= lines.length ? caret - 1 : lines.length - 1;
+    if (lines[at]?.trim()) at += 1;
+    lines.splice(at, lines[at]?.trim() === '' ? 1 : 0, topicLine);
+    if (at === lines.length - 1) lines.push('');
+    const next = lines.join('\n');
+    const pos = lines.slice(0, at + 1).join('\n').length + 1;
+    setRaw(next);
+    requestAnimationFrame(() => {
+      const ta = box.current;
+      if (!ta) return;
+      ta.focus({ preventScroll: true });
+      ta.setSelectionRange(pos, pos);
+      moveCaret(at + 2);
+    });
+  };
 
   /** Selects a line of the Questions box, so a reported problem can be fixed in place. */
   const goTo = (line: number) => {
@@ -221,7 +262,25 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
           <h2 id="in-h" className="text-[15px] font-bold text-foreground">1. Write</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {DETAIL_KEYS.map((k) => {
-              const problem = typingBox === k ? undefined : checkDetail(k, details[k]);
+              const problem = typingBox === k ? undefined : k === 'chapter' && listHasNone
+                ? { level: 'warn' as const, text: `The list has no chapters for this board, class and subject yet.` }
+                : checkDetail(k, details[k]);
+              if (k === 'chapter' && listed.length) {
+                return (
+                  <div className="col-span-2 flex flex-col gap-1 sm:col-span-1" key={k}>
+                    <label htmlFor="d-chapter" className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
+                    <select id="d-chapter" value={chosen ? String(chosen.chapter_no) : ''}
+                      className={cn(FIELD, 'h-11', details.chapter && !chosen && 'ring-2 ring-destructive')}
+                      onChange={(e) => {
+                        const c = listed.find((x) => String(x.chapter_no) === e.target.value);
+                        setRaw((r) => writeDetail(r, 'chapter', c ? `${c.chapter_no}: ${c.name}` : ''));
+                      }}>
+                      <option value="">{details.chapter && !chosen ? `${details.chapter} (not on the list)` : 'Choose a chapter'}</option>
+                      {listed.map((c) => <option key={c.chapter_id} value={String(c.chapter_no)}>{c.chapter_no}: {c.name}</option>)}
+                    </select>
+                  </div>
+                );
+              }
               return (
                 <div className={cn('flex flex-col gap-1', k === 'chapter' && 'col-span-2 sm:col-span-1')} key={k}>
                   <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
@@ -251,6 +310,16 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
             {id ? <>Chapter ID <code className="rounded-md bg-card px-1.5 py-0.5 font-mono font-semibold text-foreground">{id}</code>. </> : 'Board, class, subject and chapter number make the chapter ID. '}
             These boxes are the lines at the top of the Questions box; editing either changes both.
           </p>
+          {chosen && (chosen.topics.length ? (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[12px] font-semibold text-warm-secondary">Topics of this chapter on the list: press one to add its Topic line below the cursor</p>
+              <div className="flex flex-wrap gap-2">
+                {chosen.topics.map((t) => (
+                  <button key={t.topic_id} type="button" className={chip('card')} onClick={() => addTopic(t)}>Topic {t.topic_no}: {t.name}</button>
+                ))}
+              </div>
+            </div>
+          ) : <p className="text-[13px] text-warm-secondary">This chapter has no topics on the list, so write its questions without a Topic line.</p>)}
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
@@ -313,7 +382,7 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
       </div>
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className={SECTION}>
+        <div className="rounded-[24px] bg-card p-4 shadow-border sm:p-6">
           <GamePreview rows={rows} />
         </div>
         <form className={SECTION} onSubmit={(e) => { e.preventDefault(); void send(); }}>
@@ -332,6 +401,15 @@ export function WriteQuestions({ api, teacher, canApprove, alerts, onSeen, onRet
             </button>
             <p className="text-[13px] text-warm-secondary">Sending as <b className="text-foreground">{teacher}</b>.</p>
           </div>
+          {catalog.error && !catalog.list && (
+            <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">
+              <b>Couldn't load the list of chapters,</b> so nothing can be sent yet. {catalog.error}{' '}
+              <button type="button" className={LINKISH} onClick={onRetryCatalog}>Try again</button>
+            </p>
+          )}
+          {!catalog.list && !catalog.error && <p className="text-[13px] text-warm-secondary">Loading the list of chapters…</p>}
+          {catalog.list && !catalog.list.length && <p className="text-[13px] text-warm-secondary">The list of chapters is empty, so nothing can be sent yet. Ask an admin to add it.</p>}
+          {offList > 0 && <p className="text-[13px] text-warm-secondary">{plural(offList, "question doesn't", "questions don't")} match the list of chapters and topics and can't be sent yet. The lines in red say what to change.</p>}
           {noId > 0 && <p className="text-[13px] text-warm-secondary">{plural(noId, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
           {noName > 0 && <p className="text-[13px] text-warm-secondary">{plural(noName, 'question has', 'questions have')} no chapter name and can't be sent yet. Write it after the chapter number, for example "3: Acids".</p>}
           {sent && (

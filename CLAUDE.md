@@ -3,16 +3,16 @@
 ## Read first: this copy is the games branch
 
 This is branch `games` of `dhairyakhetan/AppleSauce`, not the Shikshaq repo.
-Work on `games`; `feat/games-integration` gets the same commits. Its first
+Work on `games`. Its first
 commit is Shikshaq-main exactly as downloaded on 11 October 2026. The work to
 bring the question bank and the games into the main site goes on top, so the
 difference from that first commit is what gets handed to the Shikshaq repo.
 The games site it comes from is `main` of this same repo
 (shikshaq-games.vercel.app).
 
-- **Push to `games` and `feat/games-integration` together**, so they never
-  differ: `git push origin games games:feat/games-integration`. Never run
-  `npm run push:all` here, and never add or push to the Shikshaq or
+- **Push only to `games`**: `git push -u origin games`, nothing else.
+  `feat/games-integration` is an older copy and is no longer pushed to. Never
+  run `npm run push:all` here, and never add or push to the Shikshaq or
   `kanitest` remotes. "Two remotes, ONE branch" below is about the Shikshaq
   repo itself.
 - **The live database cannot be restored.** There is no backup history to go
@@ -270,18 +270,37 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   it, and nothing reads Shikshaq's own tables. The account menu's "Games team"
   links come from `useGamesRoleBadge` (`games.my_role()`); any failure means no
   link, which is also what happens until the schema is installed.
-- **Not installed yet:** the `games` schema. `lib/games/api.ts` (`realGamesApi`)
-  calls its functions; until it exists every call fails and the pages say so.
-- **Dummy mode works now:** `?dummy=1` on any `/games` page, or the preview
-  toggle's "Games team" buttons, runs the real pages against
-  `dummy/games-fake-api.ts`, which keeps the database's rules. Its banner
-  switches between admin, HoD, member and not on the team.
+- **The database:** `supabase/games/install.sql` makes the whole `games`
+  schema in one transaction (a dry run by default; it stops if anything outside
+  `games` would change), and `supabase/games/list.sql` loads the fixed list of
+  chapters and topics. Neither is installed on the live database yet; until
+  then every call in `lib/games/api.ts` (`realGamesApi`) fails and the pages
+  say so. The site calls functions only; no role can read the tables.
+  `lib/games/database.test.ts` runs both scripts on PGlite.
+- **Sign-in rule:** an email counts only if the session signed in with Google
+  (or another provider in `games.settings`) or an email link, read from the
+  token's `amr`. A password sign-in gets `'reauth'` from `games.my_role()` and
+  a "sign in with Google" page: with "Confirm email" off, a password account
+  can be made with someone else's email and later merges with their Google
+  account (measured on a local GoTrue).
+- **The fixed list:** questions can only be sent for a chapter and topic on
+  `games.chapters` / `games.topics`, under the list's names. `lib/games/catalog.ts`
+  checks the Questions box against it as people write (the database refuses
+  the rest anyway); the Chapter box becomes a picker and the topics become
+  buttons once board, class and subject match the list.
+- **Dummy mode:** `?dummy=1` on any `/games` page, or the preview toggle's
+  "Games team" buttons, runs the real pages against
+  `dummy/games-fake-api.ts`, which keeps the database's rules (list included).
+  Its banner switches between admin, HoD, member, not on the team, and signed
+  in with a password.
 - **Files:** `lib/games/` (rows and exports, `format.ts` the formatter,
-  `details.ts` boards, subjects and IDs, `prompt.ts` what "Copy chatbot prompt"
-  copies, `engine/` the games: each has a maker and a separate checker, and a
-  puzzle is only shown after its checker passes it), `components/games/` (the
-  four parts, the playable games, the preview, the guide; `games.css` is only
-  what utility classes can't say, in Shikshaq's colour variables).
+  `details.ts` boards, subjects and IDs, `catalog.ts` the list check,
+  `prompt.ts` what "Copy chatbot prompt" copies, `engine/` the games: each has a
+  maker and a separate checker, and a puzzle is only shown after its checker
+  passes it), `components/games/` (the four parts, `Revise.tsx` the game
+  picker and player used full size by Try the games and small by the preview,
+  the guide; `games.css` is only what utility classes can't say, in Shikshaq's
+  colour variables).
 - **Questions and answers are never reworded.** Only numbering, labels,
   bullets, Markdown and spaces are removed.
 - **The chatbot prompt and the code agree:** `lib/games/prompt.test.ts` fails if

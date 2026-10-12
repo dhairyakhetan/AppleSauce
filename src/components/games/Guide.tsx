@@ -51,9 +51,9 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
             <dt><code className={CODE}>Subject: Chemistry</code></dt>
             <dd className="mb-1 text-warm-secondary">The textbook's subject, as in the list.</dd>
             <dt><code className={CODE}>Chapter 3: Acids, Bases and Salts</code></dt>
-            <dd className="mb-1 text-warm-secondary">Number and name, as in the textbook.</dd>
+            <dd className="mb-1 text-warm-secondary">Number and name, as on the team's list of chapters. Once board, class and subject are filled in, the Chapter box offers the chapters on it.</dd>
             <dt><code className={CODE}>Topic 2: Indicators</code></dt>
-            <dd className="text-warm-secondary">Number and name, as in the textbook. Its questions go under it.</dd>
+            <dd className="text-warm-secondary">Number and name, as on the list for that chapter (press a topic under the boxes to add its line). Its questions go under it. A chapter with no topics on the list has no Topic lines.</dd>
           </dl>
           <p className="text-[13px] text-warm-secondary">Names are capitalised for you: <i>acids, bases and salts</i> becomes <i>Acids, Bases and Salts</i>. Questions and answers are never changed.</p>
         </Card>
@@ -70,7 +70,7 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
         </Card>
 
         <Card title="Underlines and warnings">
-          <p><span className="games-mark error">Red</span>: the line is <b className="text-foreground">left out</b>. It has no answer, no question, an empty part, too many parts, is too long, is a repeat, the class is not 1 to 12, or the board or subject isn't on the site's list.</p>
+          <p><span className="games-mark error">Red</span>: the line is <b className="text-foreground">left out</b>. It has no answer, no question, an empty part, too many parts, is too long, is a repeat, the class is not 1 to 12, the board or subject isn't on the site's list, or the chapter or topic isn't on the team's list under that name. Questions under a red line can't be sent.</p>
           <p><span className="games-mark warn">Amber</span>: the line is <b className="text-foreground">kept, but check it</b>. A chapter with no number or name, a topic with no questions, a detail set twice, or the same chapter number with two different names.</p>
           <p className="text-[13px] text-warm-secondary">You can write first: a line is only checked once you move on from it, and a box once you leave it or pause. Put the cursor on an underlined line to see why, or click a line number in the list.</p>
         </Card>

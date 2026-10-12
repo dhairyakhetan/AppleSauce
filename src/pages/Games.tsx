@@ -11,7 +11,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { useAuth } from '@/lib/auth-context';
 import { isDummyMode } from '@/lib/dummy-mode';
 import { realGamesApi, type GamesApi } from '@/lib/games/api';
-import { ROLE_NAMES, type GamesRole } from '@/lib/games/rows';
+import { ROLE_NAMES, type GamesRole, type ListChapter, type RoleCheck } from '@/lib/games/rows';
 import { PREVIEW_TOOLS } from '@/lib/preview-tools';
 import { cn } from '@/lib/utils';
 
@@ -86,14 +86,14 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   /** Dummy mode has no sign-in, so who "you" are is given here. */
   me?: { name: string; email: string };
 }) {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const part = partOf(pathname);
   const name = dummy ? me?.name ?? '' : profile?.full_name || String(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '') || user?.email || '';
   const email = dummy ? me?.email ?? '' : user?.email ?? '';
 
-  const [role, setRole] = useState<{ role?: GamesRole | null; error?: string }>({});
+  const [role, setRole] = useState<{ role?: RoleCheck; error?: string }>({});
   const [attempt, setAttempt] = useState(0);
   // by the account's id, not the user object: a refreshed sign-in is a new object, and asking again would blank the page
   const uid = user?.id ?? null;
@@ -111,7 +111,20 @@ export function GamesPage({ api, dummy = false, banner, me }: {
     // the role is asked once per visit (and on "Try again"), not on every move between parts
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, authLoading, api, dummy, attempt]);
-  const r = role.role;
+  /** On the team (their role), not on it (null), or signed in with a password, which doesn't prove the email. */
+  const reauth = role.role === 'reauth';
+  const r: GamesRole | null | undefined = role.role === 'reauth' ? null : role.role;
+
+  // the fixed list of chapters and topics, for Write questions
+  const [catalog, setCatalog] = useState<{ list?: ListChapter[]; error?: string }>({});
+  const [catalogTry, setCatalogTry] = useState(0);
+  useEffect(() => {
+    if (!r) return;
+    let current = true;
+    setCatalog((c) => (c.error ? {} : c));
+    api.loadCatalog().then((list) => { if (current) setCatalog({ list }); }, (e: Error) => { if (current) setCatalog({ error: e.message }); });
+    return () => { current = false; };
+  }, [api, r, catalogTry]);
 
   // the number waiting, on the Approve link (HoDs and admins)
   const [waiting, setWaiting] = useState(0);
@@ -161,6 +174,22 @@ export function GamesPage({ api, dummy = false, banner, me }: {
       </Shell>
     );
   }
+  if (reauth) {
+    return (
+      <NotForYou banner={banner} title="Sign in with Google to open the games team">
+        <p>
+          You signed in with a password. The games team's pages need a Google sign-in (or an email sign-in link), because
+          that is what proves the email is yours. Only people on the team's list get in.
+        </p>
+        {dummy ? <p className="mt-3">In dummy mode, switch who you are in the bar above.</p> : (
+          <button type="button" className={btn('dark', 'mt-5')}
+            onClick={async () => { await signOut(); navigate('/auth?redirect=' + encodeURIComponent(pathname)); }}>
+            Sign out, then sign in with Google
+          </button>
+        )}
+      </NotForYou>
+    );
+  }
   if (r === null) {
     return (
       <NotForYou banner={banner} title="This page is for the games team">
@@ -179,7 +208,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   }
 
   const parts: Record<Part, () => ReactNode> = {
-    write: () => <WriteQuestions api={api} teacher={name} canApprove={r !== 'member'} alerts={alerts} onSeen={seen} onRetryAlerts={() => setAlertsTry((n) => n + 1)} onSent={sent} />,
+    write: () => <WriteQuestions api={api} teacher={name} canApprove={r !== 'member'} alerts={alerts} onSeen={seen} onRetryAlerts={() => setAlertsTry((n) => n + 1)} onSent={sent} catalog={catalog} onRetryCatalog={() => setCatalogTry((n) => n + 1)} />,
     approve: () => <ApproveQuestions api={api} onWaiting={setWaiting} />,
     play: () => <TryGames api={api} />,
     team: () => <Team api={api} me={email} />,

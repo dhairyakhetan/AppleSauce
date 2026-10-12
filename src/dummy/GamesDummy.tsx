@@ -3,29 +3,30 @@ import { useLocation } from 'react-router-dom';
 import { GamesPage } from '@/pages/Games';
 import { createFakeGamesApi, DUMMY_ME } from '@/dummy/games-fake-api';
 import { setDummyMode } from '@/lib/dummy-mode';
-import type { GamesRole } from '@/lib/games/rows';
+import type { RoleCheck } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 
 /* /games in dummy mode (D75): the real games pages against made-up questions and a made-up team, with no sign-in.
    Switch which role "you" have to see what each person gets, including someone who isn't on the team. Test builds
    only, reached solely through the PREVIEW_TOOLS-gated lazy import in pages/Games.tsx. */
 
-const ROLES: { role: GamesRole | null; label: string }[] = [
+const ROLES: { role: RoleCheck; label: string }[] = [
   { role: 'admin', label: 'Admin' },
   { role: 'hod', label: 'HoD' },
   { role: 'member', label: 'Member' },
   { role: null, label: 'Not on the team' },
+  { role: 'reauth', label: 'Signed in with a password' },
 ];
 const PILL = 'min-h-9 rounded-full px-3 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white';
 
 export default function GamesDummy() {
   const [api] = useState(createFakeGamesApi);
-  const [role, setRole] = useState<GamesRole | null>(() => api.role());
+  const [role, setRole] = useState<RoleCheck>(() => api.role());
   /** Bumped to start the page afresh (a new role, or "Start over"). */
   const [round, setRound] = useState(0);
   const { pathname } = useLocation();
 
-  const become = (r: GamesRole | null) => {
+  const become = (r: RoleCheck) => {
     api.setRole(r);
     setRole(r);
     setRound((n) => n + 1);

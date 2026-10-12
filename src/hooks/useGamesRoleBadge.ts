@@ -23,7 +23,8 @@ export function useGamesRoleBadge(): GamesRole | null {
     staleTime: 30 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
     retry: false,
-    queryFn: () => realGamesApi.myRole(),
+    // signed in with a password ('reauth'): no link; the page itself explains if they go there
+    queryFn: async () => { const r = await realGamesApi.myRole(); return r === 'reauth' ? null : r; },
   });
 
   return data ?? null;

@@ -39,6 +39,15 @@ describe('the dummy games database', () => {
     expect(fixed.sent).toBe(1);
   });
 
+  it('refuses the whole send when a question is off the list of chapters and topics', async () => {
+    const api = createFakeGamesApi(false);
+    const before = (await api.loadForHod()).questions.length;
+    const off = rows('Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 9: Weather\nWind from the sea by day | Sea breeze');
+    await expect(api.sendBatch([...rows(`${HEAT}Heat flowing through a solid | Conduction`), ...off])).rejects.toThrow(/topic 9/i);
+    expect((await api.loadForHod()).questions).toHaveLength(before);
+    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI04')?.topics.map((t) => t.topic_no)).toEqual([1, 2, 3]);
+  });
+
   it('lets only HoDs and admins approve, and only admins manage the team', async () => {
     const api = createFakeGamesApi(false);
     api.setRole('member');
@@ -46,7 +55,10 @@ describe('the dummy games database', () => {
     await expect(api.loadPeople()).rejects.toThrow(/admin/);
     api.setRole(null);
     expect(await api.myRole()).toBeNull();
-    await expect(api.sendBatch([])).rejects.toThrow(/sign in/);
+    await expect(api.sendBatch([])).rejects.toThrow(/sign in with google/i);
+    api.setRole('reauth');
+    expect(await api.myRole()).toBe('reauth');
+    await expect(api.loadQuestionBank()).rejects.toThrow(/games team/);
   });
 
   it('approves, sends back with a reason, and keeps a sent-back question back while its copy waits', async () => {
