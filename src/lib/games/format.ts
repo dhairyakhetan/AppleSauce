@@ -32,7 +32,12 @@ export const MAX_OPTIONS = 5;
 export const MAX_PER_TOPIC = 30;
 export const MAX_PER_CHAPTER = 80;
 
-export interface Issue { line: number; level: Level; text: string }
+/**
+ * A problem on a line. `text` is what the page shows the person; `fix` is the same thing as a short instruction for a
+ * chatbot, used by the prompt that asks one to fix the questions (prompt.ts `fixPrompt`). `oneLine`: the line is a
+ * question written on one line, not as a block.
+ */
+export interface Issue { line: number; level: Level; text: string; fix?: string; oneLine?: true }
 
 type Key = 'q' | 'a' | 'also' | 'fill' | 'wrong' | 'level';
 const LABEL_NAME: Record<Key, string> = { q: 'Q:', a: 'A:', also: 'Also:', fill: 'Fill:', wrong: 'Wrong:', level: 'Level:' };
@@ -49,6 +54,10 @@ const TRUE_FALSE_ASK = /^(?:state\s+)?(?:whether\s+)?(?:true\s+or\s+false|t\s*\/
 /** Characters a student can type on an ordinary keyboard (dashes and curly quotes are read as - and '). */
 const TYPEABLE = /^[\p{L}\p{M}\p{Nd}\s!-/:-@[-`{-~₹‘’“”–—−]*$/u;
 const untypeable = (s: string) => [...new Set([...s].filter((ch) => !TYPEABLE.test(ch)))].join(' ');
+/** A number with a unit symbol ("37 °C", "90°"): the unit belongs in the question. */
+const NUMBER_AND_UNIT = /^[-+−]?\d[\d.,]*\s*(?:°\s*[CFK]?|℃|℉|[kMm]?Ω|µ\p{L}*|²|³|(?:[kcmµ]?m|ft|in)[²³]|m\/s²)\.?$/u;
+/** What is in round or square brackets after a space in an answer: a note or another answer. */
+const BRACKETED = /\s([([][^)\]]*\p{L}{2,}[^)\]]*[)\]])/u;
 
 /** A label at the start of a line, after a bullet or a number and with Markdown bold around it if a chatbot added them. */
 function readLabel(line: string): { key: Key; value: string } | null {
@@ -122,8 +131,8 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
   /** A blank line since the block's last line: a loose line after it is not part of that question. */
   let gap = false;
 
-  const issue = (line: number, level: Level, text: string) => { issues.push({ line, level, text }); };
-  const err = (line: number, text: string) => issue(line, 'error', text);
+  const issue = (line: number, level: Level, text: string, fix?: string) => { issues.push(fix ? { line, level, text, fix } : { line, level, text }); };
+  const err = (line: number, text: string, fix?: string) => issue(line, 'error', text, fix);
   const warnOnce = (id: string, line: number, text: string, level: Level = 'warn') => {
     if (once.has(id)) return;
     once.add(id);
@@ -165,57 +174,76 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     const trueFalse = isTrueFalse(a);
 
     // the question
-    if (!q) err(b.line, 'The question is empty. Write it after Q:.');
-    if (q.length > MAX_QUESTION) err(b.line, `The question is longer than ${MAX_QUESTION} characters. Make it shorter.`);
+    if (!q) err(b.line, 'The question is empty. Write it after Q:.', 'Write the question after Q:.');
+    if (q.length > MAX_QUESTION) err(b.line, `The question is longer than ${MAX_QUESTION} characters. Make it shorter.`, `Shorten the question to at most ${MAX_QUESTION} characters.`);
     for (const [text, line, what] of [[q, b.line, 'question'], [b.fill?.v ?? '', b.fill?.line ?? 0, 'Fill: sentence']] as const) {
       if (!text) continue;
-      if (NEEDS_MORE.test(text)) err(line, `The ${what} must make sense on its own: no "of the following", "which of these", "the above" or "given below". The options appear only in multiple choice, so ask it directly.`);
-      if (NEEDS_PICTURE.test(text)) err(line, `The ${what} can't use a figure, diagram, map, table or passage: the games show only text.`);
+      const which = what === 'question' ? 'Ask it' : 'Write the Fill sentence';
+      const leans = text.match(NEEDS_MORE)?.[0];
+      if (leans) err(line, `The ${what} must make sense on its own: no "of the following", "which of these", "the above" or "given below". The options appear only in multiple choice, so ask it directly.`, `${which} directly, without "${leans}".`);
+      if (NEEDS_PICTURE.test(text)) err(line, `The ${what} can't use a figure, diagram, map, table or passage: the games show only text.`, `${which} so that it needs no figure, diagram, map, table or passage.`);
     }
-    if (TRUE_FALSE_ASK.test(q)) err(b.line, 'Write only the statement after Q:. "A: True" or "A: False" says the rest.');
-    if (blanks(q) > 1) err(b.line, 'Only one ___ in a question.');
+    if (TRUE_FALSE_ASK.test(q)) err(b.line, 'Write only the statement after Q:. "A: True" or "A: False" says the rest.', 'Write only the statement after Q:, without "True or false".');
+    if (blanks(q) > 1) err(b.line, 'Only one ___ in a question.', 'Keep at most one ___ in the question.');
 
     // the answer
-    if (!b.a) err(b.line, NO_ANSWER);
-    else if (!a) err(aLine, 'The answer is empty. Write it after A:.');
-    else if (!hasContent(a)) err(aLine, 'The answer has no letters or digits.');
+    const yesNo = /^(yes|no)$/i.test(a);
+    if (!b.a) err(b.line, NO_ANSWER, 'Add the A: line with the answer.');
+    else if (!a) err(aLine, 'The answer is empty. Write it after A:.', 'Write the answer after A:.');
+    else if (!hasContent(a)) err(aLine, 'The answer has no letters or digits.', 'Write the answer in letters or digits.');
     else {
-      if (a.length > MAX_ANSWER) err(aLine, `The answer is longer than ${MAX_ANSWER} characters. Answers must be short.`);
-      else if (words(a) > MAX_ANSWER_WORDS) err(aLine, `The answer has ${words(a)} words. Answers must be short: at most ${MAX_ANSWER_WORDS} words. Put the rest in the question.`);
-      if (/^(yes|no)$/i.test(a)) err(aLine, 'Yes or No can\'t be an answer. Write a statement after Q: and "A: True" or "A: False".');
-      if (/\s\/\s/.test(a)) err(aLine, 'Write one answer after A:, and each other answer that counts on its own Also: line.');
-      if (/\s[([][^)\]]*\p{L}{2,}[^)\]]*[)\]]/u.test(a)) err(aLine, "Students would have to type the brackets too. If what's in the brackets is another answer that counts, move it to an Also: line; if it is a note, leave it out.");
-      if (blanks(a)) err(aLine, 'No ___ in the answer. The ___ goes in the Fill: sentence.');
-      if (!TYPEABLE.test(a) && !also.some((x) => TYPEABLE.test(x))) err(aLine, `Students can't type "${untypeable(a)}" on most keyboards. Add an Also: line with the answer written using ordinary keys, such as x^2 for x² or sqrt 3 for √3.`);
+      if (a.length > MAX_ANSWER) err(aLine, `The answer is longer than ${MAX_ANSWER} characters. Answers must be short.`, `Shorten the answer to at most ${MAX_ANSWER_WORDS} words, and put the rest in the question.`);
+      else if (words(a) > MAX_ANSWER_WORDS) err(aLine, `The answer has ${words(a)} words. Answers must be short: at most ${MAX_ANSWER_WORDS} words. Put the rest in the question.`, `Shorten the answer to at most ${MAX_ANSWER_WORDS} words, and put the rest in the question.`);
+      if (yesNo) err(aLine, 'Yes or No can\'t be an answer. Write a statement after Q: and "A: True" or "A: False".', 'Turn it into a statement, with A: True or A: False (and no Also, Fill or Wrong lines).');
+      if (/\s\/\s/.test(a)) {
+        const [first, ...rest] = a.split(/\s\/\s/);
+        err(aLine, 'Write one answer after A:, and each other answer that counts on its own Also: line.', `Keep "${first}" on the A: line and put ${rest.map((x) => `"${x}"`).join(', ')} on ${rest.length > 1 ? 'their own Also: lines' : 'an Also: line'}.`);
+      }
+      const bracket = a.match(BRACKETED)?.[1];
+      if (bracket) {
+        const note = /^[([]\s*(approx|about|nearly|roughly|e\.\s?g|i\.\s?e|etc|in\s|see\s|note)/i.test(bracket);
+        err(aLine, "Students would have to type the brackets too. If what's in the brackets is another answer that counts, move it to an Also: line; if it is a note, leave it out.",
+          note ? `Drop "${bracket}" from the answer.` : `Take "${bracket}" out of the answer: put it on an Also: line if it is another right answer, or drop it if it is a note.`);
+      }
+      if (blanks(a)) err(aLine, 'No ___ in the answer. The ___ goes in the Fill: sentence.', 'Take the ___ out of the answer.');
+      if (!TYPEABLE.test(a) && !also.some((x) => TYPEABLE.test(x))) {
+        if (NUMBER_AND_UNIT.test(a.replace(BRACKETED, '').trim())) {
+          const unit = /²/.test(a) ? 'square metres' : /³/.test(a) ? 'cubic centimetres' : /[°℃℉]/.test(a) ? 'degrees Celsius' : 'ohms';
+          err(aLine, `Students can't type "${untypeable(a)}" on most keyboards. Put the unit in the question ("…, in ${unit}") and write the answer as the number alone.`, `Put the unit in the question (for example "…, in ${unit}") and make the answer the number alone.`);
+        } else {
+          err(aLine, `Students can't type "${untypeable(a)}" on most keyboards. Add an Also: line with the answer written using ordinary keys, such as x^2 for x² or sqrt 3 for √3.`, `Add an Also: line with the answer typed with ordinary keys (it has "${untypeable(a)}"; for example x^2 for x², sqrt 3 for √3).`);
+        }
+      }
       if (q && shows(q, it)) {
         const x = [a, ...also].find((s) => shows(q, { answer: s }));
-        err(b.line, `The question shows the answer ("${x}"), so it would give it away. Rewrite the question without it.`);
+        err(b.line, `The question shows the answer ("${x}"), so it would give it away. Rewrite the question without it.`, `Rewrite the question so that it doesn't contain "${x}".`);
       }
     }
 
     // other answers that count
     b.also.forEach((x, i) => {
-      if (i === MAX_ALSO) err(x.line, `At most ${MAX_ALSO} Also: lines.`);
-      if (!x.v) return err(x.line, 'This Also: line is empty.');
-      if (x.v.includes(';')) return err(x.line, 'One answer per Also: line. Put each one on its own line.');
-      if (x.v.length > MAX_ANSWER || words(x.v) > MAX_ANSWER_WORDS) return err(x.line, `This answer is too long: at most ${MAX_ANSWER_WORDS} words.`);
-      if (blanks(x.v)) return err(x.line, 'No ___ in an answer.');
-      if (a && sameAnswer(x.v, a)) return err(x.line, 'This is the same as the answer on the A: line (case, spaces and punctuation don\'t matter). Leave it out.');
-      if (also.slice(0, i).some((y) => sameAnswer(x.v, y))) return err(x.line, 'This answer is written twice.');
+      if (i === MAX_ALSO) err(x.line, `At most ${MAX_ALSO} Also: lines.`, `Keep at most ${MAX_ALSO} Also: lines.`);
+      if (!x.v) return err(x.line, 'This Also: line is empty.', 'Remove the empty Also: line.');
+      if (x.v.includes(';')) return err(x.line, 'One answer per Also: line. Put each one on its own line.', `Split "Also: ${x.v}" into one Also: line per answer.`);
+      if (x.v.length > MAX_ANSWER || words(x.v) > MAX_ANSWER_WORDS) return err(x.line, `This answer is too long: at most ${MAX_ANSWER_WORDS} words.`, `Shorten "Also: ${x.v}" to at most ${MAX_ANSWER_WORDS} words.`);
+      if (blanks(x.v)) return err(x.line, 'No ___ in an answer.', `Take the ___ out of "Also: ${x.v}".`);
+      if (a && sameAnswer(x.v, a)) return err(x.line, 'This is the same as the answer on the A: line (case, spaces and punctuation don\'t matter). Leave it out.', `Remove "Also: ${x.v}": it is the answer again (capitals, spaces and hyphens already don't count).`);
+      if (also.slice(0, i).some((y) => sameAnswer(x.v, y))) return err(x.line, 'This answer is written twice.', `Remove the second "Also: ${x.v}".`);
     });
 
     // the fill-in sentence
     if (b.fill) {
       const f = b.fill.v;
       const n = blanks(f);
-      if (trueFalse) err(b.fill.line, 'A True/False question has no Fill: line.');
-      else if (!n) err(b.fill.line, 'The Fill: sentence needs ___ (three underscores) where the answer goes.');
-      else if (n > 1) err(b.fill.line, 'Only one ___ in the Fill: sentence: it stands for the whole answer.');
-      else if (words(f.replace(BLANK, ' ')) < 3) err(b.fill.line, 'Write the whole sentence around the ___, so it can be answered on its own.');
-      else if (a && shows(f.replace(BLANK, ' '), it)) err(b.fill.line, 'The Fill: sentence shows the answer. The ___ should stand for the whole answer, and the rest of the sentence shouldn\'t repeat it.');
-      if (f.length > MAX_QUESTION) err(b.fill.line, `The Fill: sentence is longer than ${MAX_QUESTION} characters.`);
-    } else if (q && b.a && !trueFalse && blanks(q) !== 1) {
-      issue(b.line, 'warn', NO_FILL);
+      if (trueFalse) err(b.fill.line, 'A True/False question has no Fill: line.', 'Remove the Fill: line (a True/False question has none).');
+      else if (!n) err(b.fill.line, 'The Fill: sentence needs ___ (three underscores) where the answer goes.', 'Put ___ (three underscores) in the Fill sentence where the answer goes.');
+      else if (n > 1) err(b.fill.line, 'Only one ___ in the Fill: sentence: it stands for the whole answer.', 'Keep exactly one ___ in the Fill sentence, standing for the whole answer.');
+      else if (words(f.replace(BLANK, ' ')) < 3) err(b.fill.line, 'Write the whole sentence around the ___, so it can be answered on its own.', 'Write the Fill sentence in full around the ___.');
+      else if (a && shows(f.replace(BLANK, ' '), it)) err(b.fill.line, 'The Fill: sentence shows the answer. The ___ should stand for the whole answer, and the rest of the sentence shouldn\'t repeat it.', 'Rewrite the Fill sentence so the answer appears only as the ___.');
+      if (f.length > MAX_QUESTION) err(b.fill.line, `The Fill: sentence is longer than ${MAX_QUESTION} characters.`, `Shorten the Fill sentence to at most ${MAX_QUESTION} characters.`);
+    } else if (q && b.a && !trueFalse && !yesNo && blanks(q) !== 1) {
+      // (a Yes/No answer is to become True/False, which has no Fill line)
+      issue(b.line, 'warn', NO_FILL, 'Add a Fill: line: the same fact as a sentence, with ___ where the answer goes.');
     }
 
     // wrong options
@@ -225,20 +253,20 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       const kind = (s: string) => (/\p{L}/u.test(s) ? 'words' : 'a number');
       const positional = ws.find((o) => POSITIONAL.test(o));
       const isAnswer = ws.find((o) => [a, ...also].some((x) => x && sameAnswer(o, x)));
-      if (trueFalse) err(line, 'A True/False question needs no Wrong: line: the other of True and False is its option.');
-      else if (ws.length < MIN_OPTIONS) err(line, `Write at least ${MIN_OPTIONS} wrong options, separated by ";".`);
-      else if (ws.length > MAX_OPTIONS) err(line, `At most ${MAX_OPTIONS} wrong options.`);
-      else if (ws.some((o) => o.length > MAX_ANSWER || words(o) > MAX_ANSWER_WORDS)) err(line, `A wrong option is too long: at most ${MAX_ANSWER_WORDS} words, like an answer.`);
-      else if (ws.some((o, i) => ws.slice(0, i).some((p) => sameAnswer(o, p)))) err(line, 'The same wrong option is written twice.');
-      else if (isAnswer) err(line, `"${isAnswer}" counts as the answer, so it can't be a wrong option.`);
-      else if (positional) err(line, `"${positional}" doesn't work: the options are shuffled. Write a real option instead.`);
+      if (trueFalse) err(line, 'A True/False question needs no Wrong: line: the other of True and False is its option.', 'Remove the Wrong: line (a True/False question has none).');
+      else if (ws.length < MIN_OPTIONS) err(line, `Write at least ${MIN_OPTIONS} wrong options, separated by ";".`, `Give ${MIN_OPTIONS} wrong options on the Wrong: line (it has ${ws.length}).`);
+      else if (ws.length > MAX_OPTIONS) err(line, `At most ${MAX_OPTIONS} wrong options.`, `Keep at most ${MAX_OPTIONS} wrong options.`);
+      else if (ws.some((o) => o.length > MAX_ANSWER || words(o) > MAX_ANSWER_WORDS)) err(line, `A wrong option is too long: at most ${MAX_ANSWER_WORDS} words, like an answer.`, `Shorten the wrong options to at most ${MAX_ANSWER_WORDS} words each.`);
+      else if (ws.some((o, i) => ws.slice(0, i).some((p) => sameAnswer(o, p)))) err(line, 'The same wrong option is written twice.', 'Replace the repeated wrong option with a different one.');
+      else if (isAnswer) err(line, `"${isAnswer}" counts as the answer, so it can't be a wrong option.`, `Replace the wrong option "${isAnswer}": it is a right answer.`);
+      else if (positional) err(line, `"${positional}" doesn't work: the options are shuffled. Write a real option instead.`, `Replace "${positional}" with a real wrong option.`);
       // the same kind as the answer, or as one of its other answers ("Zero", also "0", with numbers as options)
-      else if (a && ws.some((o) => ![a, ...also].some((x) => kind(x) === kind(o)))) err(line, `The wrong options must be the same kind as the answer: ${kind(a) === 'a number' ? 'numbers, like it' : 'words, not numbers on their own'}.`);
+      else if (a && ws.some((o) => ![a, ...also].some((x) => kind(x) === kind(o)))) err(line, `The wrong options must be the same kind as the answer: ${kind(a) === 'a number' ? 'numbers, like it' : 'words, not numbers on their own'}.`, `Make every wrong option ${kind(a) === 'a number' ? 'a number, like the answer' : 'words, like the answer, not a number on its own'}.`);
     }
-    if (trueFalse && b.also.length) err(b.also[0].line, 'A True/False question has no Also: line.');
+    if (trueFalse && b.also.length) err(b.also[0].line, 'A True/False question has no Also: line.', 'Remove the Also: line (a True/False question has none).');
 
     // the level
-    if (b.level && !DIFFICULTIES.includes(b.level.v.toLowerCase() as Difficulty)) err(b.level.line, 'The level must be easy, medium or hard.');
+    if (b.level && !DIFFICULTIES.includes(b.level.v.toLowerCase() as Difficulty)) err(b.level.line, 'The level must be easy, medium or hard.', `Change "Level: ${b.level.v}" to easy, medium or hard.`);
 
     // where it goes, how many, and repeats
     const cid = chapterId(c.boardCode, c.class, c.subjectCode, c.chapter_no);
@@ -246,7 +274,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     if (q) {
       const dupKey = `${chapterKey}\u0001${q.toLowerCase()}`;
       const earlier = seen.get(dupKey);
-      if (earlier) err(b.line, `Same question as line ${earlier}. Leave one of them out.`);
+      if (earlier) err(b.line, `Same question as line ${earlier}. Leave one of them out.`, 'Remove this question: it is written twice in the chapter.');
       else seen.set(dupKey, b.line);
     }
     for (const k of Object.keys(lastSet) as MetaKey[]) lastSet[k]!.used = true;
@@ -277,10 +305,11 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     perTopic.set(topicKey, n);
     const inChapter = (perChapter.get(chapterKey) ?? 0) + 1;
     perChapter.set(chapterKey, inChapter);
-    if (topicNo !== null && n === MAX_PER_TOPIC + 1) err(b.line, `Topic ${topicNo} has more than ${MAX_PER_TOPIC} questions from here on: at most ${MAX_PER_TOPIC} per topic.`);
-    else if (topicNo !== null && n > MAX_PER_TOPIC) err(b.line, `More than ${MAX_PER_TOPIC} questions in topic ${topicNo}.`);
-    if (inChapter === MAX_PER_CHAPTER + 1) err(b.line, `The chapter has more than ${MAX_PER_CHAPTER} questions from here on: at most ${MAX_PER_CHAPTER} per chapter.`);
-    else if (inChapter > MAX_PER_CHAPTER) err(b.line, `More than ${MAX_PER_CHAPTER} questions in this chapter.`);
+    const over = (what: string, most: number) => `Remove this question: ${what} can have at most ${most} questions.`;
+    if (topicNo !== null && n === MAX_PER_TOPIC + 1) err(b.line, `Topic ${topicNo} has more than ${MAX_PER_TOPIC} questions from here on: at most ${MAX_PER_TOPIC} per topic.`, over(`topic ${topicNo}`, MAX_PER_TOPIC));
+    else if (topicNo !== null && n > MAX_PER_TOPIC) err(b.line, `More than ${MAX_PER_TOPIC} questions in topic ${topicNo}.`, over(`topic ${topicNo}`, MAX_PER_TOPIC));
+    if (inChapter === MAX_PER_CHAPTER + 1) err(b.line, `The chapter has more than ${MAX_PER_CHAPTER} questions from here on: at most ${MAX_PER_CHAPTER} per chapter.`, over('the chapter', MAX_PER_CHAPTER));
+    else if (inChapter > MAX_PER_CHAPTER) err(b.line, `More than ${MAX_PER_CHAPTER} questions in this chapter.`, over('the chapter', MAX_PER_CHAPTER));
 
     const level = b.level?.v.toLowerCase() as Difficulty | undefined;
     rows.push({
@@ -310,11 +339,14 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
         block = { line, end: line, q: label.value, also: [], ctx: { ...ctx } };
         return;
       }
-      if (!block) return err(line, `This ${LABEL_NAME[label.key]} line has no Q: line above it. Each question starts with Q:.`);
+      if (!block) return err(line, `This ${LABEL_NAME[label.key]} line has no Q: line above it. Each question starts with Q:.`, 'Give it the Q: line it belongs to, or remove it.');
       block.end = line;
       const v = label.value;
       if (label.key === 'also') return void block.also.push({ v, line });
-      if (block[label.key]) return err(line, `This question already has a ${LABEL_NAME[label.key]} line${label.key === 'wrong' ? ': put all the wrong options on one line, separated by ";"' : ''}. Leave one out.`);
+      if (block[label.key]) {
+        return err(line, `This question already has a ${LABEL_NAME[label.key]} line${label.key === 'wrong' ? ': put all the wrong options on one line, separated by ";"' : ''}. Leave one out.`,
+          label.key === 'wrong' ? 'Put all the wrong options on one Wrong: line, separated by ";".' : `Keep one ${LABEL_NAME[label.key]} line.`);
+      }
       if (label.key === 'a') block.a = { v, line };
       else if (label.key === 'fill') block.fill = { v, line };
       else if (label.key === 'level') block.level = { v, line };
@@ -331,13 +363,19 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     // a loose line right under a question is part of it; after a blank line it stands on its own
     if (gap) close();
     if (block) block.end = line;
-    if (meta?.key === 'difficulty' || near === 'level') return err(line, 'Write the level under each question, as Level: easy (or medium, or hard).');
-    if (near) return err(line, `Write this label as ${LABEL_NAME[near]} (with a colon).`);
-    if (/^\(?[a-dA-D][.)]\s+\S/.test(t)) return err(line, 'Don\'t list options as a), b), c). Write the wrong options on one Wrong: line, separated by ";" (the answer is on the A: line).');
-    if (/^#{1,6}\s/.test(t)) return err(line, 'Headings aren\'t read. Write it as "Topic 2: Name" or "Chapter 1: Name", or leave it out.');
-    if (/\s\|\s|\t/.test(t)) return err(line, 'Write each question as a block: Q: and the question on one line, A: and the answer on the next, then its Fill:, Wrong: and Level: lines.');
-    if (block) return err(line, 'This line isn\'t part of the question. Start it with A:, Also:, Fill:, Wrong: or Level:, or start a new question with Q:. A question or answer must fit on one line.');
-    err(line, 'Start each question with Q:, and its answer on the next line with A:.');
+    if (meta?.key === 'difficulty' || near === 'level') return err(line, 'Write the level under each question, as Level: easy (or medium, or hard).', 'Remove this line, and put a Level: line in each question instead.');
+    if (near) return err(line, `Write this label as ${LABEL_NAME[near]} (with a colon).`, `Write the label as ${LABEL_NAME[near]}`);
+    if (/^\(?[a-dA-D][.)]\s+\S/.test(t)) {
+      return err(line, 'Don\'t list options as a), b), c). Write the wrong options on one Wrong: line, separated by ";" (the answer is on the A: line).',
+        `Replace "${t}" with one Wrong: line of ${MIN_OPTIONS} wrong options, separated by ";".`);
+    }
+    if (/^#{1,6}\s/.test(t)) return err(line, 'Headings aren\'t read. Write it as "Topic 2: Name" or "Chapter 1: Name", or leave it out.', 'Remove the heading, or write it as "Topic 2: Name".');
+    if (/\s\|\s|\t/.test(t)) {
+      issues.push({ line, level: 'error', text: 'Write each question as a block: Q: and the question on one line, A: and the answer on the next, then its Fill:, Wrong: and Level: lines.', fix: 'Write it as a full block: Q, A, Fill, Wrong and Level lines.', oneLine: true });
+      return;
+    }
+    if (block) return err(line, 'This line isn\'t part of the question. Start it with A:, Also:, Fill:, Wrong: or Level:, or start a new question with Q:. A question or answer must fit on one line.', `Remove the line "${t}", or start it with its label (A:, Also:, Fill:, Wrong: or Level:).`);
+    err(line, 'Start each question with Q:, and its answer on the next line with A:.', 'Remove this line, or write it as a question block.');
   });
   close();
 

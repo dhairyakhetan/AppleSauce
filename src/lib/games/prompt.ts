@@ -136,46 +136,66 @@ export const chatbotPrompt = (ch: ListChapter) =>
   `${chatbotInstructions(ch)}\n---\n\nMaterial (my notes or questions; if there is nothing here, write from the textbook):\n`;
 
 /**
- * "Copy prompt to fix them": every question the page turned away, with what is wrong with it, then the other problems,
- * the whole text as it is now, and last, to write the whole text again in one block. Self-contained, so it works in a
- * new chat as well as in the one that wrote the questions.
+ * "Copy prompt to fix them": each question the page turned away, with what to change, as short instructions for the
+ * chatbot (each problem's `fix`, not the page's wording); the other lines it couldn't use; the rules; the whole text as
+ * it is now; and last, to write the whole text again in one code block. Self-contained, so it works in a new chat as
+ * well as in the one that wrote the questions, and for questions a teacher typed.
  */
 export function fixPrompt(text: string, rows: Row[], issues: Issue[]): string {
   const lines = text.split(/\r?\n/);
   const { byRow, general } = problemsByRow(rows, issues);
   const quote = (n: number) => (lines[n - 1] ?? '').trim();
   const own = (r: Row, x: Issue) => x.line >= r.line && x.line <= (r.end ?? r.line);
-  const questions = [...byRow].map(([i, xs]) => ({ r: rows[i], xs: xs.filter((x) => own(rows[i], x)) })).filter((q) => q.xs.length);
-  // problems on a detail line belong to every question under it: they are listed once, with the line
-  const others = new Map<string, string>();
-  for (const xs of byRow.values()) for (const x of xs) if (!rows.some((r) => own(r, x))) others.set(`${x.line}\u0000${x.text}`, `Line "${quote(x.line)}": ${x.text}`);
-  for (const x of general) others.set(`${x.line}\u0000${x.text}`, `Line "${quote(x.line)}": ${x.text}`);
-  const gaps = missing(rows);
-  if (gaps.id) others.set('ids', `${gaps.id === rows.length ? 'The questions have' : `${gaps.id} questions have`} no complete Board, Class, Subject and Chapter lines above them. Start the text with those four lines.`);
+  const say = (x: Issue) => x.fix ?? x.text;
+  const unique = (xs: string[]) => [...new Set(xs)];
 
-  const listed = questions.map(({ r, xs }, k) => [
-    `${k + 1}. Q: ${r.question || '(no question)'}`,
-    ...[...new Set(xs.map((x) => x.text))].map((t) => `   - ${t}`),
-  ].join('\n'));
+  // the questions to fix, in the order they are written: blocks with problems on their own lines, and questions
+  // written on one line
+  const items: { at: number; head: string; fixes: string[] }[] = [];
+  for (const [i, xs] of byRow) {
+    const r = rows[i];
+    const mine = xs.filter((x) => own(r, x));
+    if (!mine.length) continue;
+    // what to change first, then what to add
+    const fixes = unique(mine.map(say)).sort((x, y) => Number(x.startsWith('Add ')) - Number(y.startsWith('Add ')));
+    // a question being fixed is made whole, as the first prompt asks of every question
+    const trueFalse = /^(true|false|yes|no)$/i.test(r.answer.trim());
+    if (!trueFalse && !r.wrong_options.length && !fixes.some((f) => f.includes('Wrong:'))) fixes.push(`Add a Wrong: line with ${MIN_OPTIONS} wrong options, separated by ";".`);
+    if (!r.difficulty && !fixes.some((f) => f.includes('Level:'))) fixes.push(`Add a Level: line (${or(DIFFICULTIES)}).`);
+    items.push({ at: r.line, head: `Q: ${r.question || '(no question)'}${r.answer ? `\n   A: ${r.answer}` : ''}`, fixes });
+  }
+  for (const x of general) if (x.oneLine) items.push({ at: x.line, head: `The line "${quote(x.line)}"`, fixes: [say(x)] });
+  items.sort((a, b) => a.at - b.at);
+
+  // the other lines: a stray line, or a detail line (whose problem every question under it shares), listed once
+  const others = new Map<string, string>();
+  for (const xs of byRow.values()) for (const x of xs) if (!rows.some((r) => own(r, x))) others.set(`${x.line}\u0000${say(x)}`, `"${quote(x.line)}": ${say(x)}`);
+  for (const x of general) if (!x.oneLine) others.set(`${x.line}\u0000${say(x)}`, `"${quote(x.line)}": ${say(x)}`);
+  const gaps = missing(rows);
+  if (gaps.id) others.set('ids', 'Start the text with complete Board, Class, Subject and Chapter lines.');
+
+  const listed = items.map(({ head, fixes }, k) => [`${k + 1}. ${head}`, ...fixes.map((f) => `   - ${f}`)].join('\n'));
+  const fence = text.includes(FENCE) ? '````' : FENCE;
 
   return `# Fix these revision questions
 
-I pasted your questions into the revision games page. It checks every line, and turned these away:
+A page that checks revision questions turned these away. Fix exactly what is listed, and keep everything else as it is.
 
 ${listed.length ? listed.join('\n\n') : '(no question by itself)'}
-${others.size ? `\nOther problems:\n\n${[...others.values()].map((t) => `- ${t}`).join('\n')}\n` : ''}
-The format, as a reminder: each question is a block of lines, Q: the question, A: the answer, Also: another right answer (only if there is one, one per line), Fill: a sentence with ___ where the answer goes, Wrong: ${MIN_OPTIONS} wrong options separated by ";", Level: ${or(DIFFICULTIES)}. Every question has Q, A, Fill, Wrong and Level; a True/False question has only Q: a statement and A: True or A: False.
-
-The rules every question must follow, including any you rewrite:
-- The question makes sense on its own (never "of the following", "which of these", "the above" or a figure), and never contains its answer.
-- The answer is exactly what a student types: at most ${MAX_ANSWER_WORDS} words, no brackets or notes, no "/" between two answers, units in the question rather than the answer, and only keyboard characters (else an Also line with ordinary keys, such as x^2).
+${others.size ? `\nOther lines to fix:\n\n${[...others.values()].map((t) => `- ${t}`).join('\n')}\n` : ''}
+Every question you fix or write follows these rules:
+- Its lines: Q (the question), A (the answer), Also (only for another right answer, one per line), Fill (the same fact as a sentence, with ___ where the answer goes), Wrong (${MIN_OPTIONS} wrong options separated by ";"), Level (${or(DIFFICULTIES)}). A True/False question has only Q (a statement) and A: True or A: False.
+- Q makes sense on its own (no "of the following", "the above" or figure), and never contains its answer.
+- A is exactly what a student types: at most ${MAX_ANSWER_WORDS} words, no brackets or notes, units in the question, and only keyboard characters (else an Also line typed with ordinary keys).
 - Fill has exactly one ___, standing for the whole answer, and doesn't repeat it.
-- The wrong options are the same kind as the answer, and none of them counts as the answer.
+- The wrong options are the same kind as the answer, and none of them is right.
 
-The whole text as I pasted it:
+The text:
 
-${text.includes(FENCE) ? `\`${block(text.trimEnd())}\`` : block(text.trimEnd())}
+${fence}
+${text.trimEnd()}
+${fence}
 
-Fix every problem listed above, and keep everything else exactly as it is: the same chapter and Topic lines, and every other question unchanged. Then write the entire question text again, from the Board line to the last question, in ONE code block, so I can copy all of it at once.
+Write the entire text again, from the Board line to the last question, with these fixes and nothing else changed. Put all of it in ONE code block, so I can copy it at once.
 `;
 }

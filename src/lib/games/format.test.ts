@@ -128,6 +128,16 @@ describe('the checks, each on the line to fix', () => {
     expect(found.some(([l, lv, t]) => l === line && lv === level && text.test(String(t))), JSON.stringify(found)).toBe(true);
   });
 
+  it("doesn't ask a Yes/No question for a Fill line: it is to become True/False, which has none", () => {
+    const found = problems('Q: Is the Sun a star\nA: Yes');
+    expect(found.map(([, , t]) => t)).toEqual([expect.stringMatching(/^Yes or No/)]);
+  });
+
+  it('tells a number with a unit symbol to put the unit in the question', () => {
+    expect(problems('Q: Normal temperature of the human body\nA: 37 °C\nFill: The body is at ___.')).toContainEqual([2, 'error', expect.stringMatching(/Put the unit in the question/)]);
+    expect(problems('Q: Area of a square of side 2 m\nA: 4 m²\nFill: Its area is ___.')).toContainEqual([2, 'error', expect.stringMatching(/Put the unit in the question/)]);
+  });
+
   it('a number or a single letter in the question is not a giveaway (x + 4 = 8, Vitamin A)', () => {
     expect(problems('Q: If x + 4 = 8, what is x?\nA: 4\nFill: When x + 4 = 8, x is ___.\nWrong: 2; 8; 12')).toEqual([]);
     expect(problems('Q: Deficiency of which vitamin causes night blindness, a common eye problem\nA: Vitamin A\nFill: Lack of ___ causes night blindness.\nWrong: Vitamin C; Vitamin D; Vitamin K')).toEqual([]);

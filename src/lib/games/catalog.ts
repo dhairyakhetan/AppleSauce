@@ -16,6 +16,8 @@ export const sameName = (a: string, b: string) => {
 };
 
 const topicsOf = (ch: ListChapter) => ch.topics.map((t) => `${t.topic_no} ${t.name}`).join(', ');
+const quoteTopic = (t: ListChapter['topics'][number]) => `"Topic ${t.topic_no}: ${t.name}"`;
+const quoteTopics = (ch: ListChapter) => ch.topics.map(quoteTopic).join(', ');
 
 /** The chapters on the list for a board, class and subject (as written in the detail boxes), in order. */
 export function chaptersFor(list: ListChapter[], board: string, cls: string, subject: string): ListChapter[] {
@@ -46,7 +48,8 @@ export function checkList(text: string, rows: Row[], list: ListChapter[]): { iss
   });
 
   const issues = new Map<string, Issue>();
-  const say = (line: number, text: string) => issues.set(`${line}\u0000${text}`, { line, level: 'error', text });
+  // text: what the page says; fix: what the fix prompt tells a chatbot to do (prompt.ts)
+  const say = (line: number, text: string, fix: string) => issues.set(`${line}\u0000${text}`, { line, level: 'error', text, fix });
   const blocked = new Set<number>();
 
   for (const r of rows) {
@@ -56,34 +59,45 @@ export function checkList(text: string, rows: Row[], list: ListChapter[]): { iss
     const chapter = list.find((c) => c.chapter_id === r.chapter_id);
     if (!chapter) {
       const here = list.filter((c) => c.board === r.board && c.class === r.class && c.subject === r.subject).sort((x, y) => x.chapter_no - y.chapter_no);
+      const named = here.find((c) => sameName(c.name, r.chapter));
       say(atChapter, here.length
         ? `Chapter ${r.chapter_no} isn't on the list for ${r.board} class ${r.class} ${r.subject}. The list has ${here.map((c) => `${c.chapter_no}: ${c.name}`).join('; ')}.`
-        : `The list has no chapters for ${r.board} class ${r.class} ${r.subject} yet, so these questions can't be sent.`);
+        : `The list has no chapters for ${r.board} class ${r.class} ${r.subject} yet, so these questions can't be sent.`,
+      named
+        ? `Change it to "Chapter ${named.chapter_no}: ${named.name}", its number on the list.`
+        : here.length
+          ? `Use one of these Chapter lines, the one the questions are from: ${here.map((c) => `"Chapter ${c.chapter_no}: ${c.name}"`).join(', ')}.`
+          : `Check the Board, Class and Subject lines: there is no ${r.board} class ${r.class} ${r.subject} on the list.`);
       blocked.add(r.line);
       continue;
     }
     if (!sameName(chapter.name, r.chapter)) {
-      say(atChapter, `On the list, chapter ${chapter.chapter_no} is called "${chapter.name}".`);
+      const named = list.find((c) => c.board === r.board && c.class === r.class && c.subject === r.subject && sameName(c.name, r.chapter));
+      say(atChapter, `On the list, chapter ${chapter.chapter_no} is called "${chapter.name}".`,
+        named ? `Change it to "Chapter ${named.chapter_no}: ${named.name}", its number on the list.` : `Change it to "Chapter ${chapter.chapter_no}: ${chapter.name}", its name on the list.`);
       blocked.add(r.line);
     }
     if (!chapter.topics.length) {
       if (r.topic_no !== null) {
-        say(atTopic, `Chapter ${chapter.chapter_no} has no topics on the list, so its questions go without a Topic line.`);
+        say(atTopic, `Chapter ${chapter.chapter_no} has no topics on the list, so its questions go without a Topic line.`, 'Remove this Topic line: the chapter has no topics, so its questions go straight under the Chapter line.');
         blocked.add(r.line);
       }
       continue;
     }
     if (r.topic_no === null) {
-      say(r.line, `This question needs a Topic line above it. Chapter ${chapter.chapter_no}'s topics: ${topicsOf(chapter)}.`);
+      say(r.line, `This question needs a Topic line above it. Chapter ${chapter.chapter_no}'s topics: ${topicsOf(chapter)}.`, `Put it under the one of these Topic lines it belongs to: ${quoteTopics(chapter)}.`);
       blocked.add(r.line);
       continue;
     }
     const topic = chapter.topics.find((t) => t.topic_no === r.topic_no);
+    // the topic the line names, if it is on the list under another number: renumber it rather than rename it
+    const named = chapter.topics.find((t) => sameName(t.name, r.topic));
+    const renumber = named ? `Change it to ${quoteTopic(named)}, its number on the list.` : `Use one of these Topic lines, the one its questions belong to: ${quoteTopics(chapter)}.`;
     if (!topic) {
-      say(atTopic, `Chapter ${chapter.chapter_no} has no topic ${r.topic_no} on the list. Its topics: ${topicsOf(chapter)}.`);
+      say(atTopic, `Chapter ${chapter.chapter_no} has no topic ${r.topic_no} on the list. Its topics: ${topicsOf(chapter)}.`, renumber);
       blocked.add(r.line);
     } else if (!sameName(topic.name, r.topic)) {
-      say(atTopic, `On the list, topic ${topic.topic_no} of chapter ${chapter.chapter_no} is called "${topic.name}".`);
+      say(atTopic, `On the list, topic ${topic.topic_no} of chapter ${chapter.chapter_no} is called "${topic.name}".`, renumber);
       blocked.add(r.line);
     }
   }
