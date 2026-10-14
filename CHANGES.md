@@ -93,11 +93,13 @@ the checker and makes every game).
 
 ---
 
-## Setting up the database (for Kanish)
+## Setting up the database (for Kanishk)
 
 Run these in the Supabase dashboard's SQL editor. Neither script touches anything outside the `games` schema.
 
-**Before anything: take a backup** (Database, then Backups, or `pg_dump`). The live database has no backup history.
+**Before anything: take a backup.** The project is on Supabase's free plan, so the dashboard has no backup to
+download: it has to be a `pg_dump` (or `supabase db dump`), which needs the database password from the project's
+database settings. The database is about 490 MB.
 
 ### 1. Install the `games` schema: `supabase/games/install.sql`
 
@@ -149,6 +151,35 @@ knows.
 Sign in to the site with the moderator's Google account, open `/games/team`, and add people by their Google email.
 
 ---
+
+## Checked against the live database (13 October 2026)
+
+Kanishk's Claude ran a read-only report on the live project (`select` only, no personal data, no question text). What
+it settled for the games team:
+
+- **The name `games` is free**: no schema, table, function or role has "game" in its name.
+- **Nothing would reach into a new schema.** Default permissions are set per schema, and none is set for `games`, so a
+  new table there starts closed. No publication covers all tables, so Realtime would not pick the tables up. The six
+  event triggers are Supabase's own: they reload the API's schema cache and look after extensions.
+- **Sign-in is the version tested here.** The live sign-in server is at the same schema version as the one these
+  checks were measured on (`20260831180000`), and `auth.jwt()` reads the token the same way. Sessions in use: 658
+  `oauth`, 3 `password`, 2 `otp` (an email link, last used in March). 576 of 585 accounts sign in with Google only, and
+  none has a phone. The two email sign-ups in the last 180 days were confirmed instantly with no email sent, which is
+  what "Confirm email" being off looks like, so the rule that a password doesn't count still matters. Two accounts
+  have both a password and Google.
+- **No role is in the token.** Every Shikshaq role check reads a table by `auth.uid()`, and no auth hook exists, so the
+  games team's own list is the only thing that decides who is on it.
+- **Time limits.** The live database stops a signed-in request after 8 seconds (3 for signed out). On Supabase's own
+  Postgres, with the same limits, sending 500 questions takes about half a second, and stays there as a chapter grows
+  past 1,500.
+- **The chapters on the site.** Chapters are a free-text label on each paper question, with no number, order, topic
+  or syllabus table anywhere. Only Mathematics has a real list (CBSE X and XII, ICSE III to X, ISC XI and XII). Classes
+  are stored as Roman numerals, and ISC papers for classes XI and XII are partly filed under ICSE. The games list
+  therefore has to be written: its chapter numbers, order and topics are set in `games`, not taken from Shikshaq.
+
+Two changes came out of it: a topic that already holds 999 questions (the most a three-digit question number allows)
+now refuses a send with a plain message instead of a database error, and the subject is spelt "History & Civics", as
+Shikshaq spells it everywhere ("History and Civics" still reads as the same subject).
 
 ## How sign-in works for the games team (measured, not assumed)
 
@@ -286,7 +317,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | --- | --- |
 | `npx tsc -b` | Clean. The games files were also checked with `strict` and unused-code checks on: clean. |
 | `npx eslint .` | 0 errors, 212 warnings, the same 212 as before this change. The games files have none. |
-| `npm test` | 148 files, 2,292 tests, all pass (140 files and 2,085 tests before). |
+| `npm test` | 148 files, 2,293 tests, all pass (140 files and 2,085 tests before). |
 | Stand-in chatbots (AI agents given only the copied prompt, as a teacher would paste it) | Four chapters: Science (Heat, no material), History (From Trade to Territory, with notes), Mathematics (Basic Geometrical Ideas, no material) and Science with no topics (Nutrition in Animals); two smaller and two larger models. 181 questions in all, each reply one code block. Three were turned away: one was the checker's mistake ("Zero" with an Also "0" and numbers as options; fixed), and two repeated the answer as an Also line with a space ("End point" for "Endpoint"; the prompt now says not to). Every topic made all five games, in at most 25 ms. The fix prompt was given to a smaller model in a new chat, with a messy hand-written text (13 problems in 6 questions: a one-line question, a note in brackets, a degree sign, Yes as an answer, a repeated Also, a)/b) options, a made-up level). After two rounds of tightening the fix prompt (a short list of the rules, and that every question has all its lines), all 6 came back passing in one reply, in one code block. The fix prompt was then rewritten from the owner's review of one (it asked a Yes/No question for a Fill line, repeated the page's explanations, and gave the wrong advice for "37 °C"), and given to a smaller model with a text that also had two topics under the wrong numbers: all 9 questions came back passing in one round, the three good ones byte for byte, and the topics renumbered rather than renamed. |
 | Both SQL scripts on Supabase's own Postgres 17 (local) | Install (the current script, run again after the last changes): as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions, with the `also`, `fill` and `wrong_options` columns; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
 | Real network calls, local Supabase, real OAuth sign-in | The site's calls go to `/rest/v1/rpc/<function>` with the `games` profile, and return 200. After the last changes: a question with other answers, a fill-in sentence and wrong options went in whole; a sentence with two blanks and an other answer repeating the answer were refused with their messages; the HoD saw the sender's name and email; approved, the bank held every part. A member wrote questions with the chapter picker and a topic button. An off-list topic was underlined and held back. One question was sent as batch `B20261012-01`. The HoD approved it, and Try the games played it from the bank. A password session got `reauth` from `games.my_role()` and the "Sign in with Google" page. Signed out: refused. Tables can't be read directly. |
@@ -298,6 +329,8 @@ here.
 
 ## Still to do
 
-- **The list itself.** Kanish is sending the boards, classes, chapters and topics. It goes in through `list.sql`
-  (above). Until then nothing can be sent.
+- **The list itself.** The live report shows the site has chapter names for Mathematics only, and no numbers, order
+  or topics, so the list is to be written. It goes in through `list.sql` (above). Until then nothing can be sent.
+- **The dashboard settings** Kanishk's report left open: whether "Confirm email" and "Allow manual linking" are on,
+  any auth hook, the redirect URLs, email sending limits, and the exposed schemas.
 - **Run the two scripts on the live database**, with a backup first (above).

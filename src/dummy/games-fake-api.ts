@@ -726,6 +726,9 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
     }
     const tno = r.topic_no ?? 0;
     const n = Math.max(0, ...s.questions.filter((x) => x.chapter_id === cid && (x.topic_no ?? 0) === tno).map((x) => x.question_no)) + 1;
+    if (n > 999) {
+      throw new Error(`${r.topic_no === null ? `Chapter ${r.chapter_no} ("${r.chapter}")` : `Topic ${r.topic_no} ("${r.topic}") of chapter ${r.chapter_no}`} already has 999 questions, the most it can hold. Nothing was sent.`);
+    }
     const id = `${cid}T${pad2(tno)}Q${String(n).padStart(3, '0')}`;
     s.questions.push({
       ...r, line: 0, end: undefined, under: undefined, question: r.question.trim(), answer: r.answer.trim(), also: r.also.map((o) => o.trim()), fill: r.fill?.trim() || null,
@@ -849,7 +852,16 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
           const why = codesProblem(r) ?? onTheList(s.catalog, r).problem;
           if (why) throw new Error(why);
         }
-        const r = add(s, part, DUMMY_ME);
+        // and if one can't be numbered, nothing in the batch is kept
+        const kept = { questions: s.questions.length, batches: s.batches.length };
+        let r: ReturnType<typeof add>;
+        try {
+          r = add(s, part, DUMMY_ME);
+        } catch (e) {
+          s.questions.length = kept.questions;
+          s.batches.length = kept.batches;
+          throw e;
+        }
         if (r.batchId) out.batchIds.push(r.batchId);
         out.sent += r.ids.length;
         out.already += r.already;

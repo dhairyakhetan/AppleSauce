@@ -248,7 +248,7 @@ export const SUBJECTS: { name: string; code: string; also: string[] }[] = [
   { name: 'History', code: 'HIS', also: ['hist', 'इतिहास'] },
   { name: 'Geography', code: 'GEO', also: ['geo', 'भूगोल'] },
   { name: 'Civics', code: 'CIV', also: ['citizenship', 'citizenship studies'] },
-  { name: 'History and Civics', code: 'HCV', also: [] },
+  { name: 'History & Civics', code: 'HCV', also: [] }, // as Shikshaq spells it; "History and Civics" reads the same
   { name: 'Political Science', code: 'POL', also: ['pol sci', 'polity', 'politics', 'global politics', 'राजनीति विज्ञान'] },
   { name: 'Economics', code: 'ECO', also: ['eco', 'economic', 'अर्थशास्त्र'] },
   { name: 'Sociology', code: 'SOC', also: [] },

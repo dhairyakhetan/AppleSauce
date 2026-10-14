@@ -284,6 +284,19 @@ describe('the fixed list and sending', () => {
     expect(days).toEqual(days.map((_, i) => `B${day}-${String(i + 1).padStart(2, '0')}`)); // no gaps
   });
 
+  it('says plainly when a topic is full (999 questions, as the IDs have three digits), and keeps nothing from that batch', async () => {
+    const day = (await admin(`select to_char(now() at time zone 'Asia/Kolkata', 'YYYYMMDD') d`))[0].d;
+    await admin(`insert into games.batches (batch_id, teacher, teacher_email) values ('B${day}-99', 'Bulk', 'bulk@x.in')`);
+    await admin(`insert into games.questions (question_id, batch_id, chapter_id, topic_id, board, class, subject, chapter_no, chapter, topic_no, topic, question_no, question, answer)
+      values ('CBSE10SCI01T05Q999', 'B${day}-99', 'CBSE10SCI01', 'CBSE10SCI01T05', 'CBSE', 10, 'Science', 1, 'Chemical Reactions', 5, 'Topic 5', 999, 'The last one?', 'Yes')`);
+    const before = await count('games.questions');
+    refused(await send('bulk@x.in', [Q('Fits elsewhere?', 'Yes'), Q('One too many?', 'No', { topic_no: 5, topic: 'Topic 5' })]),
+      /^Topic 5 \("Topic 5"\) of chapter 1 already has 999 questions, the most it can hold\. Nothing was sent\.$/);
+    expect(await count('games.questions')).toBe(before);
+    await admin(`delete from games.questions where question_id = 'CBSE10SCI01T05Q999'`);
+    await admin(`delete from games.batches where batch_id = 'B${day}-99'`);
+  });
+
   it('keeps the wrong options of a multiple-choice question, and refuses broken ones', async () => {
     const r = await sent('zed@x.in', [Q('Gas in chip packets?', 'Nitrogen', { wrong_options: [' Oxygen ', 'Hydrogen', 'Carbon dioxide'] }), Q('Plain one?', 'Yes')]);
     const rows = await admin('select question, wrong_options from games.questions where question_id = any($1) order by question', [r.question_ids]);

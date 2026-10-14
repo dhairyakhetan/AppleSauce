@@ -416,7 +416,7 @@ describe('subjects', () => {
   it('knows subjects and short names, and gives each a unique three-letter code', () => {
     expect(checkSubject('maths')).toEqual({ name: 'Mathematics', code: 'MAT' });
     expect(checkSubject('Chem')).toEqual({ name: 'Chemistry', code: 'CHE' });
-    expect(checkSubject('history & civics')).toEqual({ name: 'History and Civics', code: 'HCV' });
+    expect(checkSubject('history & civics')).toEqual({ name: 'History & Civics', code: 'HCV' });
     const codes = SUBJECTS.map((s) => s.code);
     expect(new Set(codes).size).toBe(codes.length);
     expect(codes.every((c) => /^[A-Z]{3}$/.test(c))).toBe(true);

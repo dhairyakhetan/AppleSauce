@@ -273,7 +273,7 @@ insert into games.subjects (name, code) values
   ('Electricity and Electronics', 'EEL'), ('Technical Drawing', 'TDR'),
   ('Geometrical and Mechanical Drawing', 'GMD'), ('Geometrical and Building Drawing', 'GBD'),
   ('Design and Technology', 'DTE'), ('Social Science', 'SST'), ('History', 'HIS'), ('Geography', 'GEO'),
-  ('Civics', 'CIV'), ('History and Civics', 'HCV'), ('Political Science', 'POL'), ('Economics', 'ECO'),
+  ('Civics', 'CIV'), ('History & Civics', 'HCV'), ('Political Science', 'POL'), ('Economics', 'ECO'),
   ('Sociology', 'SOC'), ('Psychology', 'PSY'), ('Philosophy', 'PHI'), ('Anthropology', 'ANT'),
   ('Religious Studies', 'REL'), ('Global Perspectives', 'GLP'), ('Theory of Knowledge', 'TOK'),
   ('Legal Studies', 'LGS'), ('Knowledge Traditions and Practices of India', 'KTP'),
@@ -580,6 +580,11 @@ begin
       continue;
     end if;
     select coalesce(max(x.question_no), 0) + 1 into n from games.questions x where x.chapter_id = cid and coalesce(x.topic_no, 0) = coalesce(tno, 0);
+    -- a question ID has three digits for its number (Q001 to Q999)
+    if n > 999 then
+      raise exception '% already has 999 questions, the most it can hold. Nothing was sent.',
+        case when tno is null then format('Chapter %s ("%s")', ch.chapter_no, ch.name) else format('Topic %s ("%s") of chapter %s', tno, tp.name, ch.chapter_no) end;
+    end if;
     insert into games.questions (question_id, batch_id, chapter_id, topic_id, board, class, subject, chapter_no, chapter,
                                  topic_no, topic, question_no, question, answer, also, fill, wrong_options, difficulty)
     values (cid || 'T' || lpad(coalesce(tno, 0)::text, 2, '0') || 'Q' || lpad(n::text, 3, '0'), bid, cid,
