@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { format, MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, missing, NO_FILL } from './format';
+import { checkList } from './catalog';
 import { chapterLines, chatbotInstructions, chatbotPrompt, EXAMPLE_BLOCKS, fixPrompt, formatExample, topicLines } from './prompt';
 import { DIFFICULTIES, type ListChapter } from './rows';
 
@@ -68,14 +69,25 @@ describe('the chatbot prompt agrees with the checker', () => {
     }
   });
 
-  it('for a chapter with no topics, asks for no Topic lines', () => {
+  it('for a chapter the list gives no topics, asks the chatbot to divide it into topics, and the page takes them', () => {
     const plain = chatbotInstructions(NO_TOPICS);
-    expect(plain).toContain('This chapter has no topics: write no Topic lines.');
-    expect(plain).not.toMatch(/^Topic \d/m);
-    expect(plain).toContain(`never more than ${MAX_PER_CHAPTER}`);
-    const { rows, issues } = format(formatExample(NO_TOPICS));
-    expect(issues).toEqual([]);
-    expect(rows.every((r) => r.chapter_id === 'ICSE06GEO02' && r.topic_no === null)).toBe(true);
+    expect(plain).toContain("Its topics aren't fixed, so divide the questions into topics yourself");
+    expect(plain).toMatch(/A topic is a part of the chapter that the textbook gives a heading of its own/);
+    expect(plain).toMatch(/2 to 6 topics, fewer if the chapter is short, numbered from 1 in the order the chapter teaches them\. Write each as "Topic 1: Name"/);
+    expect(plain).not.toMatch(/^Topic \d/m); // no topics of its own to keep yet
+    expect(plain).toContain(`never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter`);
+    // a reply shaped the way it asks: topics of its own, each over its questions
+    const reply = `${chapterLines(NO_TOPICS)}\n\nTopic 1: Mountains\n\n${EXAMPLE_BLOCKS}\n\nTopic 2: Plateaus\n\nQ: Flat land raised above its surroundings\nA: Plateau\nFill: A raised flat land is a ___.\nWrong: Valley; Delta; Plain\nLevel: easy`;
+    const { rows, issues } = format(reply);
+    expect([...issues, ...checkList(reply, rows, [NO_TOPICS]).issues]).toEqual([]);
+    expect(new Set(rows.map((r) => r.topic_id))).toEqual(new Set(['ICSE06GEO02T01', 'ICSE06GEO02T02']));
+  });
+
+  it('for such a chapter with topics already in use, asks it to keep them and number new ones after them', () => {
+    const inUse: ListChapter = { ...NO_TOPICS, open: true, topics: [{ topic_id: 'ICSE06GEO02T01', topic_no: 1, name: 'Mountains' }, { topic_id: 'ICSE06GEO02T02', topic_no: 2, name: 'Plateaus' }] };
+    const t = chatbotInstructions(inUse);
+    expect(t).toContain(`These topics are already in use for this chapter. Keep them, written exactly like this, for the questions that belong there, and number any new topic from 3:\n\n\`\`\`\n${topicLines(inUse)}\n\`\`\``);
+    expect(chatbotInstructions(HEAT)).toContain("Its topics are fixed."); // a chapter the list gives topics keeps only those
   });
 
   it('carries nothing about other boards, subjects or chapters, and nothing about the site', () => {

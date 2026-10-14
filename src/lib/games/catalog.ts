@@ -1,7 +1,9 @@
 /**
- * The fixed list of chapters and topics (games.chapters and games.topics in the database): questions can only be
- * written for a chapter and topic on it, under its names. The database refuses anything else when it is sent; this
- * checks the Questions box against the list as the person writes, so they see why on the line itself.
+ * The fixed list of chapters (games.chapters in the database): questions can only be written for a chapter on it, under
+ * its name. Where the list gives a chapter topics (games.topics), only those; where it gives none, the chapter is open:
+ * its questions may go under topics of their own, and the first one sent under a new topic adds it to the chapter, so
+ * a topic keeps one number and one name. The database refuses anything else when it is sent; this checks the Questions
+ * box against the list as the person writes, so they see why on the line itself.
  *
  * Pure: the list is loaded by the page (api.loadCatalog) and passed in.
  */
@@ -14,6 +16,9 @@ export const sameName = (a: string, b: string) => {
   const n = (t: string) => t.trim().replace(/[\s?.!:;,।]+$/u, '').replace(/\s+/g, ' ').toLowerCase();
   return n(a) === n(b);
 };
+
+/** A chapter whose topics the list doesn't fix: its questions may go under topics of their own (or none). */
+export const isOpen = (ch: ListChapter) => ch.open ?? ch.topics.length === 0;
 
 const topicsOf = (ch: ListChapter) => ch.topics.map((t) => `${t.topic_no} ${t.name}`).join(', ');
 const quoteTopic = (t: ListChapter['topics'][number]) => `"Topic ${t.topic_no}: ${t.name}"`;
@@ -47,6 +52,17 @@ export function checkList(text: string, rows: Row[], list: ListChapter[]): { iss
     topicLine[i + 1] = tp;
   });
 
+  // the topics each open chapter's questions are written under, in the order they come, for one number and one name each
+  const written = new Map<string, { byNo: Map<number, string>; byName: Map<string, number>; nos: Set<number> }>();
+  for (const r of rows) {
+    if (r.chapter_id && r.topic_no !== null) {
+      const w = written.get(r.chapter_id) ?? { byNo: new Map(), byName: new Map(), nos: new Set<number>() };
+      w.nos.add(r.topic_no);
+      written.set(r.chapter_id, w);
+    }
+  }
+  const key = (name: string) => name.trim().replace(/[\s?.!:;,।]+$/u, '').replace(/\s+/g, ' ').toLowerCase();
+
   const issues = new Map<string, Issue>();
   // text: what the page says; fix: what the fix prompt tells a chatbot to do (prompt.ts)
   const say = (line: number, text: string, fix: string) => issues.set(`${line}\u0000${text}`, { line, level: 'error', text, fix });
@@ -77,11 +93,31 @@ export function checkList(text: string, rows: Row[], list: ListChapter[]): { iss
         named ? `Change it to "Chapter ${named.chapter_no}: ${named.name}", its number on the list.` : `Change it to "Chapter ${chapter.chapter_no}: ${chapter.name}", its name on the list.`);
       blocked.add(r.line);
     }
-    if (!chapter.topics.length) {
-      if (r.topic_no !== null) {
-        say(atTopic, `Chapter ${chapter.chapter_no} has no topics on the list, so its questions go without a Topic line.`, 'Remove this Topic line: the chapter has no topics, so its questions go straight under the Chapter line.');
-        blocked.add(r.line);
+    if (isOpen(chapter)) {
+      if (r.topic_no === null || !r.topic) continue; // no topic is fine here; a Topic line with no name is the formatter's
+      const w = written.get(chapter.chapter_id)!;
+      const next = Math.max(0, ...chapter.topics.map((t) => t.topic_no), ...w.nos) + 1;
+      const taken = chapter.topics.find((t) => t.topic_no === r.topic_no);
+      const known = chapter.topics.find((t) => sameName(t.name, r.topic));
+      const earlierName = w.byNo.get(r.topic_no);
+      const earlierNo = w.byName.get(key(r.topic));
+      if (taken && !sameName(taken.name, r.topic)) {
+        say(atTopic, `Topic ${taken.topic_no} of chapter ${chapter.chapter_no} is already "${taken.name}".`,
+          `Change it to ${quoteTopic(taken)} if its questions belong there; otherwise number it ${next}: "Topic ${next}: ${r.topic}".`);
+      } else if (!taken && known) {
+        say(atTopic, `Chapter ${chapter.chapter_no} already has "${known.name}" as topic ${known.topic_no}.`, `Change it to ${quoteTopic(known)}, its number in this chapter.`);
+      } else if (!taken && earlierName !== undefined && !sameName(earlierName, r.topic)) {
+        say(atTopic, `Topic ${r.topic_no} is "${earlierName}" earlier in the text.`, `Number it ${next} instead: "Topic ${next}: ${r.topic}".`);
+      } else if (!taken && earlierNo !== undefined && earlierNo !== r.topic_no) {
+        say(atTopic, `"${r.topic}" is topic ${earlierNo} earlier in the text.`, `Change it to "Topic ${earlierNo}: ${r.topic}".`);
+      } else {
+        if (!taken) {
+          w.byNo.set(r.topic_no, r.topic);
+          w.byName.set(key(r.topic), r.topic_no);
+        }
+        continue;
       }
+      blocked.add(r.line);
       continue;
     }
     if (r.topic_no === null) {

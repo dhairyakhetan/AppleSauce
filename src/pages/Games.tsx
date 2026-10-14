@@ -144,7 +144,8 @@ export function GamesPage({ api, dummy = false, banner, me }: {
     setAlerts((a) => ({ ...a, list: a.list?.map((x) => (ids.includes(x.id) ? { ...x, seen: true } : x)) }));
     api.markSentBackSeen(ids).catch(() => {});
   }, [api]);
-  const sent = useCallback(() => { recount(); setAlertsTry((n) => n + 1); }, [recount]);
+  // and the list again: a send can add topics to a chapter whose topics are open
+  const sent = useCallback(() => { recount(); setAlertsTry((n) => n + 1); setCatalogTry((n) => n + 1); }, [recount]);
   const unseen = alerts.list?.filter((a) => !a.seen).length ?? 0;
 
   // a part stays mounted once opened

@@ -243,10 +243,36 @@ describe('the fixed list and sending', () => {
     refused(await send('ann@x.in', [Q('Topic 9?', 'A', { topic_no: 9, topic_id: 'CBSE10SCI01T09' })]), /no topic 9 on the list/);
     refused(await send('ann@x.in', [Q('Wrong topic name?', 'A', { topic: 'Balancing' })]), /Topic 1 of chapter 1 is called "Equations" on the list, not "Balancing"/);
     refused(await send('ann@x.in', [Q('No topic?', 'A', { topic_no: null, topic_id: null, topic: '' })]), /has no topic/);
-    refused(await send('ann@x.in', [Q('Topic where there are none?', 'A', { board: 'Maharashtra State Board', chapter_id: 'MH10SCI01', chapter: 'Gravitation', topic_id: null })]), /no topics on the list/);
     const r = await sent('ann@x.in', [Q('Case and spaces in the names?', 'Fine', { chapter: '  chemical   reactions ', topic: 'equations.' })]);
     expect((await admin('select chapter, topic from games.questions where question_id = $1', [r.question_ids[0]]))[0]).toEqual({ chapter: 'Chemical Reactions', topic: 'Equations' });
     expect((await send('ann@x.in', [Q('No topic where there are none?', 'Fine', { board: 'Maharashtra State Board', chapter_id: 'MH10SCI01', chapter: 'Gravitation', topic_no: null, topic_id: null, topic: '' })])).error).toBeUndefined();
+  });
+
+  it('a chapter the list gives no topics takes topics of its own: the first question under a new one adds it', async () => {
+    const MH = (q: string, a: string, x: object = {}) =>
+      Q(q, a, { board: 'Maharashtra State Board', chapter_id: 'MH10SCI01', chapter: 'Gravitation', topic_no: null, topic_id: null, topic: '', ...x });
+    const r = await sent('ann@x.in', [
+      MH('Force that pulls bodies towards the Earth?', 'Gravity', { topic_no: 1, topic: 'Universal Law' }),
+      MH('Acceleration of a falling body near the Earth, in m/s^2?', '9.8', { topic_no: 2, topic: 'Free Fall' }),
+      MH('Which changes on the Moon, mass or weight?', 'Weight', { topic_no: 1, topic: ' universal law. ' }),
+    ]);
+    expect(r.question_ids).toEqual(['MH10SCI01T01Q001', 'MH10SCI01T02Q001', 'MH10SCI01T01Q002']);
+    expect(await admin(`select topic_id, name, from_list from games.topics where chapter_id = 'MH10SCI01' order by 1`)).toEqual([
+      { topic_id: 'MH10SCI01T01', name: 'Universal Law', from_list: false }, { topic_id: 'MH10SCI01T02', name: 'Free Fall', from_list: false },
+    ]);
+    // the team sees them, and which chapters are open
+    const list = await value('ann@x.in', 'select games.catalog()');
+    const mh = list.find((c: Json) => c.chapter_id === 'MH10SCI01');
+    expect([mh.open, mh.topics.map((t: Json) => t.name)]).toEqual([true, ['Universal Law', 'Free Fall']]);
+    expect(list.find((c: Json) => c.chapter_id === 'CBSE10SCI01').open).toBe(false);
+    // one number and one name each
+    refused(await send('ben@x.in', [MH('Another?', 'A', { topic_no: 1, topic: 'Weightlessness' })]), /^Topic 1 of chapter 1 is called "Universal Law", not "Weightlessness"\.$/);
+    refused(await send('ben@x.in', [MH('Moved?', 'A', { topic_no: 3, topic: 'free fall' })]), /^Chapter 1 \("Gravitation"\) already has "Free Fall" as topic 2\.$/);
+    refused(await send('ben@x.in', [MH('Nameless?', 'A', { topic_no: 3, topic: '  ' })]), /a name of at most 120 characters/);
+    // a refused batch adds no topic, and a question with no topic is still fine there
+    refused(await send('ben@x.in', [MH('New topic?', 'A', { topic_no: 3, topic: 'Weightlessness' }), MH('Broken?', 'A', { also: ['b', 'b'] })]), /repeats/);
+    expect(await count(`games.topics where chapter_id = 'MH10SCI01'`)).toBe(2);
+    expect((await send('ben@x.in', [MH('Unit of force?', 'Newton')])).error).toBeUndefined();
   });
 
   it('refuses a batch that is empty, too big, or has a question with no chapter ID', async () => {
@@ -424,10 +450,12 @@ describe('approving, sending back, and the bank', () => {
 describe('loading the list of chapters and topics (list.sql)', () => {
   const LIST = readFileSync('supabase/games/list.sql', 'utf8');
   const HEADER = 'Board | Class | Subject | Chapter number | Chapter | Topic number | Topic\n';
-  /** The script with these rows pasted under its header line. */
+  /** The script with its list taken out. */
+  const EMPTY = LIST.replace(/(Board \| Class \| Subject \| Chapter number \| Chapter \| Topic number \| Topic\n)[^$]*(\$list\$\);)/, '$1$2');
+  /** The script with these rows, and only these, under its header line. */
   const withRows = (rows: string, dryRun = 'yes') => {
-    expect(LIST).toContain(HEADER);
-    return LIST.replace(HEADER, HEADER + rows).replace("'games_list.dry_run', 'yes'", `'games_list.dry_run', '${dryRun}'`);
+    expect(EMPTY).toContain(`${HEADER}$list$);`);
+    return EMPTY.replace(HEADER, HEADER + rows).replace("'games_list.dry_run', 'yes'", `'games_list.dry_run', '${dryRun}'`);
   };
   const SHEET = [
     // from a spreadsheet: tabs, and a chapter with no topics leaves its topic cells empty
@@ -445,9 +473,28 @@ describe('loading the list of chapters and topics (list.sql)', () => {
     await fresh.exec(installable());
   }, 60_000);
 
-  it('as committed, it stops: the list is empty', async () => {
-    expect(await failure(fresh, LIST)).toMatch(/The list is empty/);
+  it('with no rows, it stops: the list is empty', async () => {
+    expect(await failure(fresh, EMPTY)).toMatch(/The list is empty/);
   });
+
+  it("as committed, it holds the site's 189 chapters, with no topics, and loads them under the site's IDs", async () => {
+    expect(await failure(fresh, LIST)).toMatch(/^Dry run passed: the list has 189 chapters and 0 topics, of which 189 chapters and 0 topics are new\./);
+    const site = await supabaseLike();
+    await site.exec(installable());
+    await site.exec(LIST.replace("'games_list.dry_run', 'yes'", "'games_list.dry_run', 'no'"));
+    const n = async (sql: string) => (await site.query<Json>(sql)).rows;
+    expect(await n(`select board, class, subject, count(*)::int n from games.chapters group by 1, 2, 3 order by 1, 2, 3`)).toEqual([
+      ...[[10, 13], [12, 13]].map(([c, k]) => ({ board: 'CBSE', class: c, subject: 'Mathematics', n: k })),
+      ...[[3, 10], [4, 12], [5, 15], [6, 14], [7, 15], [8, 16], [9, 20]].map(([c, k]) => ({ board: 'ICSE', class: c, subject: 'Mathematics', n: k })),
+      { board: 'ICSE', class: 10, subject: 'History & Civics', n: 11 }, { board: 'ICSE', class: 10, subject: 'Mathematics', n: 18 },
+      { board: 'ISC', class: 11, subject: 'Mathematics', n: 16 }, { board: 'ISC', class: 12, subject: 'Mathematics', n: 16 },
+    ]);
+    expect(await n(`select chapter_id, name from games.chapters where chapter_id in ('CBSE10MAT01', 'ICSE10HCV01', 'ICSE10MAT01', 'ISC12MAT13') order by 1`)).toEqual([
+      { chapter_id: 'CBSE10MAT01', name: 'Real Numbers' }, { chapter_id: 'ICSE10HCV01', name: 'Parliament' },
+      { chapter_id: 'ICSE10MAT01', name: 'GST and Banking' }, { chapter_id: 'ISC12MAT13', name: 'Application of Calculus in Commerce and Economics' },
+    ]);
+    expect((await n('select count(*)::int n from games.topics'))[0].n).toBe(0);
+  }, 60_000);
 
   it('the dry run checks and counts, then keeps nothing', async () => {
     expect(await failure(fresh, withRows(SHEET))).toMatch(/Dry run passed: the list has 3 chapters and 3 topics, of which 3 chapters and 3 topics are new/);
@@ -469,6 +516,16 @@ describe('loading the list of chapters and topics (list.sql)', () => {
   it('run again with more rows, it adds only the new ones', async () => {
     expect(await failure(fresh, withRows(`${SHEET}CBSE | 7 | Science | 4 | Heat | 3 | Sea and Land Breezes\n`)))
       .toMatch(/the list has 3 chapters and 4 topics, of which 0 chapters and 1 topics are new/);
+  });
+
+  it('a topic already written with questions becomes the list\'s when the list names it, and fixes the chapter\'s topics', async () => {
+    await fresh.query(`insert into games.topics (topic_id, chapter_id, topic_no, name, from_list) values ('CBSE07SCI05T01', 'CBSE07SCI05', 1, 'Acids', false)`);
+    const open = async () => (await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.catalog() c')).rows![0].c.find((c: Json) => c.chapter_id === 'CBSE07SCI05').open;
+    expect(await open()).toBe(true);
+    expect(await failure(fresh, withRows('CBSE | 7 | Science | 5 | Acids, Bases and Salts | 1 | Bases\n', 'no'))).toMatch(/topic 1 of chapter CBSE07SCI05 is already on the list as "Acids", not "Bases"/);
+    await fresh.exec(withRows('CBSE | 7 | Science | 5 | Acids, Bases and Salts | 1 | Acids\n', 'no'));
+    expect((await fresh.query<Json>(`select from_list from games.topics where topic_id = 'CBSE07SCI05T01'`)).rows[0].from_list).toBe(true);
+    expect(await open()).toBe(false);
   });
 
   it('stops on a problem, naming the row as numbered in the sheet, and keeps nothing', async () => {

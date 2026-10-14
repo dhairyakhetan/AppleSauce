@@ -118,5 +118,9 @@ export interface Person { email: string; name: string | null; role: GamesRole; m
 // ---------------------------------------------------------------- the fixed list of chapters and topics
 
 export interface ListTopic { topic_id: string; topic_no: number; name: string }
-/** A chapter on the list, with its topics. `board` and `subject` are their names, as on the site's lists. */
-export interface ListChapter { chapter_id: string; board: string; class: number; subject: string; chapter_no: number; name: string; topics: ListTopic[] }
+/**
+ * A chapter on the list, with its topics. `board` and `subject` are their names, as on the site's lists. `open`: the list
+ * doesn't fix its topics, so its questions may go under topics of their own; `topics` are then the ones already used
+ * (when it is left out, a chapter with no topics is open).
+ */
+export interface ListChapter { chapter_id: string; board: string; class: number; subject: string; chapter_no: number; name: string; topics: ListTopic[]; open?: boolean }

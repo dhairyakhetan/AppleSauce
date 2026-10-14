@@ -71,6 +71,19 @@ describe('the dummy games database', () => {
     expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI04')?.topics.map((t) => t.topic_no)).toEqual([1, 2, 3]);
   });
 
+  it('lets a chapter the list gives no topics take topics of its own, as the database does', async () => {
+    const api = createFakeGamesApi(false);
+    const NUTRITION = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 2: Nutrition in Animals\n';
+    const r = await api.sendBatch(rows(`${NUTRITION}Topic 1: Digestion in Humans${q('Organ where digestion ends', 'Small intestine')}\nTopic 2: Feeding in Amoeba${q('Finger-like parts Amoeba feeds with', 'Pseudopodia')}`));
+    expect(r.sent).toBe(2);
+    const ch = (await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!;
+    expect([ch.open, ch.topics.map((t) => `${t.topic_no} ${t.name}`)]).toEqual([true, ['1 Digestion in Humans', '2 Feeding in Amoeba']]);
+    // one number and one name each, and a refused send adds no topic
+    await expect(api.sendBatch(rows(`${NUTRITION}Topic 1: Teeth${q('Teeth that cut food', 'Incisors')}`))).rejects.toThrow('Topic 1 of chapter 2 is called "Digestion in Humans", not "Teeth".');
+    await expect(api.sendBatch(rows(`${NUTRITION}Topic 3: Teeth${q('Teeth that cut food', 'Incisors')}\nTopic 4: Digestion in humans${q('Juice the liver makes', 'Bile')}`))).rejects.toThrow('already has "Digestion in Humans" as topic 1');
+    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.topics).toHaveLength(2);
+  });
+
   it('lets only HoDs and admins approve, and only admins manage the team', async () => {
     const api = createFakeGamesApi(false);
     api.setRole('member');

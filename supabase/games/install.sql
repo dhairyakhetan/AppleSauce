@@ -35,8 +35,10 @@
 -- IDs:
 --   question  CBSE10SCI01T02Q003 = chapter ID CBSE10SCI01 (board, class, subject code, chapter) + topic 02 + question 003
 --   batch     B20261009-03 = the 3rd batch sent on 9 October 2026 (India time)
--- The fixed list of chapters and topics (games.chapters, games.topics) is empty here: it is loaded separately, from the
--- list. A question can only be sent for a chapter and topic on it.
+-- The fixed list of chapters (games.chapters) is empty here: it is loaded separately, from the list (list.sql). A
+-- question can only be sent for a chapter on it. Its topics (games.topics) are fixed where the list gives the chapter
+-- topics; where it gives none, they are written with the questions, and the first question sent under a new topic adds
+-- it to the chapter.
 -- =====================================================================================================================
 
 begin;
@@ -218,8 +220,9 @@ end $$;
 create table games.boards (name text primary key, code text not null unique check (code ~ '^[A-Z]{2,5}$'));
 create table games.subjects (name text primary key, code text not null unique check (code ~ '^[A-Z]{3}$'));
 
--- The chapters and topics questions can be written for. Loaded from the list, not here; questions can only be sent
--- for a chapter and topic on it, under the names it gives.
+-- The chapters and topics questions can be written for. Chapters come from the list, not from here; questions can only
+-- be sent for a chapter on it, under the name it gives. A chapter's topics come from the list too (from_list), which fixes
+-- them; a chapter the list gives no topics takes the topics its questions are sent under (from_list false).
 create table games.chapters (
   chapter_id text primary key check (chapter_id ~ '^[A-Z]{2,5}(0[1-9]|1[0-2])[A-Z]{3}[0-9]{2}$'),
   board text not null references games.boards (name) on update cascade,
@@ -234,11 +237,13 @@ create table games.topics (
   chapter_id text not null references games.chapters on delete cascade,
   topic_no smallint not null check (topic_no between 1 and 99),
   name text not null check (char_length(name) between 1 and 120),
+  from_list boolean not null default true,
   unique (chapter_id, topic_no),
   constraint topic_id_matches check (topic_id = chapter_id || 'T' || lpad(topic_no::text, 2, '0'))
 );
 comment on table games.chapters is 'The fixed list of chapters. chapter_id = board code + class + subject code + chapter number, e.g. CBSE10SCI01.';
-comment on table games.topics is 'The fixed list of topics in each chapter. topic_id = chapter ID + T + topic number, e.g. CBSE10SCI01T02.';
+comment on table games.topics is 'The topics of each chapter. topic_id = chapter ID + T + topic number, e.g. CBSE10SCI01T02.';
+comment on column games.topics.from_list is 'True: from the list, which fixes the chapter''s topics. False: added by the first question sent under it, in a chapter the list gives no topics.';
 
 insert into games.boards (name, code) values
   ('CBSE', 'CBSE'), ('ICSE', 'ICSE'), ('ISC', 'ISC'), ('NIOS', 'NIOS'), ('IB', 'IB'), ('IGCSE', 'IGCSE'),
@@ -324,7 +329,8 @@ as $$
   from (select regexp_match(chapter_id, '^([A-Z]{2,5})[0-9]{2}([A-Z]{3})[0-9]{2}$') m) id
 $$;
 
--- The list, for the team's pages: every chapter with its topics, in order.
+-- The list, for the team's pages: every chapter with its topics, in order. `open` is true for a chapter whose topics the
+-- list doesn't fix: its questions may go under topics of their own.
 create function games.catalog() returns jsonb language plpgsql stable security definer set search_path = ''
 as $$
 begin
@@ -332,6 +338,7 @@ begin
   return coalesce((
     select jsonb_agg(jsonb_build_object('chapter_id', c.chapter_id, 'board', c.board, 'class', c.class, 'subject', c.subject,
                                         'chapter_no', c.chapter_no, 'name', c.name,
+                                        'open', not exists (select 1 from games.topics t where t.chapter_id = c.chapter_id and t.from_list),
                                         'topics', coalesce((select jsonb_agg(jsonb_build_object('topic_id', t.topic_id, 'topic_no', t.topic_no, 'name', t.name) order by t.topic_no)
                                                             from games.topics t where t.chapter_id = c.chapter_id), '[]'))
                      order by c.board, c.class, c.subject, c.chapter_no)
@@ -480,7 +487,8 @@ declare
   back text[];
   ch games.chapters%rowtype;
   tp games.topics%rowtype;
-  has_topics boolean;
+  tname text;
+  fixed boolean;
   seen text[] := '{}';
   sent int := 0;
   already int := 0;
@@ -520,17 +528,33 @@ begin
     if games.norm(ch.name) is distinct from games.norm(q ->> 'chapter') then
       raise exception 'Chapter % is called "%" on the list, not "%".', ch.chapter_no, ch.name, q ->> 'chapter';
     end if;
-    has_topics := exists (select 1 from games.topics t where t.chapter_id = cid);
+    -- the list fixes a chapter's topics when it gives it any; otherwise its questions may go under topics of their own
+    fixed := exists (select 1 from games.topics t where t.chapter_id = cid and t.from_list);
     tp := null;
-    if has_topics then
-      if tno is null then raise exception 'A question in chapter % ("%") has no topic. Put it under one of the chapter''s topics.', ch.chapter_no, ch.name; end if;
+    tname := btrim(coalesce(q ->> 'topic', ''));
+    if tno is not null then
       select * into tp from games.topics t where t.chapter_id = cid and t.topic_no = tno;
-      if not found then raise exception 'Chapter % ("%") has no topic % on the list.', ch.chapter_no, ch.name, tno; end if;
-      if games.norm(tp.name) is distinct from games.norm(coalesce(q ->> 'topic', '')) then
-        raise exception 'Topic % of chapter % is called "%" on the list, not "%".', tno, ch.chapter_no, tp.name, q ->> 'topic';
+      if found then
+        if games.norm(tp.name) is distinct from games.norm(tname) then
+          raise exception 'Topic % of chapter % is called "%"%, not "%".', tno, ch.chapter_no, tp.name, case when tp.from_list then ' on the list' else '' end, tname;
+        end if;
+      elsif fixed then
+        raise exception 'Chapter % ("%") has no topic % on the list.', ch.chapter_no, ch.name, tno;
+      else
+        -- a new topic: added to the chapter under the number and name it was sent with
+        if tno not between 1 and 99 or char_length(tname) not between 1 and 120 then
+          raise exception 'A topic needs a number from 1 to 99 and a name of at most 120 characters: "%".', qtext;
+        end if;
+        select * into tp from games.topics t where t.chapter_id = cid and games.norm(t.name) = games.norm(tname);
+        if found then
+          raise exception 'Chapter % ("%") already has "%" as topic %.', ch.chapter_no, ch.name, tp.name, tp.topic_no;
+        end if;
+        insert into games.topics (topic_id, chapter_id, topic_no, name, from_list)
+        values (cid || 'T' || lpad(tno::text, 2, '0'), cid, tno, tname, false)
+        returning * into tp;
       end if;
-    elsif tno is not null then
-      raise exception 'Chapter % ("%") has no topics on the list, so its questions go without a topic line.', ch.chapter_no, ch.name;
+    elsif fixed then
+      raise exception 'A question in chapter % ("%") has no topic. Put it under one of the chapter''s topics.', ch.chapter_no, ch.name;
     end if;
     -- multiple choice: up to 5 wrong options, each different from the answer and from each other
     wrong := coalesce((select array_agg(btrim(w.x) order by w.i)

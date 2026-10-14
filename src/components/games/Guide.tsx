@@ -28,7 +28,7 @@ export function Guide() {
       <div className="grid grid-cols-1 gap-3 text-[14px] leading-relaxed text-warm-prose lg:grid-cols-3">
         <Card title="The format" span={2}>
           <ol className="flex list-decimal flex-col gap-1.5 pl-5">
-            <li><B>Fill in Board, Class, Subject and Chapter,</B> then add a topic.</li>
+            <li><B>Fill in Board, Class, Subject and Chapter,</B> then a <C>Topic</C> line above each part's questions: one of the chapter's own topics, or, when the list leaves them open, your own, numbered from 1.</li>
             <li>
               <B>Write each question as a block of lines,</B> each starting with its label, with a blank line between questions:{' '}
               <C>Q:</C> the question, <C>A:</C> the answer, <C>Also:</C> another answer that counts (one per line, only if there is one),{' '}

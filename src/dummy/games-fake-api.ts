@@ -640,10 +640,11 @@ const NOTE_LAND_BREEZE = 'A land breeze blows at night. During the day the breez
 /** A chapter on the made-up list, with its topics numbered from 1. */
 function listed(board: string, cls: number, subject: string, no: number, name: string, topics: string[]): ListChapter {
   const id = chapterId(checkBoard(board).code, cls, checkSubject(subject).code, no)!;
-  return { chapter_id: id, board, class: cls, subject, chapter_no: no, name, topics: topics.map((t, i) => ({ topic_id: topicId(id, i + 1)!, topic_no: i + 1, name: t })) };
+  return { chapter_id: id, board, class: cls, subject, chapter_no: no, name, topics: topics.map((t, i) => ({ topic_id: topicId(id, i + 1)!, topic_no: i + 1, name: t })), open: !topics.length };
 }
 /** The made-up list of chapters and topics: the ones the made-up questions use, the formatter's example, one with no
- * questions yet, and one with no topics (its questions go without a Topic line). The real list comes from the database. */
+ * questions yet, and one the list gives no topics (its questions may go under topics of their own). The real list comes
+ * from the database. */
 export const DUMMY_LIST: ListChapter[] = [
   listed('ICSE', 6, 'Geography', 2, 'Landforms of the Earth', ['Mountains', 'Plateaus and Plains']),
   listed('CBSE', 6, 'Mathematics', 4, 'Basic Geometrical Ideas', ['Points, Lines and Rays', 'Polygons', 'Circles']),
@@ -741,19 +742,32 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
   return { batchId: out.ids.length ? batch.id : null, ...out };
 }
 
-/** The chapter and topic must be on the list (under its names, which are the ones kept), as in the database. */
+/**
+ * The chapter must be on the list (under its name, the one kept), as in the database. Its topics are the list's when
+ * the list gives it any; otherwise its questions may go under topics of their own, and a new one is added to the
+ * chapter here (so check a batch against a copy of the list first).
+ */
 function onTheList(catalog: ListChapter[], r: Row): { problem?: string; row: Row } {
   const ch = catalog.find((c) => c.chapter_id === r.chapter_id);
   if (!ch) return { problem: `Chapter ${r.chapter_no} (${r.board}, class ${r.class}, ${r.subject}) isn't on the list of chapters.`, row: r };
   if (norm(ch.name) !== norm(r.chapter)) return { problem: `Chapter ${ch.chapter_no} is called "${ch.name}" on the list, not "${r.chapter}".`, row: r };
-  if (!ch.topics.length) {
-    if (r.topic_no !== null) return { problem: `Chapter ${ch.chapter_no} ("${ch.name}") has no topics on the list, so its questions go without a topic line.`, row: r };
+  const open = ch.open ?? !ch.topics.length;
+  if (r.topic_no === null) {
+    if (!open) return { problem: `A question in chapter ${ch.chapter_no} ("${ch.name}") has no topic. Put it under one of the chapter's topics.`, row: r };
     return { row: { ...r, chapter: ch.name, topic: '' } };
   }
-  if (r.topic_no === null) return { problem: `A question in chapter ${ch.chapter_no} ("${ch.name}") has no topic. Put it under one of the chapter's topics.`, row: r };
-  const tp = ch.topics.find((t) => t.topic_no === r.topic_no);
-  if (!tp) return { problem: `Chapter ${ch.chapter_no} ("${ch.name}") has no topic ${r.topic_no} on the list.`, row: r };
-  if (norm(tp.name) !== norm(r.topic)) return { problem: `Topic ${r.topic_no} of chapter ${ch.chapter_no} is called "${tp.name}" on the list, not "${r.topic}".`, row: r };
+  const name = r.topic.trim();
+  let tp = ch.topics.find((t) => t.topic_no === r.topic_no);
+  if (tp && norm(tp.name) !== norm(name)) return { problem: `Topic ${r.topic_no} of chapter ${ch.chapter_no} is called "${tp.name}"${open ? '' : ' on the list'}, not "${name}".`, row: r };
+  if (!tp) {
+    if (!open) return { problem: `Chapter ${ch.chapter_no} ("${ch.name}") has no topic ${r.topic_no} on the list.`, row: r };
+    if (r.topic_no < 1 || r.topic_no > 99 || !name || name.length > 120) return { problem: `A topic needs a number from 1 to 99 and a name of at most 120 characters: "${r.question}".`, row: r };
+    const same = ch.topics.find((t) => norm(t.name) === norm(name));
+    if (same) return { problem: `Chapter ${ch.chapter_no} ("${ch.name}") already has "${same.name}" as topic ${same.topic_no}.`, row: r };
+    tp = { topic_id: topicId(ch.chapter_id, r.topic_no)!, topic_no: r.topic_no, name };
+    ch.topics = [...ch.topics, tp].sort((a, b) => a.topic_no - b.topic_no);
+    ch.open = true;
+  }
   return { row: { ...r, chapter: ch.name, topic: tp.name } };
 }
 
@@ -847,19 +861,22 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       const out: SendResult = { batchIds: [], sent: 0, already: 0, sentBack: 0, sentBackIds: [] };
       for (let i = 0; i < ready.length; i += BATCH_MAX) {
         const part = ready.slice(i, i + BATCH_MAX);
-        // like the database, a batch with one bad question is refused whole, before anything is kept
+        // like the database, a batch with one bad question is refused whole, before anything is kept (new topics
+        // included: they are checked against a copy of the list)
+        const copy = structuredClone(s.catalog);
         for (const r of part) {
-          const why = codesProblem(r) ?? onTheList(s.catalog, r).problem;
+          const why = codesProblem(r) ?? onTheList(copy, r).problem;
           if (why) throw new Error(why);
         }
         // and if one can't be numbered, nothing in the batch is kept
-        const kept = { questions: s.questions.length, batches: s.batches.length };
+        const kept = { questions: s.questions.length, batches: s.batches.length, catalog: structuredClone(s.catalog) };
         let r: ReturnType<typeof add>;
         try {
           r = add(s, part, DUMMY_ME);
         } catch (e) {
           s.questions.length = kept.questions;
           s.batches.length = kept.batches;
+          s.catalog = kept.catalog;
           throw e;
         }
         if (r.batchId) out.batchIds.push(r.batchId);

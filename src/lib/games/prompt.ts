@@ -2,7 +2,9 @@
  * The two prompts the Write questions page copies for a chatbot:
  *
  *   chatbotPrompt  "Copy chatbot prompt": how to write questions for ONE chapter on the team's list, in the block format
- *                  the page reads (src/lib/games/format.ts), with the teacher's material underneath.
+ *                  the page reads (src/lib/games/format.ts), with the teacher's material underneath. A chapter whose
+ *                  topics the list fixes gets those; any other is divided into topics by the chatbot, keeping the
+ *                  topics already in use.
  *   fixPrompt      "Copy prompt to fix them" (when sending with problems): the questions the page turned away and why,
  *                  the text as it is, and, last, to write the whole text again.
  *
@@ -11,6 +13,7 @@
  * chatbots were run on it (CHANGES.md). Everyone on the team copies the same prompt, and the teacher is already on the
  * page, so it says nothing about the site, signing in or sending.
  */
+import { isOpen } from './catalog';
 import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, missing, problemsByRow, type Issue } from './format';
 import { DIFFICULTIES, type ListChapter, type Row } from './rows';
 
@@ -48,9 +51,21 @@ Level: easy`;
 export const formatExample = (ch: ListChapter) =>
   [chapterLines(ch), ...ch.topics.slice(0, 1).map((t) => `Topic ${t.topic_no}: ${t.name}`), '', EXAMPLE_BLOCKS].join('\n');
 
+/** How a chatbot divides an open chapter (one whose topics the list doesn't fix) into topics of its own. */
+function ownTopics(ch: ListChapter): string {
+  const next = Math.max(0, ...ch.topics.map((t) => t.topic_no)) + 1;
+  return `Its topics aren't fixed, so divide the questions into topics yourself:
+
+- A topic is a part of the chapter that the textbook gives a heading of its own (in a chapter on heat: Conduction, Convection, Radiation). Not a kind of question ("MCQs", "Short answers"), not a single fact, and not the chapter's own name.
+- 2 to 6 topics, fewer if the chapter is short, numbered from 1 in the order the chapter teaches them. Write each as "Topic 1: Name" on its own line, with its questions under it, and put every question under the topic it belongs to.${ch.topics.length ? `
+- These topics are already in use for this chapter. Keep them, written exactly like this, for the questions that belong there, and number any new topic from ${next}:
+
+${block(topicLines(ch))}` : ''}`;
+}
+
 /** The instructions for one chapter. */
 export function chatbotInstructions(ch: ListChapter): string {
-  const topics = ch.topics.length > 0;
+  const open = isOpen(ch);
   return `# Revision questions for one chapter
 
 Write questions for school revision games: crossword, word search, matching, fill in the blank and multiple choice. The teacher pastes your reply into a page that checks every line and turns away any question that breaks a rule below, so follow them exactly.
@@ -61,15 +76,15 @@ Write only for this chapter. Start with these lines, exactly as written:
 
 ${block(chapterLines(ch))}
 
-${topics
-  ? `Its topics are fixed. Put each question under the one of these Topic lines it belongs to, written exactly like this. Use no other topic, and leave out a topic the material doesn't cover:
+${open
+  ? ownTopics(ch)
+  : `Its topics are fixed. Put each question under the one of these Topic lines it belongs to, written exactly like this. Use no other topic, and leave out a topic the material doesn't cover:
 
-${block(topicLines(ch))}`
-  : 'This chapter has no topics: write no Topic lines. Its questions go straight under the Chapter line.'}
+${block(topicLines(ch))}`}
 
 ## How many
 
-${topics ? `20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter.` : `20 to ${MAX_PER_CHAPTER} questions, never more than ${MAX_PER_CHAPTER}.`} Fewer is fine when the material is short: never pad, and never ask the same thing twice.
+20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
 
 ## The material
 
@@ -126,7 +141,7 @@ ${block(EXAMPLE_BLOCKS)}
 
 ## Your reply
 
-- Paste everything in ONE code block, so the teacher can copy it with one click: the chapter lines, then ${topics ? 'each Topic line with its questions under it' : 'the questions'}. Nothing else inside the block.
+- Paste everything in ONE code block, so the teacher can copy it with one click: the chapter lines, then each Topic line with its questions under it. Nothing else inside the block.
 - After the block, at most two short sentences, only if needed: which answers you filled in yourself, or that you wrote from general knowledge and the teacher should check them.
 `;
 }

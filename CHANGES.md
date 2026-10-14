@@ -36,9 +36,11 @@ look.
   it is written, and each problem is underlined and says exactly what to change (the answer is in the question, "of the
   following", a note in brackets, an answer students can't type, a Fill line without its `___`, too few wrong options,
   a wrong option that counts as the answer, more than 30 questions in a topic or 80 in a chapter, and so on). The table
-  shows which games each question can be used in. Questions can only be written for a chapter and topic on the team's
-  fixed list. Once board, class and subject are filled in, the Chapter box becomes a picker of the listed chapters, and
-  the chapter's topics become buttons that add their Topic line. Teachers play a small version of Try the games made
+  shows which games each question can be used in. Questions can only be written for a chapter on the team's fixed
+  list. A chapter's topics are the list's where it gives them; where it gives none, the chapter is open and its
+  questions go under topics of their own (the first one sent under a new topic adds it to the chapter, and each topic
+  keeps one number and one name). Once board, class and subject are filled in, the Chapter box becomes a picker of the
+  listed chapters, and the chapter's topics become buttons that add their Topic line. Teachers play a small version of Try the games made
   from their questions, and send them for approval.
 - **Sending with problems.** Send then shows "There are errors in the questions", with two ways on: "Remove those and
   send" (the questions with problems leave the box, with Undo, and the rest are sent), or "Copy prompt to fix them": a
@@ -50,7 +52,10 @@ look.
   is dropped; a listed topic under the wrong number is renumbered, not renamed. A question being fixed is also made
   whole (a missing Wrong or Level line is asked for).
 - **The chatbot prompt** ("Copy chatbot prompt") is made for one chapter: that chapter's lines and its topics, and
-  nothing about the site, sending or any other chapter (everyone on the team copies the same prompt). It states every
+  nothing about the site, sending or any other chapter (everyone on the team copies the same prompt). For an open
+  chapter it asks the chatbot to divide the questions into 2 to 6 topics, each a part of the chapter the textbook gives
+  a heading (not a kind of question, a single fact or the chapter's name), numbered in the order the chapter teaches
+  them, keeping the topics already in use and numbering new ones after them. It states every
   rule the checker applies, the block format with an example, 20 to 30 questions per topic (at most 30, and 80 in the
   chapter), and to reply in one code block that can be copied with one click. It uses the chapter in the boxes; when
   there isn't one of the teacher's own (or the example is loaded), it first asks which chapter, from the list. Tested
@@ -128,18 +133,21 @@ What the script guarantees, all checked inside it before it keeps anything:
 
 To remove all of it later: `drop schema games cascade;` (then take `games` out of the exposed schemas).
 
-### 2. Load the list of chapters and topics: `supabase/games/list.sql`
+### 2. Load the list of chapters: `supabase/games/list.sql`
 
-Questions can only be sent for a chapter and topic on this list. The list starts empty, so nothing can be sent until
-this is run.
+Questions can only be sent for a chapter on this list. The `games` schema starts with none, so nothing can be sent
+until this is run. **The file already holds the list: the 189 chapters on the site** (below).
 
-1. Paste the list between the two `$list$` lines in the file. You can copy it straight from a spreadsheet (columns
-   separated by tabs) or write it by hand (separated by `|`). There is one row per topic, with these columns: board,
-   class, subject, chapter number, chapter, topic number, topic. A chapter with no topics is one row with the topic
-   columns empty. A header row is fine.
-2. Run the whole file. This is a dry run too. It ends with **"Dry run passed: the list has N chapters and M topics, of
-   which ... are new"**. If a row has a problem it names the row (numbered as in the sheet) and why, and keeps nothing.
-3. Change `'yes'` to `'no'` on its DRY RUN line and run it again.
+1. Run the whole file. This is a dry run too. It ends with **"Dry run passed: the list has 189 chapters and 0 topics,
+   of which 189 chapters and 0 topics are new"**. If a row has a problem it names the row (numbered as in the sheet)
+   and why, and keeps nothing.
+2. Change `'yes'` to `'no'` on its DRY RUN line and run it again.
+
+To add more later, paste rows between the two `$list$` lines (in place of the ones there, or after them), straight
+from a spreadsheet (columns separated by tabs) or written by hand (separated by `|`): one row per topic, with board,
+class, subject, chapter number, chapter, topic number and topic. A chapter with no topics is one row with the topic
+columns empty; its topics are then the ones its questions are sent under. Giving a chapter topics in the list fixes
+them: from then on its questions go only under those (and any it had already).
 
 It only adds. If a chapter or topic is already on the list under a different name, it stops, because questions keep
 the names they were sent with. Running it again with more rows adds only the new ones. Board and subject names must be
@@ -176,6 +184,33 @@ it settled for the games team:
   or syllabus table anywhere. Only Mathematics has a real list (CBSE X and XII, ICSE III to X, ISC XI and XII). Classes
   are stored as Roman numerals, and ISC papers for classes XI and XII are partly filed under ICSE. The games list
   therefore has to be written: its chapter numbers, order and topics are set in `games`, not taken from Shikshaq.
+
+**The list, as committed in `list.sql`:** every chapter the site has, under the site's names, numbered in the order
+each syllabus teaches them, with no topics (the chatbot divides each chapter into topics; above). 189 chapters:
+
+| Board, class | Subject | Chapters |
+| --- | --- | --- |
+| CBSE 10 | Mathematics | 13 |
+| CBSE 12 | Mathematics | 13 |
+| ICSE 3 to 9 | Mathematics | 10, 12, 15, 14, 15, 16, 20 |
+| ICSE 10 | Mathematics | 18 |
+| ICSE 10 | History & Civics | 11 |
+| ISC 11 | Mathematics | 16 |
+| ISC 12 | Mathematics | 16 |
+
+- **ISC for classes 11 and 12.** The bank files some ISC papers under ICSE; ISC is the board for those classes, so the
+  two sets of chapter names (identical but for one) are one list each.
+- **Added from the papers still being checked:** CBSE 10 "Real Numbers" and "Pair of Linear Equations in Two
+  Variables", which the live bank doesn't have yet.
+- **Left out, as chapters the board doesn't teach in that class** (a misfiled label, at most 7 questions each):
+  CBSE 10 GST and Banking, Linear Inequations, Matrices, Ratio and Proportion; CBSE 12 Application of Calculus in
+  Commerce and Economics; ICSE 9 Banking. Adding a chapter later is easy; taking one out after questions are sent
+  isn't.
+- **History & Civics:** the bank's 49 labels are partly chapters and partly single points within them. The 11 used are
+  the chapters (Parliament, President, Judiciary, Revolt of 1857, Indian Nationalism, Indian Independence, Rise of
+  Fascism, Rise of Nazism, World War II, United Nations, Post-WWII World). The 38 left out are points inside them
+  (Speaker, Writs, UNICEF, High Court...) or class 9 history (Industrial Revolution), each in one or two papers.
+- **No chapters at all** for ICSE 10 Economics and ISC 11 Applied Mathematics: their questions carry none.
 
 Two changes came out of it: a topic that already holds 999 questions (the most a three-digit question number allows)
 now refuses a send with a plain message instead of a database error, and the subject is spelt "History & Civics", as
@@ -241,7 +276,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | File | What it is |
 | --- | --- |
 | `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the moderator line and the outside-change check (above). Tables: settings, team, boards, subjects, chapters, topics, batches, questions, question_bank. The site calls functions only. |
-| `supabase/games/list.sql` | Loads the fixed list of chapters and topics from pasted rows, with a dry run. It only adds. |
+| `supabase/games/list.sql` | Loads the fixed list of chapters (and topics, where it gives them) from pasted rows, with a dry run. It only adds. As committed it holds the site's 189 chapters. |
 | `src/pages/Games.tsx` | The page: checks who you are (including the "sign in with Google" page for a password sign-in), loads the list of chapters, the links between the four parts, the "not for you" pages, and the real/dummy switch (the same pattern as `pages/Hod.tsx`). A part stays mounted once opened. |
 | `src/components/games/WriteQuestions.tsx` | Write questions: the four detail boxes (kept in step with the text; Chapter becomes a picker from the list), topic buttons, the Questions box with underlined problems, the check panel (each question with the games it can go in, or marked as needing a fix), the sent-back panel, the preview, Send and its "There are errors in the questions" popup, the guide, and the phone's "jump to results" button. |
 | `src/components/games/Revise.tsx` | The game picker and player: class, subject, chapter, topics (all in by default; tap one to leave it out) and a tab per game. Try the games uses it full size; the preview uses a small version. |
@@ -257,7 +292,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `src/lib/games/rows.ts` | The question row, its CSV, JSON and Sheets exports, the bank's statuses, roles, and the list's chapter and topic types. |
 | `src/lib/games/format.ts` | The strict checker: reads the Questions box (detail lines and question blocks) into rows, with every problem on the line to fix, and which question each problem belongs to. Replaces the games site's formatter, which read many loose shapes. |
 | `src/lib/games/details.ts` | Boards, classes, subjects, chapters, topics and the IDs. Unchanged from the games site. |
-| `src/lib/games/catalog.ts` | Checks the Questions box against the list of chapters and topics, on the line to fix, the way the database will. |
+| `src/lib/games/catalog.ts` | Checks the Questions box against the list of chapters and topics, on the line to fix, the way the database will: a chapter's own topics where the list gives them, otherwise one number and one name for each topic written. |
 | `src/lib/games/prompt.ts` | What "Copy chatbot prompt" copies (the rules for one chapter on the list, with its lines and topics), and the prompt that asks a chatbot to fix the questions turned away. |
 | `src/lib/games/api.ts` | Every database call, as one `GamesApi` object. `realGamesApi` calls the `games` schema's functions through Shikshaq's own Supabase client. |
 | `src/lib/games/engine/` | The games engine (`index`, `shared`, `crossword`, `wordsearch`, `matching`, `fill`, `choice`), and `answers.ts`, which decides whether a typed answer is right, half right (a spelling slip) or wrong. Each game has a maker and a separate checker, and a puzzle is only shown after its checker passes it. |
@@ -317,20 +352,20 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | --- | --- |
 | `npx tsc -b` | Clean. The games files were also checked with `strict` and unused-code checks on: clean. |
 | `npx eslint .` | 0 errors, 212 warnings, the same 212 as before this change. The games files have none. |
-| `npm test` | 148 files, 2,293 tests, all pass (140 files and 2,085 tests before). |
+| `npm test` | 148 files, 2,299 tests, all pass (140 files and 2,085 tests before). |
 | Stand-in chatbots (AI agents given only the copied prompt, as a teacher would paste it) | Four chapters: Science (Heat, no material), History (From Trade to Territory, with notes), Mathematics (Basic Geometrical Ideas, no material) and Science with no topics (Nutrition in Animals); two smaller and two larger models. 181 questions in all, each reply one code block. Three were turned away: one was the checker's mistake ("Zero" with an Also "0" and numbers as options; fixed), and two repeated the answer as an Also line with a space ("End point" for "Endpoint"; the prompt now says not to). Every topic made all five games, in at most 25 ms. The fix prompt was given to a smaller model in a new chat, with a messy hand-written text (13 problems in 6 questions: a one-line question, a note in brackets, a degree sign, Yes as an answer, a repeated Also, a)/b) options, a made-up level). After two rounds of tightening the fix prompt (a short list of the rules, and that every question has all its lines), all 6 came back passing in one reply, in one code block. The fix prompt was then rewritten from the owner's review of one (it asked a Yes/No question for a Fill line, repeated the page's explanations, and gave the wrong advice for "37 °C"), and given to a smaller model with a text that also had two topics under the wrong numbers: all 9 questions came back passing in one round, the three good ones byte for byte, and the topics renumbered rather than renamed. |
-| Both SQL scripts on Supabase's own Postgres 17 (local) | Install (the current script, run again after the last changes): as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions, with the `also`, `fill` and `wrong_options` columns; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
+| Both SQL scripts on Supabase's own Postgres 17 (local) | After the topics change: the install's dry run passes and the real run keeps; `list.sql` as committed passes its dry run and loads all 189 chapters. Before it, the install (the current script, run again after the last changes): as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions, with the `also`, `fill` and `wrong_options` columns; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. List: the dry run counts, the real run adds, and problems are named by row. |
 | Real network calls, local Supabase, real OAuth sign-in | The site's calls go to `/rest/v1/rpc/<function>` with the `games` profile, and return 200. After the last changes: a question with other answers, a fill-in sentence and wrong options went in whole; a sentence with two blanks and an other answer repeating the answer were refused with their messages; the HoD saw the sender's name and email; approved, the bank held every part. A member wrote questions with the chapter picker and a topic button. An off-list topic was underlined and held back. One question was sent as batch `B20261012-01`. The HoD approved it, and Try the games played it from the bank. A password session got `reauth` from `games.my_role()` and the "Sign in with Google" page. Signed out: refused. Tables can't be read directly. |
 | Live-shaped build (`vite build` without `VITE_PREVIEW_TOOLS`) | Builds. No dummy code, made-up data or preview tools in it. The games pages are a separate download (149 kB script, 4 kB styles), fetched only when `/games` opens. |
-| Browser, dummy mode, desktop (1280 px) and phone (390 px) | All four parts and every role work, including the password case. No sideways scrolling on a phone, and no page errors. |
+| Browser, dummy mode, desktop (1280 px) and phone (390 px) | All four parts and every role work, including the password case. No sideways scrolling on a phone, and no page errors. After the topics change, a chapter with open topics: the page says its topics aren't fixed; two questions under two new topics were sent; the two topics then showed as buttons, with the next free number; a third question under "Topic 1: Teeth" was underlined ("Topic 1 of chapter 2 is already "Digestion in Humans"."). |
 
 `npm run build` (the full one) needs Shikshaq's live Supabase keys for its sitemap step, as before, so it was not run
 here.
 
 ## Still to do
 
-- **The list itself.** The live report shows the site has chapter names for Mathematics only, and no numbers, order
-  or topics, so the list is to be written. It goes in through `list.sql` (above). Until then nothing can be sent.
+- **More subjects.** The list has the site's chapters only (Mathematics, and ICSE 10 History & Civics). Physics,
+  Chemistry, Biology, English and the rest need their chapters written before teachers can send for them.
 - **The dashboard settings** Kanishk's report left open: whether "Confirm email" and "Allow manual linking" are on,
   any auth hook, the redirect URLs, email sending limits, and the exposed schemas.
 - **Run the two scripts on the live database**, with a backup first (above).

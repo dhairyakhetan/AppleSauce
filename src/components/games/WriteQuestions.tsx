@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowDown, Copy, Send, Trash2 } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
 import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
-import { chaptersFor, checkList, sameName } from '@/lib/games/catalog';
+import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
 import { usableIn } from '@/lib/games/engine';
 import { asText, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
 import { chatbotPrompt, fixPrompt } from '@/lib/games/prompt';
@@ -37,7 +37,7 @@ function scrollToEl(el: HTMLElement | null) {
 }
 
 export interface Alerts { list?: SentBack[]; error?: string }
-/** The fixed list of chapters and topics (no list while loading). */
+/** The fixed list of chapters, with their topics (no list while loading). */
 export interface Catalog { list?: ListChapter[]; error?: string }
 
 export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
@@ -103,8 +103,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   };
   const details = readDetails(raw);
   const gaps = missing(rows);
-  // a chapter the list gives no topics needs no Topic line
-  const topicless = new Set(catalog.list?.filter((c) => !c.topics.length).map((c) => c.chapter_id));
+  // a chapter whose topics the list leaves open needs no Topic line
+  const topicless = new Set(catalog.list?.filter(isOpen).map((c) => c.chapter_id));
   const noTopic = rows.filter((r) => !r.topic && r.topic_no === null && !(r.chapter_id && topicless.has(r.chapter_id))).length;
   const chapters = new Set(rows.map((r) => r.chapter_id ?? [r.board, r.class, r.subject, r.chapter_no, r.chapter].join('|'))).size;
   const topics = new Set(rows.filter((r) => r.topic || r.topic_no !== null).map((r) => [r.chapter_id, r.board, r.class, r.subject, r.chapter_no, r.chapter, r.topic_no, r.topic].join('|'))).size;
@@ -367,8 +367,9 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
                   <button key={t.topic_id} type="button" className={chip('card')} onClick={() => addTopic(t)}>Topic {t.topic_no}: {t.name}</button>
                 ))}
               </div>
+              {isOpen(chosen) && <p className="text-[13px] text-warm-secondary">These topics are already in use. For a new one, write a line such as "Topic {Math.max(...chosen.topics.map((t) => t.topic_no)) + 1}: Name" above its questions.</p>}
             </div>
-          ) : <p className="text-[13px] text-warm-secondary">This chapter has no topics: write its questions straight under it.</p>)}
+          ) : <p className="text-[13px] text-warm-secondary">This chapter's topics aren't fixed: write a line such as "Topic 1: Name" above each part's questions, or write them straight under the chapter.</p>)}
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
@@ -608,7 +609,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg rounded-2xl bg-card">
         <DialogTitle>Which chapter are the questions for?</DialogTitle>
-        <DialogDescription>The prompt is made for one chapter and its topics on the list, so the chatbot writes only what fits them.</DialogDescription>
+        <DialogDescription>The prompt is made for one chapter on the list and its topics, so the chatbot writes only what fits them.</DialogDescription>
         {!catalog.list ? (
           <p className="text-[14px] text-warm-secondary">{catalog.error ? `Couldn't load the list of chapters. ${catalog.error}` : 'Loading the list of chapters…'}</p>
         ) : !list.length ? (
@@ -621,7 +622,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
               {field('Subject', subject ?? '', subjects.map((s) => [s, s]), (v) => setPick((p) => ({ ...p, subject: v, chapter: '' })), 'col-span-2 sm:col-span-1')}
               {field('Chapter', ch ? String(ch.chapter_no) : '', chapters.map((c) => [String(c.chapter_no), `${c.chapter_no}: ${c.name}`]), (v) => setPick((p) => ({ ...p, chapter: v })), 'col-span-full')}
             </div>
-            {ch && <p className="text-[13px] text-warm-secondary">{ch.topics.length ? `Its topics: ${ch.topics.map((t) => `${t.topic_no} ${t.name}`).join(', ')}.` : 'It has no topics on the list.'}</p>}
+            {ch && <p className="text-[13px] text-warm-secondary">{ch.topics.length ? `Its topics${isOpen(ch) ? ' so far' : ''}: ${ch.topics.map((t) => `${t.topic_no} ${t.name}`).join(', ')}.` : 'Its topics aren\'t fixed: the chatbot divides the questions into topics.'}{ch.topics.length && isOpen(ch) ? ' The chatbot can add more.' : ''}</p>}
             <button type="submit" className={btn('brand', 'w-fit')} disabled={!ch}><Copy aria-hidden />Copy chatbot prompt</button>
           </form>
         )}

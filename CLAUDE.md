@@ -273,7 +273,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **The database:** `supabase/games/install.sql` makes the whole `games`
   schema in one transaction (a dry run by default; it stops if anything outside
   `games` would change), and `supabase/games/list.sql` loads the fixed list of
-  chapters and topics. Neither is installed on the live database yet; until
+  chapters (as committed, the site's 189 chapters: Mathematics and ICSE 10
+  History & Civics, from the live bank). Neither is installed on the live
+  database yet; until
   then every call in `lib/games/api.ts` (`realGamesApi`) fails and the pages
   say so. The site calls functions only; no role can read the tables.
   `lib/games/database.test.ts` runs both scripts on PGlite.
@@ -283,11 +285,14 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   a "sign in with Google" page: with "Confirm email" off, a password account
   can be made with someone else's email and later merges with their Google
   account (measured on a local GoTrue).
-- **The fixed list:** questions can only be sent for a chapter and topic on
-  `games.chapters` / `games.topics`, under the list's names. `lib/games/catalog.ts`
-  checks the Questions box against it as people write (the database refuses
-  the rest anyway); the Chapter box becomes a picker and the topics become
-  buttons once board, class and subject match the list.
+- **The fixed list:** questions can only be sent for a chapter on
+  `games.chapters`, under the list's name. Topics: where the list gives a
+  chapter topics (`games.topics.from_list`), only those; where it gives none
+  the chapter is open, and the first question sent under a new topic adds it
+  (one number and one name per topic). `lib/games/catalog.ts` checks the
+  Questions box against it as people write (the database refuses the rest
+  anyway); the Chapter box becomes a picker and the topics become buttons
+  once board, class and subject match the list.
 - **Dummy mode:** `?dummy=1` on any `/games` page, or the preview toggle's
   "Games team" buttons, runs the real pages against
   `dummy/games-fake-api.ts`, which keeps the database's rules (list included).
@@ -316,7 +321,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
 - **The chatbot prompt is made for one chapter** on the list (its lines and
-  topics, nothing else) and states every rule the checker applies.
+  topics, nothing else; for an open chapter it asks the chatbot to divide the
+  questions into topics, keeping those already in use) and states every rule
+  the checker applies.
   `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples
   drift from the checker. Change `prompt.ts`, `Guide.tsx` and `format.ts`
   together. Stand-in chatbots were run on it (see CHANGES.md).
