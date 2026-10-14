@@ -477,24 +477,39 @@ describe('loading the list of chapters and topics (list.sql)', () => {
     expect(await failure(fresh, EMPTY)).toMatch(/The list is empty/);
   });
 
-  it("as committed, it holds the site's 189 chapters, with no topics, and loads them under the site's IDs", async () => {
-    expect(await failure(fresh, LIST)).toMatch(/^Dry run passed: the list has 189 chapters and 0 topics, of which 189 chapters and 0 topics are new\./);
+  it("as committed, it holds the site's chapters and the drafted ones, with no topics, and loads them under the site's IDs", async () => {
+    expect(await failure(fresh, LIST)).toMatch(/^Dry run passed: the list has 564 chapters and 0 topics, of which 564 chapters and 0 topics are new\./);
     const site = await supabaseLike();
     await site.exec(installable());
     await site.exec(LIST.replace("'games_list.dry_run', 'yes'", "'games_list.dry_run', 'no'"));
     const n = async (sql: string) => (await site.query<Json>(sql)).rows;
-    expect(await n(`select board, class, subject, count(*)::int n from games.chapters group by 1, 2, 3 order by 1, 2, 3`)).toEqual([
-      ...[[10, 13], [12, 13]].map(([c, k]) => ({ board: 'CBSE', class: c, subject: 'Mathematics', n: k })),
-      ...[[3, 10], [4, 12], [5, 15], [6, 14], [7, 15], [8, 16], [9, 20]].map(([c, k]) => ({ board: 'ICSE', class: c, subject: 'Mathematics', n: k })),
-      { board: 'ICSE', class: 10, subject: 'History & Civics', n: 11 }, { board: 'ICSE', class: 10, subject: 'Mathematics', n: 18 },
-      { board: 'ISC', class: 11, subject: 'Mathematics', n: 16 }, { board: 'ISC', class: 12, subject: 'Mathematics', n: 16 },
+    // Mathematics: the site's, with CBSE 9 and 11 drafted
+    expect(await n(`select board, class, count(*)::int n from games.chapters where subject = 'Mathematics' group by 1, 2 order by 1, 2`)).toEqual([
+      ...[[9, 12], [10, 13], [11, 14], [12, 13]].map(([c, k]) => ({ board: 'CBSE', class: c, n: k })),
+      ...[[3, 10], [4, 12], [5, 15], [6, 14], [7, 15], [8, 16], [9, 20], [10, 18]].map(([c, k]) => ({ board: 'ICSE', class: c, n: k })),
+      { board: 'ISC', class: 11, n: 16 }, { board: 'ISC', class: 12, n: 16 },
     ]);
-    expect(await n(`select chapter_id, name from games.chapters where chapter_id in ('CBSE10MAT01', 'ICSE10HCV01', 'ICSE10MAT01', 'ISC12MAT13') order by 1`)).toEqual([
-      { chapter_id: 'CBSE10MAT01', name: 'Real Numbers' }, { chapter_id: 'ICSE10HCV01', name: 'Parliament' },
-      { chapter_id: 'ICSE10MAT01', name: 'GST and Banking' }, { chapter_id: 'ISC12MAT13', name: 'Application of Calculus in Commerce and Economics' },
+    // and the drafted subjects, classes 9 to 12
+    expect(await n(`select board, string_agg(distinct subject, ', ' order by subject) subjects, min(class)::int lo, max(class)::int hi from games.chapters where subject <> 'Mathematics' group by 1 order by 1`)).toEqual([
+      { board: 'CBSE', subjects: 'Biology, Chemistry, Economics, Geography, History, Physics, Political Science, Science', lo: 9, hi: 12 },
+      { board: 'ICSE', subjects: 'Biology, Chemistry, Geography, History & Civics, Physics', lo: 9, hi: 10 },
+      { board: 'ISC', subjects: 'Biology, Chemistry, Physics', lo: 11, hi: 12 },
     ]);
+    expect(await n(`select chapter_id, name from games.chapters where chapter_id in ('CBSE10MAT01', 'ICSE10HCV01', 'ICSE10HCV17', 'ISC12MAT13', 'CBSE10SCI09', 'ISC12CHE04', 'CBSE09POL01', 'ICSE09PHY05') order by 1`)).toEqual([
+      { chapter_id: 'CBSE09POL01', name: 'What Is Democracy? Why Democracy?' }, { chapter_id: 'CBSE10MAT01', name: 'Real Numbers' },
+      { chapter_id: 'CBSE10SCI09', name: 'Light: Reflection and Refraction' }, { chapter_id: 'ICSE09PHY05', name: 'Upthrust in Fluids and Floatation' },
+      { chapter_id: 'ICSE10HCV01', name: 'Parliament' }, { chapter_id: 'ICSE10HCV17', name: 'Post-WWII World' },
+      { chapter_id: 'ISC12CHE04', name: 'The d- and f-Block Elements' }, { chapter_id: 'ISC12MAT13', name: 'Application of Calculus in Commerce and Economics' },
+    ]);
+    // no dashes in a name (the site's rule), and no topics
+    expect(await n(`select name from games.chapters where name ~ '[\u2013\u2014]'`)).toEqual([]);
     expect((await n('select count(*)::int n from games.topics'))[0].n).toBe(0);
   }, 60_000);
+
+  it('skips a line that starts with # (a note), as it does a header row', async () => {
+    expect(await failure(fresh, withRows(`# a note about the next rows\n${SHEET}  # another, indented\n`)))
+      .toMatch(/Dry run passed: the list has 3 chapters and 3 topics/);
+  });
 
   it('the dry run checks and counts, then keeps nothing', async () => {
     expect(await failure(fresh, withRows(SHEET))).toMatch(/Dry run passed: the list has 3 chapters and 3 topics, of which 3 chapters and 3 topics are new/);

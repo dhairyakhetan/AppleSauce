@@ -273,9 +273,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **The database:** `supabase/games/install.sql` makes the whole `games`
   schema in one transaction (a dry run by default; it stops if anything outside
   `games` would change), and `supabase/games/list.sql` loads the fixed list of
-  chapters (as committed, the site's 189 chapters: Mathematics and ICSE 10
-  History & Civics, from the live bank). Neither is installed on the live
-  database yet; until
+  chapters (as committed, 564: the site's Mathematics chapters, and chapters
+  drafted from the syllabus for other subjects, classes 9 to 12, still to be
+  checked). Neither is installed on the live database yet; until
   then every call in `lib/games/api.ts` (`realGamesApi`) fails and the pages
   say so. The site calls functions only; no role can read the tables.
   `lib/games/database.test.ts` runs both scripts on PGlite.
