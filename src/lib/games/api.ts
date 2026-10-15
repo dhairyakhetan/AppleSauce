@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import type { NewChapter } from './list-rows';
-import { toRecord, type AdminList, type Bank, type BankQuestion, type Batch, type GamesRole, type ListChapter, type Person, type RoleCheck, type Row, type SentBack, type Status } from './rows';
+import { toRecord, type AdminList, type Bank, type BankQuestion, type Batch, type GamesRole, type ListChapter, type ListSave, type Person, type RoleCheck, type Row, type SentBack, type Status, type TopicQuestions } from './rows';
 
 /*
  * Everything the games pages ask the database, as one object, so the same pages run against the real database or,
@@ -52,22 +51,14 @@ export interface GamesApi {
 
   /** Admins: the list as the Chapters page shows it, with question counts and the latest changes. */
   loadList(): Promise<AdminList>;
-  /** Admins: add chapters (topics given with one fix its topics). One already on the list under that name is left as it is. */
-  addChapters(chapters: NewChapter[]): Promise<AddResult>;
-  /** Admins: one topic for a chapter (the list's if its topics are fixed, otherwise one more in use). */
-  addTopic(chapterId: string, topicNo: number, name: string): Promise<void>;
-  /** Admins: rename a chapter (`topicNo` null) or a topic; its questions take the new name, and keep their IDs. */
-  renameInList(chapterId: string, topicNo: number | null, name: string): Promise<void>;
-  /** Admins: another number for a chapter or topic, while nothing has been sent for it. */
-  renumberInList(chapterId: string, topicNo: number | null, newNo: number): Promise<void>;
-  /** Admins: delete a chapter (with its topics) or a topic, while nothing has been sent for it. */
-  deleteFromList(chapterId: string, topicNo: number | null): Promise<void>;
-  /** Admins: fix a chapter's topics (questions go only under them) or open them (writers may add their own). */
-  setTopicsFixed(chapterId: string, fixed: boolean): Promise<void>;
+  /**
+   * Admins: saves the changes made to one board, class and subject's chapters, all at once, or none of them if any is
+   * refused (or the list changed since `before`). Gives back how many changes were made.
+   */
+  saveChapters(save: ListSave): Promise<{ changes: number }>;
+  /** Admins: up to 20 of a topic's questions (`topicNo` null: the chapter's questions under no topic), and how many it has. */
+  topicQuestions(chapterId: string, topicNo: number | null): Promise<TopicQuestions>;
 }
-
-/** What adding chapters gives back: how many chapters and topics were added, and how many were on the list already. */
-export interface AddResult { chapters: number; topics: number; already: number }
 
 /** The most questions the database takes in one batch; more are sent as several batches, one after another. */
 export const BATCH_MAX = 500;
@@ -152,10 +143,6 @@ export const realGamesApi: GamesApi = {
   removePerson: async (email) => { await ask<null>(db().rpc('admin_remove', { person: email })); },
 
   loadList: () => ask<AdminList>(db().rpc('admin_list')),
-  addChapters: (chapters) => ask<AddResult>(db().rpc('admin_add_chapters', { chapters })),
-  addTopic: async (chapterId, topicNo, name) => { await ask<null>(db().rpc('admin_add_topic', { chapter: chapterId, topic_no: topicNo, name })); },
-  renameInList: async (chapterId, topicNo, name) => { await ask<null>(db().rpc('admin_rename', { chapter: chapterId, topic_no: topicNo, name })); },
-  renumberInList: async (chapterId, topicNo, newNo) => { await ask<null>(db().rpc('admin_renumber', { chapter: chapterId, topic_no: topicNo, new_no: newNo })); },
-  deleteFromList: async (chapterId, topicNo) => { await ask<null>(db().rpc('admin_delete_from_list', { chapter: chapterId, topic_no: topicNo })); },
-  setTopicsFixed: async (chapterId, fixed) => { await ask<null>(db().rpc('admin_set_topics_fixed', { chapter: chapterId, fixed })); },
+  saveChapters: (save) => ask<{ changes: number }>(db().rpc('admin_save_chapters', { changes: save })),
+  topicQuestions: (chapterId, topicNo) => ask<TopicQuestions>(db().rpc('admin_topic_questions', { chapter: chapterId, topic_no: topicNo })),
 };

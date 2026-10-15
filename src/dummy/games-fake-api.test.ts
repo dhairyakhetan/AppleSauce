@@ -6,6 +6,8 @@ import { createFakeGamesApi, DUMMY_LIST, DUMMY_TEXTS } from '@/dummy/games-fake-
 import { checkList } from '@/lib/games/catalog';
 import { GAME_TYPES, makeGame } from '@/lib/games/engine';
 import { format } from '@/lib/games/format';
+import { addChapter, addTopic, changeCount, chaptersOf, deleteChapter, draftOf, renameChapter, renumberChapter, setOpen, toSave, type DraftChapter } from '@/lib/games/list-draft';
+import type { AdminChapter } from '@/lib/games/rows';
 
 /* Dummy mode's stand-in for the `games` schema keeps the database's rules, so what people try in dummy mode is what
    the real pages will do. Its made-up questions are written the way the prompt asks, so they pass the checker. */
@@ -84,35 +86,64 @@ describe('the dummy games database', () => {
     expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.topics).toHaveLength(2);
   });
 
-  it('keeps the list of chapters by the database\'s rules: renames reach questions, numbers and deletes wait for none', async () => {
+  it("saves a subject's chapters all at once by the database's rules: renames reach questions, numbers and deletes wait for none", async () => {
     const api = createFakeGamesApi(false);
-    const heat = async () => (await api.loadList()).chapters.find((c) => c.name === 'Heat')!;
-    expect((await heat()).questions).toBeGreaterThan(0);
-    await expect(api.renumberInList('CBSE07SCI04', null, 9)).rejects.toThrow(/so its number stays: it is part of each question's ID/);
-    await expect(api.deleteFromList('CBSE07SCI04', null)).rejects.toThrow(/can't be deleted\. Rename it instead/);
-    await api.renameInList('CBSE07SCI04', null, 'Heat and Temperature');
+    const SCI7 = { board: 'CBSE', class: 7, subject: 'Science' };
+    const open = async () => {
+      const loaded = chaptersOf((await api.loadList()).chapters, SCI7);
+      return { loaded, d: draftOf(loaded) };
+    };
+    const save = (loaded: AdminChapter[], d: DraftChapter[]) => api.saveChapters(toSave(SCI7, loaded, d));
+    let { loaded, d } = await open();
+    const heat = d.find((c) => c.name === 'Heat')!;
+    expect(heat.questions).toBeGreaterThan(0);
+    // what the page refuses, the database refuses too
+    const sneaky = toSave(SCI7, loaded, d);
+    sneaky.after = sneaky.after.map((c) => (c.chapter_id === heat.key ? { ...c, chapter_no: 9 } : c));
+    await expect(api.saveChapters(sneaky)).rejects.toThrow(/so its number stays: it is part of each question's ID/);
+    sneaky.after = sneaky.after.filter((c) => c.chapter_id !== heat.key);
+    await expect(api.saveChapters(sneaky)).rejects.toThrow(/can't be deleted\. Rename it instead/);
+    // a rename, a new chapter, and fixed topics for a chapter that had none, in one save
+    d = renameChapter(d, heat.key, 'Heat and Temperature');
+    d = addChapter(d, 12, 'Motion and Time');
+    d = addTopic(d, 'CBSE07SCI02', 1, 'Digestion in Humans');
+    d = setOpen(d, 'CBSE07SCI02', false);
+    expect(changeCount(d)).toBe(4);
+    expect(await save(loaded, d)).toEqual({ changes: 4 });
     expect((await api.loadForHod()).questions.filter((q) => q.chapter_id === 'CBSE07SCI04').every((q) => q.chapter === 'Heat and Temperature')).toBe(true);
-    // a chapter with nothing sent: added, renumbered, deleted
-    expect(await api.addChapters([{ board: 'CBSE', class: 7, subject: 'Science', chapter_no: 12, name: 'Motion and Time', topics: [] }])).toEqual({ chapters: 1, topics: 0, already: 0 });
-    await expect(api.addChapters([{ board: 'CBSE', class: 7, subject: 'Science', chapter_no: 13, name: 'motion and time', topics: [] }])).rejects.toThrow(/already has "Motion and Time" as chapter 12/);
-    await api.renumberInList('CBSE07SCI12', null, 11);
+    const nutrition = (await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!;
+    expect([nutrition.open, nutrition.topics.map((t) => t.topic_id)]).toEqual([false, ['CBSE07SCI02T01']]);
+    // saving from the list as it was before refuses, and keeps nothing
+    await expect(save(loaded, renameChapter(d, heat.key, 'Heat'))).rejects.toThrow(/changed after you opened them .*Nothing was saved/);
+    // the new chapter has nothing sent: it moves, then goes
+    ({ loaded, d } = await open());
+    d = renumberChapter(d, 'CBSE07SCI12', 11);
+    await save(loaded, d);
     expect((await api.loadCatalog()).some((c) => c.chapter_id === 'CBSE07SCI11' && c.name === 'Motion and Time')).toBe(true);
-    await api.deleteFromList('CBSE07SCI11', null);
+    ({ loaded, d } = await open());
+    await save(loaded, deleteChapter(d, 'CBSE07SCI11'));
     expect((await api.loadCatalog()).some((c) => c.name === 'Motion and Time')).toBe(false);
-    // topics: fixing needs some; a topic added keeps the chapter as it was
-    await expect(api.setTopicsFixed('CBSE07SCI02', true)).rejects.toThrow(/add them first/);
-    await api.addTopic('CBSE07SCI02', 1, 'Digestion in Humans');
-    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.open).toBe(true);
-    await api.setTopicsFixed('CBSE07SCI02', true);
-    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.open).toBe(false);
-    expect((await api.loadList()).log.slice(0, 2).map((l) => l.action)).toEqual(['topics', 'add']);
+    expect((await api.loadList()).log.slice(0, 2).map((l) => l.detail)).toEqual([
+      'Chapter 11 (CBSE class 7 Science) "Motion and Time" deleted.', 'Chapter 12 (CBSE class 7 Science) "Motion and Time" is now chapter 11.',
+    ]);
+  });
+
+  it("shows up to 20 of a topic's questions, in order, with how many it has", async () => {
+    const api = createFakeGamesApi(false);
+    const r = await api.topicQuestions('CBSE07SCI04', 2);
+    expect(r.total).toBeGreaterThan(0);
+    expect(r.questions.map((x) => x.question_id)).toEqual([...r.questions.map((x) => x.question_id)].sort());
+    expect(r.questions[0]).toEqual({ question_id: 'CBSE07SCI04T02Q001', question: expect.any(String), answer: expect.any(String), status: 'approved' });
+    expect((await api.topicQuestions('CBSE07SCI04', 77)).total).toBe(0);
   });
 
   it('keeps the list for admins only', async () => {
     const api = createFakeGamesApi(false);
+    const loaded = chaptersOf((await api.loadList()).chapters, { board: 'CBSE', class: 7, subject: 'Science' });
     api.setRole('hod');
     await expect(api.loadList()).rejects.toThrow(/Only an admin/);
-    await expect(api.addChapters([{ board: 'CBSE', class: 7, subject: 'Science', chapter_no: 12, name: 'Motion and Time', topics: [] }])).rejects.toThrow(/Only an admin/);
+    await expect(api.saveChapters(toSave({ board: 'CBSE', class: 7, subject: 'Science' }, loaded, draftOf(loaded)))).rejects.toThrow(/Only an admin/);
+    await expect(api.topicQuestions('CBSE07SCI04', 2)).rejects.toThrow(/Only an admin/);
   });
 
   it('lets only HoDs and admins approve, and only admins manage the team', async () => {

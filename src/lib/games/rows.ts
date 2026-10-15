@@ -132,3 +132,20 @@ export interface AdminChapter extends Omit<ListChapter, 'topics' | 'open'> { ope
 export interface ListChange { at: string; by: string; action: 'add' | 'rename' | 'renumber' | 'delete' | 'topics'; detail: string }
 /** The list for the Chapters page, with the latest changes, newest first. */
 export interface AdminList { chapters: AdminChapter[]; log: ListChange[] }
+
+/** One board, class and subject: the Chapters page shows and saves the list one of these at a time. */
+export interface ListGroup { board: string; class: number; subject: string }
+/** A chapter of a group as the page was shown it (games.list_group): sent back on saving, so nothing changed since is
+ * overwritten. */
+export interface SavedChapter { chapter_id: string; chapter_no: number; name: string; open: boolean; topics: { topic_no: number; name: string }[] }
+/** A chapter of a group as it is to be: `chapter_id` null for a new one; each topic's `was` is its number until now
+ * (null for a new topic). A chapter or topic left out is deleted. */
+export interface ChapterToSave { chapter_id: string | null; chapter_no: number; name: string; open: boolean; topics: { was: number | null; topic_no: number; name: string }[] }
+/** What "Save changes" sends: one group, as it was and as it is to be. */
+export interface ListSave extends ListGroup { before: SavedChapter[]; after: ChapterToSave[] }
+/** A question under a topic on the Chapters page. */
+export interface TopicQuestion { question_id: string; question: string; answer: string; status: Status }
+/** Up to 20 of a topic's questions, in order, and how many it has. */
+export interface TopicQuestions { total: number; questions: TopicQuestion[] }
+/** The most questions the Chapters page shows under a topic. */
+export const TOPIC_QUESTIONS_MAX = 20;

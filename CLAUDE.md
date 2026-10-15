@@ -265,7 +265,8 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   (everyone on the team), `/games/team` Team (admins), `/games/chapters`
   Chapters (admins). `pages/Games.tsx` picks
   the part; `RouteTransition` in `App.tsx` keeps `/games/*` mounted, so the text
-  being written survives moving between parts. Footerless, like `/hod`.
+  being written survives moving between parts. Footerless, like `/hod`, and
+  without the "Ask AI" button (`Chatbot.tsx` treats `/games` as a work tool).
 - **Who gets in:** only emails on the games team's own list, in its own
   `games` schema. Being a Shikshaq admin, HOD or checker doesn't put anyone on
   it, and nothing reads Shikshaq's own tables. The account menu's "Games team"
@@ -278,7 +279,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   uses: 564, the site's Mathematics chapters and others drafted from the
   syllabus for classes 9 to 12, still to be checked). From then on the list is
   kept on the site, on Chapters (`/games/chapters`, admins:
-  `components/games/Chapters.tsx`, the `games.admin_*` list functions).
+  `components/games/Chapters.tsx`): one board, class and subject at a time,
+  edits kept and marked on the page (`lib/games/list-draft.ts`) until "Save
+  changes" sends them all at once to `games.admin_save_chapters`, which checks
+  them again and refuses a save from a list that changed since it was loaded.
   It isn't installed on the live database yet; until
   then every call in `lib/games/api.ts` (`realGamesApi`) fails and the pages
   say so. The site calls functions only; no role can read the tables.
@@ -306,7 +310,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `details.ts` boards, subjects and IDs, `catalog.ts` the list check,
   `prompt.ts` what "Copy chatbot prompt" copies, `engine/` the games: each has a
   maker and a separate checker, and a puzzle is only shown after its checker
-  passes it; `answers.ts` marks typed answers), `components/games/` (the five parts, `Revise.tsx` the game
+  passes it; `answers.ts` marks typed answers), `components/games/` (the five parts, `Picker.tsx` the Chapters dropdowns, `Revise.tsx` the game
   picker and player used full size by Try the games and small by the preview,
   the guide; `games.css` is only what utility classes can't say, in Shikshaq's
   colour variables).

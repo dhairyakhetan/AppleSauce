@@ -28,9 +28,8 @@
 -- function checks who is asking. Only signed-in people on the team's list (games.team) get anything:
 --   member  writes questions and sends them (submit_batch), sees their own sent-back questions (my_sent_back)
 --   hod     also approves them or sends them back (hod_questions, hod_approved, hod_set_status, waiting_count)
---   admin   also manages the team (admin_people, admin_set_role, admin_remove) and the list of chapters (admin_list,
---           admin_add_chapters, admin_add_topic, admin_rename, admin_renumber, admin_delete_from_list,
---           admin_set_topics_fixed), on the site's Chapters page
+--   admin   also manages the team (admin_people, admin_set_role, admin_remove) and the list of chapters on the site's
+--           Chapters page (admin_list, admin_save_chapters, admin_topic_questions)
 --
 -- Signing in. A person's email counts only if this session was signed in with Google (or another provider listed in
 -- games.settings) or with an email sign-in link. A password doesn't count: with "Confirm email" off, anyone can sign up
@@ -771,9 +770,10 @@ end $$;
 
 -- ---------------------------------------------------------------- the list, for admins (the Chapters page)
 
--- Admins keep the list on the site: add chapters (one, or many pasted), rename a chapter or topic (its questions take
--- the new name), change a number or delete only while nothing has been sent for it (the number is part of every
--- question ID), and open or fix a chapter's topics. Every change is noted here.
+-- Admins keep the list on the site, one board, class and subject at a time: add chapters and topics, rename them (their
+-- questions take the new name), change a number or delete only while nothing has been sent for it (the number is part
+-- of every question ID), and open or fix a chapter's topics. The page saves them all at once, and each change is noted
+-- here.
 create table games.list_log (
   id bigint generated always as identity primary key,
   at timestamptz not null default now(),
@@ -843,7 +843,7 @@ end $$;
 
 -- Adds chapters (with any topics, which fix the chapter's topics): [{board, class, subject, chapter_no, name,
 -- topics: [{topic_no, name}]}]. One already on the list under the same name is left as it is. All of it, or none.
--- The Chapters page (admin_add_chapters, below) and the starting list (near the end) both add chapters through it.
+-- The starting list (near the end) goes in through it.
 create function games.list_add_chapters(chapters jsonb) returns jsonb language plpgsql security definer set search_path = ''
 as $$
 declare
@@ -897,154 +897,248 @@ begin
   return jsonb_build_object('chapters', added, 'topics', topics, 'already', already);
 end $$;
 
--- An admin adds chapters on the Chapters page (one, or many pasted).
-create function games.admin_add_chapters(chapters jsonb) returns jsonb language plpgsql security definer set search_path = ''
+-- One board, class and subject's chapters as the Chapters page shows them, and sends back as `before` when it saves:
+-- in order, each with whether its topics are open, and its topics in order.
+create function games.list_group(b text, cls int, s text) returns jsonb language sql stable security definer set search_path = ''
 as $$
-declare
-  r jsonb;
-begin
-  perform games.list_check_admin();
-  r := games.list_add_chapters(chapters);
-  if (r ->> 'chapters')::int + (r ->> 'topics')::int > 0 then
-    perform games.list_note('add', format('Added %s chapters and %s topics.', r ->> 'chapters', r ->> 'topics'));
-  end if;
-  return r;
-end $$;
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'chapter_id', c.chapter_id, 'chapter_no', c.chapter_no, 'name', c.name,
+      'open', not exists (select 1 from games.topics t where t.chapter_id = c.chapter_id and t.from_list),
+      'topics', coalesce((select jsonb_agg(jsonb_build_object('topic_no', t.topic_no, 'name', t.name) order by t.topic_no)
+                          from games.topics t where t.chapter_id = c.chapter_id), '[]'))
+    order by c.chapter_no), '[]')
+  from games.chapters c where c.board = b and c.class = cls and c.subject = s
+$$;
 
--- One topic for a chapter: the list's if the chapter's topics are fixed, otherwise one more in use.
-create function games.admin_add_topic(chapter text, topic_no int, name text) returns void language plpgsql security definer set search_path = ''
+-- Saves an admin's changes to one board, class and subject's chapters, all at once (the Chapters page's "Save changes"):
+-- {board, class, subject, before, after}. `before` is the list as the page showed it (games.list_group); if it has
+-- changed since, nothing is saved. `after` is the list as it is to be: [{chapter_id (null for a new chapter), chapter_no,
+-- name, open, topics: [{was (the topic's number until now; null for a new topic), topic_no, name}]}]. A chapter or topic
+-- left out of it is deleted. A name can change at any time, and its questions take the new one; a number changes, and a
+-- chapter or topic is deleted, only while it has no questions, as the number is part of each question's ID. All of it,
+-- or none of it; each change is noted.
+create function games.admin_save_chapters(changes jsonb) returns jsonb language plpgsql security definer set search_path = ''
 as $$
 declare
+  b games.boards%rowtype;
+  s games.subjects%rowtype;
+  cls int;
+  grp text;
+  aft jsonb := changes -> 'after';
+  c jsonb;
+  t jsonb;
+  o jsonb;
+  cur games.chapters%rowtype;
   ch games.chapters%rowtype;
-begin
-  perform games.list_check_admin();
-  select * into ch from games.chapters c where c.chapter_id = chapter;
-  if not found then raise exception 'That chapter isn''t on the list.'; end if;
-  if not games.list_add_topic(ch, topic_no, name, exists (select 1 from games.topics t where t.chapter_id = ch.chapter_id and t.from_list)) then
-    raise exception 'Topic % of % is already "%".', topic_no, games.list_label(ch), btrim(name);
-  end if;
-  perform games.list_note('add', format('%s: added topic %s "%s".', games.list_label(ch), topic_no, btrim(name)));
-end $$;
-
--- Renames a chapter (topic_no null) or one of its topics. Its questions, waiting, approved or sent back, take the new
--- name too; their IDs don't change.
-create function games.admin_rename(chapter text, topic_no int, name text) returns void language plpgsql security definer set search_path = ''
-as $$
-declare
-  ch games.chapters%rowtype;
-  t games.topics%rowtype;
-  nm text := btrim(coalesce(name, ''));
-  tno int := topic_no;
-begin
-  perform games.list_check_admin();
-  select * into ch from games.chapters c where c.chapter_id = chapter;
-  if not found then raise exception 'That chapter isn''t on the list.'; end if;
-  if char_length(nm) not between 1 and 120 then raise exception 'A name must be 1 to 120 characters.'; end if;
-  if tno is null then
-    if exists (select 1 from games.chapters c where c.board = ch.board and c.class = ch.class and c.subject = ch.subject
-               and c.chapter_id <> ch.chapter_id and games.norm(c.name) = games.norm(nm)) then
-      raise exception '% class % % already has a chapter called "%".', ch.board, ch.class, ch.subject, nm;
-    end if;
-    update games.chapters c set name = nm where c.chapter_id = ch.chapter_id;
-    update games.questions q set chapter = nm where q.chapter_id = ch.chapter_id;
-    update games.question_bank q set chapter = nm where q.chapter_id = ch.chapter_id;
-    perform games.list_note('rename', format('%s: "%s" renamed "%s".', games.list_label(ch), ch.name, nm));
-  else
-    select * into t from games.topics x where x.chapter_id = ch.chapter_id and x.topic_no = tno;
-    if not found then raise exception '% has no topic %.', games.list_label(ch), tno; end if;
-    if exists (select 1 from games.topics x where x.chapter_id = ch.chapter_id and x.topic_no <> tno and games.norm(x.name) = games.norm(nm)) then
-      raise exception '% already has a topic called "%".', games.list_label(ch), nm;
-    end if;
-    update games.topics x set name = nm where x.topic_id = t.topic_id;
-    update games.questions q set topic = nm where q.chapter_id = ch.chapter_id and q.topic_no = tno;
-    update games.question_bank q set topic = nm where q.chapter_id = ch.chapter_id and q.topic_no = tno;
-    perform games.list_note('rename', format('%s topic %s: "%s" renamed "%s".', games.list_label(ch), tno, t.name, nm));
-  end if;
-end $$;
-
--- Gives a chapter (topic_no null) or a topic another number, while nothing has been sent for it.
-create function games.admin_renumber(chapter text, topic_no int, new_no int) returns void language plpgsql security definer set search_path = ''
-as $$
-declare
-  ch games.chapters%rowtype;
-  t games.topics%rowtype;
-  tno int := topic_no;
+  old_topics jsonb;
+  was_open boolean;
+  is_open boolean;
+  moved jsonb := '{}';
+  no int;
+  nm text;
+  tno int;
+  twas int;
+  tnm text;
   n int;
-  nid text;
+  dup text;
+  done int := 0;
 begin
   perform games.list_check_admin();
-  select * into ch from games.chapters c where c.chapter_id = chapter;
-  if not found then raise exception 'That chapter isn''t on the list.'; end if;
-  if new_no is null or new_no not between 1 and 99 then raise exception 'A number must be from 1 to 99.'; end if;
-  if tno is null then
-    select count(*) into n from games.questions q where q.chapter_id = ch.chapter_id;
-    if n > 0 then raise exception '% has %, so its number stays: it is part of each question''s ID.', games.list_label(ch), n || case when n = 1 then ' question' else ' questions' end; end if;
-    if new_no = ch.chapter_no then return; end if;
-    if exists (select 1 from games.chapters c where c.board = ch.board and c.class = ch.class and c.subject = ch.subject and c.chapter_no = new_no) then
-      raise exception '% class % % already has a chapter %.', ch.board, ch.class, ch.subject, new_no;
-    end if;
-    nid := left(ch.chapter_id, char_length(ch.chapter_id) - 2) || lpad(new_no::text, 2, '0');
-    insert into games.chapters (chapter_id, board, class, subject, chapter_no, name) values (nid, ch.board, ch.class, ch.subject, new_no, ch.name);
-    insert into games.topics (topic_id, chapter_id, topic_no, name, from_list)
-    select nid || 'T' || lpad(x.topic_no::text, 2, '0'), nid, x.topic_no, x.name, x.from_list from games.topics x where x.chapter_id = ch.chapter_id;
-    delete from games.chapters c where c.chapter_id = ch.chapter_id;
-    perform games.list_note('renumber', format('%s "%s" is now chapter %s.', games.list_label(ch), ch.name, new_no));
-  else
-    select * into t from games.topics x where x.chapter_id = ch.chapter_id and x.topic_no = tno;
-    if not found then raise exception '% has no topic %.', games.list_label(ch), tno; end if;
-    select count(*) into n from games.questions q where q.chapter_id = ch.chapter_id and q.topic_no = tno;
-    if n > 0 then raise exception 'Topic % of % has %, so its number stays: it is part of each question''s ID.', tno, games.list_label(ch), n || case when n = 1 then ' question' else ' questions' end; end if;
-    if new_no = tno then return; end if;
-    if exists (select 1 from games.topics x where x.chapter_id = ch.chapter_id and x.topic_no = new_no) then
-      raise exception '% already has a topic %.', games.list_label(ch), new_no;
-    end if;
-    update games.topics x set topic_no = new_no, topic_id = ch.chapter_id || 'T' || lpad(new_no::text, 2, '0') where x.topic_id = t.topic_id;
-    perform games.list_note('renumber', format('%s topic %s "%s" is now topic %s.', games.list_label(ch), tno, t.name, new_no));
+  select * into b from games.boards x where x.name = changes ->> 'board';
+  if not found then raise exception 'The board "%" isn''t on the site''s list.', changes ->> 'board'; end if;
+  select * into s from games.subjects x where x.name = changes ->> 'subject';
+  if not found then raise exception 'The subject "%" isn''t on the site''s list.', changes ->> 'subject'; end if;
+  cls := case when (changes ->> 'class') ~ '^\d{1,2}$' then (changes ->> 'class')::int end;
+  if cls is null or cls not between 1 and 12 then raise exception 'The class must be from 1 to 12.'; end if;
+  grp := format('%s class %s %s', b.name, cls, s.name);
+  if (changes -> 'before') is distinct from games.list_group(b.name, cls, s.name) then
+    raise exception 'The chapters of % changed after you opened them (another admin saved changes, or a question was sent under a new topic). Nothing was saved: press Revert changes to see them as they are now, then make your changes again.', grp;
   end if;
+
+  -- what is to be saved, checked whole before anything changes
+  if jsonb_typeof(aft) is distinct from 'array' or jsonb_array_length(aft) > 99 then
+    raise exception 'The chapters to save must be a list of at most 99.';
+  end if;
+  for c in select y from jsonb_array_elements(aft) y loop
+    no := case when (c ->> 'chapter_no') ~ '^\d{1,2}$' then (c ->> 'chapter_no')::int end;
+    nm := btrim(coalesce(c ->> 'name', ''));
+    if no is null or no not between 1 and 99 then raise exception 'A chapter number must be from 1 to 99 ("%").', nm; end if;
+    if char_length(nm) not between 1 and 120 then raise exception 'The name of chapter % must be 1 to 120 characters.', no; end if;
+    if nm ~ '[–—]' then raise exception 'No dashes in a name ("%"): use a colon or a comma.', nm; end if;
+    if jsonb_typeof(c -> 'open') is distinct from 'boolean' or jsonb_typeof(c -> 'topics') is distinct from 'array' then
+      raise exception 'Chapter % needs its topics, and whether they are open.', no;
+    end if;
+    if not (c ->> 'open')::boolean and jsonb_array_length(c -> 'topics') = 0 then
+      raise exception 'Chapter % ("%") has no topics: add them first, then fix them.', no, nm;
+    end if;
+    if c ->> 'chapter_id' is not null then
+      select * into cur from games.chapters x where x.chapter_id = c ->> 'chapter_id' and x.board = b.name and x.class = cls and x.subject = s.name;
+      if not found then raise exception 'Chapter % isn''t one of the chapters of %.', c ->> 'chapter_id', grp; end if;
+      if cur.chapter_no <> no then
+        select count(*) into n from games.questions q where q.chapter_id = cur.chapter_id;
+        if n > 0 then
+          raise exception '% has %, so its number stays: it is part of each question''s ID.', games.list_label(cur), n || case when n = 1 then ' question' else ' questions' end;
+        end if;
+      end if;
+    end if;
+    for t in select y from jsonb_array_elements(c -> 'topics') y loop
+      tno := case when (t ->> 'topic_no') ~ '^\d{1,2}$' then (t ->> 'topic_no')::int end;
+      tnm := btrim(coalesce(t ->> 'name', ''));
+      twas := case when (t ->> 'was') ~ '^\d{1,2}$' then (t ->> 'was')::int end;
+      if tno is null or tno not between 1 and 99 then raise exception 'A topic number must be from 1 to 99 (chapter %, "%").', no, tnm; end if;
+      if char_length(tnm) not between 1 and 120 then raise exception 'The name of topic % of chapter % must be 1 to 120 characters.', tno, no; end if;
+      if tnm ~ '[–—]' then raise exception 'No dashes in a name ("%"): use a colon or a comma.', tnm; end if;
+      if t ->> 'was' is not null then
+        if twas is null or c ->> 'chapter_id' is null
+           or not exists (select 1 from games.topics x where x.chapter_id = c ->> 'chapter_id' and x.topic_no = twas) then
+          raise exception 'Chapter % has no topic % to keep.', no, t ->> 'was';
+        end if;
+        if twas <> tno then
+          select count(*) into n from games.questions q where q.chapter_id = c ->> 'chapter_id' and q.topic_no = twas;
+          if n > 0 then
+            raise exception 'Topic % of % has %, so its number stays: it is part of each question''s ID.', twas, games.list_label(cur), n || case when n = 1 then ' question' else ' questions' end;
+          end if;
+        end if;
+      end if;
+    end loop;
+    select min(y ->> 'topic_no') into dup from jsonb_array_elements(c -> 'topics') y group by (y ->> 'topic_no')::int having count(*) > 1 limit 1;
+    if dup is not null then raise exception 'Chapter % has two topics numbered %.', no, dup; end if;
+    select min(btrim(y ->> 'name')) into dup from jsonb_array_elements(c -> 'topics') y group by games.norm(y ->> 'name') having count(*) > 1 limit 1;
+    if dup is not null then raise exception 'Chapter % has two topics called "%".', no, dup; end if;
+    select min(y ->> 'was') into dup from jsonb_array_elements(c -> 'topics') y where y ->> 'was' is not null group by (y ->> 'was')::int having count(*) > 1 limit 1;
+    if dup is not null then raise exception 'Topic % of chapter % is there twice.', dup, no; end if;
+  end loop;
+  select min(y ->> 'chapter_no') into dup from jsonb_array_elements(aft) y group by (y ->> 'chapter_no')::int having count(*) > 1 limit 1;
+  if dup is not null then raise exception '% has two chapters numbered %.', grp, dup; end if;
+  select min(btrim(y ->> 'name')) into dup from jsonb_array_elements(aft) y group by games.norm(y ->> 'name') having count(*) > 1 limit 1;
+  if dup is not null then raise exception '% has two chapters called "%".', grp, dup; end if;
+  select min(y ->> 'chapter_id') into dup from jsonb_array_elements(aft) y where y ->> 'chapter_id' is not null group by y ->> 'chapter_id' having count(*) > 1 limit 1;
+  if dup is not null then raise exception 'Chapter % is there twice.', dup; end if;
+
+  -- chapters left out are deleted; chapters given another number leave theirs (they come back below, it being free)
+  for cur in select * from games.chapters x where x.board = b.name and x.class = cls and x.subject = s.name order by x.chapter_no loop
+    select y into c from jsonb_array_elements(aft) y where y ->> 'chapter_id' = cur.chapter_id;
+    if c is null then
+      select count(*) into n from games.questions q where q.chapter_id = cur.chapter_id;
+      if n > 0 then
+        raise exception '% has %, so it can''t be deleted. Rename it instead.', games.list_label(cur), n || case when n = 1 then ' question' else ' questions' end;
+      end if;
+      delete from games.chapters x where x.chapter_id = cur.chapter_id;
+      perform games.list_note('delete', format('%s "%s" deleted.', games.list_label(cur), cur.name));
+      done := done + 1;
+    elsif (c ->> 'chapter_no')::int <> cur.chapter_no then
+      moved := moved || jsonb_build_object(cur.chapter_id, jsonb_build_object('chapter', to_jsonb(cur),
+        'open', not exists (select 1 from games.topics x where x.chapter_id = cur.chapter_id and x.from_list),
+        'topics', coalesce((select jsonb_agg(jsonb_build_object('topic_no', x.topic_no, 'name', x.name)) from games.topics x where x.chapter_id = cur.chapter_id), '[]')));
+      delete from games.chapters x where x.chapter_id = cur.chapter_id;
+    end if;
+  end loop;
+
+  -- each chapter as it is to be, then its topics
+  for c in select y from jsonb_array_elements(aft) y order by (y ->> 'chapter_no')::int loop
+    no := (c ->> 'chapter_no')::int;
+    nm := btrim(c ->> 'name');
+    is_open := (c ->> 'open')::boolean;
+    if c ->> 'chapter_id' is null or moved ? (c ->> 'chapter_id') then
+      insert into games.chapters (chapter_id, board, class, subject, chapter_no, name)
+      values (b.code || lpad(cls::text, 2, '0') || s.code || lpad(no::text, 2, '0'), b.name, cls, s.name, no, nm) returning * into ch;
+      done := done + 1;
+      if c ->> 'chapter_id' is null then
+        perform games.list_note('add', format('%s "%s" added.', games.list_label(ch), nm));
+        old_topics := '[]';
+        was_open := true;
+      else
+        o := moved -> (c ->> 'chapter_id');
+        cur := jsonb_populate_record(null::games.chapters, o -> 'chapter');
+        perform games.list_note('renumber', format('%s "%s" is now chapter %s.', games.list_label(cur), cur.name, no));
+        if nm is distinct from cur.name then
+          perform games.list_note('rename', format('%s: "%s" renamed "%s".', games.list_label(ch), cur.name, nm));
+          done := done + 1;
+        end if;
+        old_topics := o -> 'topics';
+        was_open := (o ->> 'open')::boolean;
+      end if;
+    else
+      select * into ch from games.chapters x where x.chapter_id = c ->> 'chapter_id';
+      if nm is distinct from ch.name then
+        update games.chapters x set name = nm where x.chapter_id = ch.chapter_id;
+        update games.questions q set chapter = nm where q.chapter_id = ch.chapter_id;
+        update games.question_bank q set chapter = nm where q.chapter_id = ch.chapter_id;
+        perform games.list_note('rename', format('%s: "%s" renamed "%s".', games.list_label(ch), ch.name, nm));
+        done := done + 1;
+      end if;
+      old_topics := coalesce((select jsonb_agg(jsonb_build_object('topic_no', x.topic_no, 'name', x.name)) from games.topics x where x.chapter_id = ch.chapter_id), '[]');
+      was_open := not exists (select 1 from games.topics x where x.chapter_id = ch.chapter_id and x.from_list);
+    end if;
+
+    -- topics left out are deleted; topics given another number leave theirs
+    for o in select x from jsonb_array_elements(old_topics) x
+             where not exists (select 1 from jsonb_array_elements(c -> 'topics') y where (y ->> 'was')::int = (x ->> 'topic_no')::int) loop
+      tno := (o ->> 'topic_no')::int;
+      select count(*) into n from games.questions q where q.chapter_id = ch.chapter_id and q.topic_no = tno;
+      if n > 0 then
+        raise exception 'Topic % of % has %, so it can''t be deleted. Rename it instead.', tno, games.list_label(ch), n || case when n = 1 then ' question' else ' questions' end;
+      end if;
+      delete from games.topics x where x.chapter_id = ch.chapter_id and x.topic_no = tno;
+      perform games.list_note('delete', format('%s topic %s "%s" deleted.', games.list_label(ch), tno, o ->> 'name'));
+      done := done + 1;
+    end loop;
+    delete from games.topics x where x.chapter_id = ch.chapter_id
+      and exists (select 1 from jsonb_array_elements(c -> 'topics') y where (y ->> 'was')::int = x.topic_no and (y ->> 'topic_no')::int <> x.topic_no);
+    for t in select y from jsonb_array_elements(c -> 'topics') y order by (y ->> 'topic_no')::int loop
+      tno := (t ->> 'topic_no')::int;
+      tnm := btrim(t ->> 'name');
+      twas := (t ->> 'was')::int;
+      select x into o from jsonb_array_elements(old_topics) x where (x ->> 'topic_no')::int = twas;
+      if twas = tno and exists (select 1 from games.topics x where x.chapter_id = ch.chapter_id and x.topic_no = tno) then
+        if tnm is distinct from o ->> 'name' then
+          update games.topics x set name = tnm where x.chapter_id = ch.chapter_id and x.topic_no = tno;
+          update games.questions q set topic = tnm where q.chapter_id = ch.chapter_id and q.topic_no = tno;
+          update games.question_bank q set topic = tnm where q.chapter_id = ch.chapter_id and q.topic_no = tno;
+          perform games.list_note('rename', format('%s topic %s: "%s" renamed "%s".', games.list_label(ch), tno, o ->> 'name', tnm));
+          done := done + 1;
+        end if;
+      else
+        insert into games.topics (topic_id, chapter_id, topic_no, name, from_list)
+        values (ch.chapter_id || 'T' || lpad(tno::text, 2, '0'), ch.chapter_id, tno, tnm, not is_open);
+        if twas is null then
+          perform games.list_note('add', format('%s: added topic %s "%s".', games.list_label(ch), tno, tnm));
+          done := done + 1;
+        else
+          if twas <> tno then
+            perform games.list_note('renumber', format('%s topic %s "%s" is now topic %s.', games.list_label(ch), twas, o ->> 'name', tno));
+            done := done + 1;
+          end if;
+          if tnm is distinct from o ->> 'name' then
+            perform games.list_note('rename', format('%s topic %s: "%s" renamed "%s".', games.list_label(ch), tno, o ->> 'name', tnm));
+            done := done + 1;
+          end if;
+        end if;
+      end if;
+    end loop;
+    update games.topics x set from_list = not is_open where x.chapter_id = ch.chapter_id and x.from_list is distinct from not is_open;
+    if c ->> 'chapter_id' is not null and is_open is distinct from was_open and jsonb_array_length(c -> 'topics') > 0 then
+      perform games.list_note('topics', format('%s: topics %s.', games.list_label(ch), case when is_open then 'opened' else 'fixed' end));
+      done := done + 1;
+    end if;
+  end loop;
+  return jsonb_build_object('changes', done);
 end $$;
 
--- Deletes a chapter (with its topics; topic_no null) or a topic, while nothing has been sent for it.
-create function games.admin_delete_from_list(chapter text, topic_no int) returns void language plpgsql security definer set search_path = ''
+-- Up to 20 of a topic's questions (topic_no null: a chapter's questions under no topic), of any status, in order, and
+-- how many it has: what the Chapters page shows under a topic.
+create function games.admin_topic_questions(chapter text, topic_no int) returns jsonb language plpgsql stable security definer set search_path = ''
 as $$
 declare
-  ch games.chapters%rowtype;
-  t games.topics%rowtype;
-  tno int := topic_no;
-  n int;
+  cid text := chapter;
+  tno int := coalesce(topic_no, 0);
 begin
   perform games.list_check_admin();
-  select * into ch from games.chapters c where c.chapter_id = chapter;
-  if not found then raise exception 'That chapter isn''t on the list.'; end if;
-  if tno is null then
-    select count(*) into n from games.questions q where q.chapter_id = ch.chapter_id;
-    if n > 0 then raise exception '% has %, so it can''t be deleted. Rename it instead.', games.list_label(ch), n || case when n = 1 then ' question' else ' questions' end; end if;
-    delete from games.chapters c where c.chapter_id = ch.chapter_id;
-    perform games.list_note('delete', format('%s "%s" deleted.', games.list_label(ch), ch.name));
-  else
-    select * into t from games.topics x where x.chapter_id = ch.chapter_id and x.topic_no = tno;
-    if not found then raise exception '% has no topic %.', games.list_label(ch), tno; end if;
-    select count(*) into n from games.questions q where q.chapter_id = ch.chapter_id and q.topic_no = tno;
-    if n > 0 then raise exception 'Topic % of % has %, so it can''t be deleted. Rename it instead.', tno, games.list_label(ch), n || case when n = 1 then ' question' else ' questions' end; end if;
-    delete from games.topics x where x.topic_id = t.topic_id;
-    perform games.list_note('delete', format('%s topic %s "%s" deleted.', games.list_label(ch), tno, t.name));
-  end if;
-end $$;
-
--- Fixes a chapter's topics (questions then go only under them) or opens them (writers may add their own).
-create function games.admin_set_topics_fixed(chapter text, fixed boolean) returns void language plpgsql security definer set search_path = ''
-as $$
-declare
-  ch games.chapters%rowtype;
-begin
-  perform games.list_check_admin();
-  select * into ch from games.chapters c where c.chapter_id = chapter;
-  if not found then raise exception 'That chapter isn''t on the list.'; end if;
-  if fixed is null then raise exception 'Say whether the topics are fixed.'; end if;
-  if fixed and not exists (select 1 from games.topics t where t.chapter_id = ch.chapter_id) then
-    raise exception '% has no topics yet: add them first, then fix them.', games.list_label(ch);
-  end if;
-  update games.topics t set from_list = fixed where t.chapter_id = ch.chapter_id;
-  perform games.list_note('topics', format('%s: topics %s.', games.list_label(ch), case when fixed then 'fixed' else 'opened' end));
+  return jsonb_build_object(
+    'total', (select count(*) from games.questions q where q.chapter_id = cid and coalesce(q.topic_no, 0) = tno),
+    'questions', coalesce((
+      select jsonb_agg(jsonb_build_object('question_id', q.question_id, 'question', q.question, 'answer', q.answer, 'status', q.status) order by q.question_no)
+      from (select * from games.questions x where x.chapter_id = cid and coalesce(x.topic_no, 0) = tno order by x.question_no limit 20) q), '[]'));
 end $$;
 
 -- ---------------------------------------------------------------- who can see what
@@ -1065,8 +1159,7 @@ revoke execute on all functions in schema games from public, anon, authenticated
 grant execute on function games.my_role(), games.catalog(), games.submit_batch(jsonb), games.my_sent_back(), games.mark_sent_back_seen(text[]),
   games.bank(), games.bank_count(), games.waiting_count(), games.hod_questions(), games.hod_approved(timestamptz, text, int),
   games.hod_set_status(text[], text, text), games.admin_people(), games.admin_set_role(text, text), games.admin_remove(text),
-  games.admin_list(), games.admin_add_chapters(jsonb), games.admin_add_topic(text, int, text), games.admin_rename(text, int, text),
-  games.admin_renumber(text, int, int), games.admin_delete_from_list(text, int), games.admin_set_topics_fixed(text, boolean) to authenticated;
+  games.admin_list(), games.admin_save_chapters(jsonb), games.admin_topic_questions(text, int) to authenticated;
 
 -- ---------------------------------------------------------------- the moderator
 
@@ -1698,8 +1791,7 @@ begin
   where p.pronamespace = 'games'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')
     and p.proname not in ('my_role', 'catalog', 'submit_batch', 'my_sent_back', 'mark_sent_back_seen', 'bank', 'bank_count',
                           'waiting_count', 'hod_questions', 'hod_approved', 'hod_set_status', 'admin_people', 'admin_set_role', 'admin_remove',
-                          'admin_list', 'admin_add_chapters', 'admin_add_topic', 'admin_rename', 'admin_renumber', 'admin_delete_from_list',
-                          'admin_set_topics_fixed');
+                          'admin_list', 'admin_save_chapters', 'admin_topic_questions');
   if bad is not null then raise exception 'Stopped: signed-in people could call %. Nothing was kept.', bad; end if;
   select string_agg(c.oid::regclass::text, ', ') into bad from pg_class c
   where c.relnamespace = 'games'::regnamespace and c.relkind = 'r'
