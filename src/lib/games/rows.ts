@@ -124,3 +124,11 @@ export interface ListTopic { topic_id: string; topic_no: number; name: string }
  * (when it is left out, a chapter with no topics is open).
  */
 export interface ListChapter { chapter_id: string; board: string; class: number; subject: string; chapter_no: number; name: string; topics: ListTopic[]; open?: boolean }
+
+/** A chapter as admins see it on the Chapters page, with how many questions it and each topic have (of any status:
+ * while it has any, its number stays and it can't be deleted). */
+export interface AdminChapter extends Omit<ListChapter, 'topics' | 'open'> { open: boolean; questions: number; topics: (ListTopic & { questions: number })[] }
+/** A change an admin made to the list. `by` is their name on the team (else their email). */
+export interface ListChange { at: string; by: string; action: 'add' | 'rename' | 'renumber' | 'delete' | 'topics'; detail: string }
+/** The list for the Chapters page, with the latest changes, newest first. */
+export interface AdminList { chapters: AdminChapter[]; log: ListChange[] }

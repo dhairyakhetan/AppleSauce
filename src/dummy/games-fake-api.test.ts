@@ -84,6 +84,37 @@ describe('the dummy games database', () => {
     expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.topics).toHaveLength(2);
   });
 
+  it('keeps the list of chapters by the database\'s rules: renames reach questions, numbers and deletes wait for none', async () => {
+    const api = createFakeGamesApi(false);
+    const heat = async () => (await api.loadList()).chapters.find((c) => c.name === 'Heat')!;
+    expect((await heat()).questions).toBeGreaterThan(0);
+    await expect(api.renumberInList('CBSE07SCI04', null, 9)).rejects.toThrow(/so its number stays: it is part of each question's ID/);
+    await expect(api.deleteFromList('CBSE07SCI04', null)).rejects.toThrow(/can't be deleted\. Rename it instead/);
+    await api.renameInList('CBSE07SCI04', null, 'Heat and Temperature');
+    expect((await api.loadForHod()).questions.filter((q) => q.chapter_id === 'CBSE07SCI04').every((q) => q.chapter === 'Heat and Temperature')).toBe(true);
+    // a chapter with nothing sent: added, renumbered, deleted
+    expect(await api.addChapters([{ board: 'CBSE', class: 7, subject: 'Science', chapter_no: 12, name: 'Motion and Time', topics: [] }])).toEqual({ chapters: 1, topics: 0, already: 0 });
+    await expect(api.addChapters([{ board: 'CBSE', class: 7, subject: 'Science', chapter_no: 13, name: 'motion and time', topics: [] }])).rejects.toThrow(/already has "Motion and Time" as chapter 12/);
+    await api.renumberInList('CBSE07SCI12', null, 11);
+    expect((await api.loadCatalog()).some((c) => c.chapter_id === 'CBSE07SCI11' && c.name === 'Motion and Time')).toBe(true);
+    await api.deleteFromList('CBSE07SCI11', null);
+    expect((await api.loadCatalog()).some((c) => c.name === 'Motion and Time')).toBe(false);
+    // topics: fixing needs some; a topic added keeps the chapter as it was
+    await expect(api.setTopicsFixed('CBSE07SCI02', true)).rejects.toThrow(/add them first/);
+    await api.addTopic('CBSE07SCI02', 1, 'Digestion in Humans');
+    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.open).toBe(true);
+    await api.setTopicsFixed('CBSE07SCI02', true);
+    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.open).toBe(false);
+    expect((await api.loadList()).log.slice(0, 2).map((l) => l.action)).toEqual(['topics', 'add']);
+  });
+
+  it('keeps the list for admins only', async () => {
+    const api = createFakeGamesApi(false);
+    api.setRole('hod');
+    await expect(api.loadList()).rejects.toThrow(/Only an admin/);
+    await expect(api.addChapters([{ board: 'CBSE', class: 7, subject: 'Science', chapter_no: 12, name: 'Motion and Time', topics: [] }])).rejects.toThrow(/Only an admin/);
+  });
+
   it('lets only HoDs and admins approve, and only admins manage the team', async () => {
     const api = createFakeGamesApi(false);
     api.setRole('member');

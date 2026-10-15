@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { toRecord, type Bank, type BankQuestion, type Batch, type GamesRole, type ListChapter, type Person, type RoleCheck, type Row, type SentBack, type Status } from './rows';
+import type { NewChapter } from './list-rows';
+import { toRecord, type AdminList, type Bank, type BankQuestion, type Batch, type GamesRole, type ListChapter, type Person, type RoleCheck, type Row, type SentBack, type Status } from './rows';
 
 /*
  * Everything the games pages ask the database, as one object, so the same pages run against the real database or,
@@ -48,7 +49,25 @@ export interface GamesApi {
   setPersonRole(email: string, role: GamesRole): Promise<void>;
   /** Admins: take someone off the team. */
   removePerson(email: string): Promise<void>;
+
+  /** Admins: the list as the Chapters page shows it, with question counts and the latest changes. */
+  loadList(): Promise<AdminList>;
+  /** Admins: add chapters (topics given with one fix its topics). One already on the list under that name is left as it is. */
+  addChapters(chapters: NewChapter[]): Promise<AddResult>;
+  /** Admins: one topic for a chapter (the list's if its topics are fixed, otherwise one more in use). */
+  addTopic(chapterId: string, topicNo: number, name: string): Promise<void>;
+  /** Admins: rename a chapter (`topicNo` null) or a topic; its questions take the new name, and keep their IDs. */
+  renameInList(chapterId: string, topicNo: number | null, name: string): Promise<void>;
+  /** Admins: another number for a chapter or topic, while nothing has been sent for it. */
+  renumberInList(chapterId: string, topicNo: number | null, newNo: number): Promise<void>;
+  /** Admins: delete a chapter (with its topics) or a topic, while nothing has been sent for it. */
+  deleteFromList(chapterId: string, topicNo: number | null): Promise<void>;
+  /** Admins: fix a chapter's topics (questions go only under them) or open them (writers may add their own). */
+  setTopicsFixed(chapterId: string, fixed: boolean): Promise<void>;
 }
+
+/** What adding chapters gives back: how many chapters and topics were added, and how many were on the list already. */
+export interface AddResult { chapters: number; topics: number; already: number }
 
 /** The most questions the database takes in one batch; more are sent as several batches, one after another. */
 export const BATCH_MAX = 500;
@@ -131,4 +150,12 @@ export const realGamesApi: GamesApi = {
   loadPeople: () => ask<Person[]>(db().rpc('admin_people')),
   setPersonRole: async (email, role) => { await ask<null>(db().rpc('admin_set_role', { person: email, new_role: role })); },
   removePerson: async (email) => { await ask<null>(db().rpc('admin_remove', { person: email })); },
+
+  loadList: () => ask<AdminList>(db().rpc('admin_list')),
+  addChapters: (chapters) => ask<AddResult>(db().rpc('admin_add_chapters', { chapters })),
+  addTopic: async (chapterId, topicNo, name) => { await ask<null>(db().rpc('admin_add_topic', { chapter: chapterId, topic_no: topicNo, name })); },
+  renameInList: async (chapterId, topicNo, name) => { await ask<null>(db().rpc('admin_rename', { chapter: chapterId, topic_no: topicNo, name })); },
+  renumberInList: async (chapterId, topicNo, newNo) => { await ask<null>(db().rpc('admin_renumber', { chapter: chapterId, topic_no: topicNo, new_no: newNo })); },
+  deleteFromList: async (chapterId, topicNo) => { await ask<null>(db().rpc('admin_delete_from_list', { chapter: chapterId, topic_no: topicNo })); },
+  setTopicsFixed: async (chapterId, fixed) => { await ask<null>(db().rpc('admin_set_topics_fixed', { chapter: chapterId, fixed })); },
 };

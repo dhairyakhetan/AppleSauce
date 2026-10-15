@@ -260,9 +260,10 @@ on it write short questions and answers, HoDs approve them, and the games
 ones on the device, with no AI. Brought in from the games site (`main` of
 `dhairyakhetan/AppleSauce`, shikshaq-games.vercel.app).
 
-- **One route, four parts:** `/games` Write questions (everyone on the team),
+- **One route, five parts:** `/games` Write questions (everyone on the team),
   `/games/approve` Approve questions (HoDs, admins), `/games/play` Try the games
-  (everyone on the team), `/games/team` Team (admins). `pages/Games.tsx` picks
+  (everyone on the team), `/games/team` Team (admins), `/games/chapters`
+  Chapters (admins). `pages/Games.tsx` picks
   the part; `RouteTransition` in `App.tsx` keeps `/games/*` mounted, so the text
   being written survives moving between parts. Footerless, like `/hod`.
 - **Who gets in:** only emails on the games team's own list, in its own
@@ -272,13 +273,15 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   link, which is also what happens until the schema is installed.
 - **The database:** `supabase/games/install.sql` makes the whole `games`
   schema in one transaction (a dry run by default; it stops if anything outside
-  `games` would change), and `supabase/games/list.sql` loads the fixed list of
-  chapters (as committed, 564: the site's Mathematics chapters, and chapters
-  drafted from the syllabus for other subjects, classes 9 to 12, still to be
-  checked). Neither is installed on the live database yet; until
+  `games` would change). The fixed list of chapters is then kept on the site,
+  on Chapters (`/games/chapters`, admins: `components/games/Chapters.tsx`,
+  the `games.admin_*` list functions), which can fill in the starting list
+  (`lib/games/starting-list.ts`: 564, the site's Mathematics chapters and
+  others drafted from the syllabus for classes 9 to 12, still to be checked).
+  It isn't installed on the live database yet; until
   then every call in `lib/games/api.ts` (`realGamesApi`) fails and the pages
   say so. The site calls functions only; no role can read the tables.
-  `lib/games/database.test.ts` runs both scripts on PGlite.
+  `lib/games/database.test.ts` runs the script on PGlite.
 - **Sign-in rule:** an email counts only if the session signed in with Google
   (or another provider in `games.settings`) or an email link, read from the
   token's `amr`. A password sign-in gets `'reauth'` from `games.my_role()` and
@@ -302,7 +305,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `details.ts` boards, subjects and IDs, `catalog.ts` the list check,
   `prompt.ts` what "Copy chatbot prompt" copies, `engine/` the games: each has a
   maker and a separate checker, and a puzzle is only shown after its checker
-  passes it; `answers.ts` marks typed answers), `components/games/` (the four parts, `Revise.tsx` the game
+  passes it; `answers.ts` marks typed answers), `components/games/` (the five parts, `Revise.tsx` the game
   picker and player used full size by Try the games and small by the preview,
   the guide; `games.css` is only what utility classes can't say, in Shikshaq's
   colour variables).

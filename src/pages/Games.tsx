@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
 import { ApproveQuestions } from '@/components/games/ApproveQuestions';
+import { Chapters } from '@/components/games/Chapters';
 import { btn } from '@/components/games/helpers';
 import { LoadFailed } from '@/components/games/shared';
 import { Team } from '@/components/games/Team';
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
      /games/approve   Approve questions HoDs and admins
      /games/play      Try the games     everyone on the team
      /games/team      Team              admins
+     /games/chapters  Chapters          admins: the list of chapters and topics questions can be written for
 
    Only people on the team's list get in (the `games` schema decides, on every call). Everyone else gets a polite
    "not for you" page, and the account menu never shows them the link. A part stays mounted once opened, so the text in
@@ -43,12 +45,13 @@ export default function Games() {
   return <GamesPage api={realGamesApi} />;
 }
 
-type Part = 'write' | 'approve' | 'play' | 'team';
+type Part = 'write' | 'approve' | 'play' | 'team' | 'chapters';
 const GAMES_PARTS: { key: Part; path: string; label: string; may: (r: GamesRole) => boolean }[] = [
   { key: 'write', path: '/games', label: 'Write questions', may: () => true },
   { key: 'approve', path: '/games/approve', label: 'Approve questions', may: (r) => r !== 'member' },
   { key: 'play', path: '/games/play', label: 'Try the games', may: () => true },
   { key: 'team', path: '/games/team', label: 'Team', may: (r) => r === 'admin' },
+  { key: 'chapters', path: '/games/chapters', label: 'Chapters', may: (r) => r === 'admin' },
 ];
 
 /** The part an address is for; null for an address under /games that isn't one. */
@@ -197,7 +200,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   }
   if (!here) {
     return (
-      <NotForYou banner={banner} title={part === 'team' ? 'This part is for games admins' : 'This part is for HoDs and admins'}>
+      <NotForYou banner={banner} title={part === 'team' || part === 'chapters' ? 'This part is for games admins' : 'This part is for HoDs and admins'}>
         <Link to="/games" className={btn('quiet', 'mt-3')}>Go to Write questions</Link>
       </NotForYou>
     );
@@ -208,6 +211,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
     approve: () => <ApproveQuestions api={api} onWaiting={setWaiting} canDownload={r === 'admin'} />,
     play: () => <TryGames api={api} />,
     team: () => <Team api={api} me={email} />,
+    chapters: () => <Chapters api={api} onChanged={() => setCatalogTry((n) => n + 1)} />,
   };
 
   return (

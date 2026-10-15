@@ -63,6 +63,7 @@ const ALL_DUMMY_PAGES: DummyPageEntry[] = [
   { path: '/games/approve', label: 'Games team: approve questions (dummy)' },
   { path: '/games/play', label: 'Games team: try the games (dummy)' },
   { path: '/games/team', label: 'Games team: team (dummy)' },
+  { path: '/games/chapters', label: 'Games team: chapters (dummy)' },
 ];
 
 /** Pages that have a dummy mode, for the preview toggle. */

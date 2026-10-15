@@ -8,6 +8,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ALL_BOARDS, SUBJECTS } from './details';
+import { parseList } from './list-rows';
+import { STARTING_LIST } from './starting-list';
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Result = { rows?: Json[]; error?: string };
@@ -160,7 +162,8 @@ describe('installing it', () => {
   it('signed-out visitors can call nothing, and signed-in people only the site\'s functions', async () => {
     const callable = async (role: string) => (await admin(`select p.proname from pg_proc p where p.pronamespace = 'games'::regnamespace and has_function_privilege('${role}', p.oid, 'EXECUTE') order by 1`)).map((r) => r.proname);
     expect(await callable('anon')).toEqual([]);
-    expect(await callable('authenticated')).toEqual(['admin_people', 'admin_remove', 'admin_set_role', 'bank', 'bank_count', 'catalog', 'hod_approved',
+    expect(await callable('authenticated')).toEqual(['admin_add_chapters', 'admin_add_topic', 'admin_delete_from_list', 'admin_list', 'admin_people',
+      'admin_remove', 'admin_rename', 'admin_renumber', 'admin_set_role', 'admin_set_topics_fixed', 'bank', 'bank_count', 'catalog', 'hod_approved',
       'hod_questions', 'hod_set_status', 'mark_sent_back_seen', 'my_role', 'my_sent_back', 'submit_batch', 'waiting_count']);
   });
 });
@@ -447,49 +450,50 @@ describe('approving, sending back, and the bank', () => {
   });
 });
 
-describe('loading the list of chapters and topics (list.sql)', () => {
-  const LIST = readFileSync('supabase/games/list.sql', 'utf8');
-  const HEADER = 'Board | Class | Subject | Chapter number | Chapter | Topic number | Topic\n';
-  /** The script with its list taken out. */
-  const EMPTY = LIST.replace(/(Board \| Class \| Subject \| Chapter number \| Chapter \| Topic number \| Topic\n)[^$]*(\$list\$\);)/, '$1$2');
-  /** The script with these rows, and only these, under its header line. */
-  const withRows = (rows: string, dryRun = 'yes') => {
-    expect(EMPTY).toContain(`${HEADER}$list$);`);
-    return EMPTY.replace(HEADER, HEADER + rows).replace("'games_list.dry_run', 'yes'", `'games_list.dry_run', '${dryRun}'`);
-  };
-  const SHEET = [
-    // from a spreadsheet: tabs, and a chapter with no topics leaves its topic cells empty
-    'cbse\t7\tscience\t4\tHeat\t1\tHot and Cold',
-    'CBSE\t7\tScience\t4\tHeat\t2\tTransfer of Heat',
-    'CBSE\t7\tScience\t5\tAcids, Bases and Salts\t\t',
-    // written by hand
-    'ICSE | 6 | Geography | 2 | Landforms of the Earth | 1 | Mountains',
-  ].join('\n') + '\n';
-  let fresh: PGlite;
-  const chapters = async () => (await fresh.query<Json>('select chapter_id, board, subject, name from games.chapters order by 1')).rows;
+describe('the list of chapters, for admins (the Chapters page)', () => {
+  let site: PGlite;
+  const on = (email: string, sql: string, params?: unknown[]) => run(site, 'authenticated', claims(email), sql, params);
+  async function val(email: string, sql: string, params?: unknown[]) {
+    const r = await on(email, sql, params);
+    expect(r.error, sql).toBeUndefined();
+    return Object.values(r.rows![0])[0] as Json;
+  }
+  const add = (chapters: unknown, email = 'mod@x.in') => on(email, 'select games.admin_add_chapters($1::jsonb) r', [JSON.stringify(chapters)]);
+  const ch = (no: number, name: string, topics: { topic_no: number; name: string }[] = [], x: object = {}) =>
+    ({ board: 'ICSE', class: 10, subject: 'Physics', chapter_no: no, name, topics, ...x });
+  const listed = async () => (await val('mod@x.in', 'select games.admin_list()')).chapters as Json[];
+  const rows = async (sql: string) => (await site.query<Json>(sql)).rows;
 
   beforeAll(async () => {
-    fresh = await supabaseLike();
-    await fresh.exec(installable());
+    site = await supabaseLike();
+    await site.exec(installable());
+    await site.query(`insert into games.team (email, role) values ('hod@x.in', 'hod'), ('ann@x.in', 'member')`);
   }, 60_000);
 
-  it('with no rows, it stops: the list is empty', async () => {
-    expect(await failure(fresh, EMPTY)).toMatch(/The list is empty/);
+  it('only a games admin can see it or change it', async () => {
+    for (const who of ['hod@x.in', 'ann@x.in', 'stranger@x.in']) {
+      for (const f of ['admin_list()', `admin_add_chapters('[]')`, `admin_add_topic('ICSE10PHY01', 1, 'x')`, `admin_rename('ICSE10PHY01', null, 'x')`,
+        `admin_renumber('ICSE10PHY01', null, 2)`, `admin_delete_from_list('ICSE10PHY01', null)`, `admin_set_topics_fixed('ICSE10PHY01', true)`]) {
+        refused(await on(who, `select games.${f}`), /Only a games admin can change the list of chapters/);
+      }
+    }
+    refused(await run(site, 'anon', null, 'select games.admin_list()'), /permission denied/);
   });
 
-  it("as committed, it holds the site's chapters and the drafted ones, with no topics, and loads them under the site's IDs", async () => {
-    expect(await failure(fresh, LIST)).toMatch(/^Dry run passed: the list has 564 chapters and 0 topics, of which 564 chapters and 0 topics are new\./);
-    const site = await supabaseLike();
-    await site.exec(installable());
-    await site.exec(LIST.replace("'games_list.dry_run', 'yes'", "'games_list.dry_run', 'no'"));
-    const n = async (sql: string) => (await site.query<Json>(sql)).rows;
-    // Mathematics: the site's, with CBSE 9 and 11 drafted
+  it("the starting list goes in whole: the site's chapters and the drafted ones, under the site's IDs", async () => {
+    const { chapters, problems } = parseList(STARTING_LIST);
+    expect(problems).toEqual([]);
+    const fresh = await supabaseLike();
+    await fresh.exec(installable());
+    const send = async () => (await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.admin_add_chapters($1::jsonb) r', [JSON.stringify(chapters)])).rows![0].r;
+    expect(await send()).toEqual({ chapters: 564, topics: 0, already: 0 });
+    expect(await send()).toEqual({ chapters: 0, topics: 0, already: 564 }); // again: nothing new
+    const n = async (sql: string) => (await fresh.query<Json>(sql)).rows;
     expect(await n(`select board, class, count(*)::int n from games.chapters where subject = 'Mathematics' group by 1, 2 order by 1, 2`)).toEqual([
       ...[[9, 12], [10, 13], [11, 14], [12, 13]].map(([c, k]) => ({ board: 'CBSE', class: c, n: k })),
       ...[[3, 10], [4, 12], [5, 15], [6, 14], [7, 15], [8, 16], [9, 20], [10, 18]].map(([c, k]) => ({ board: 'ICSE', class: c, n: k })),
       { board: 'ISC', class: 11, n: 16 }, { board: 'ISC', class: 12, n: 16 },
     ]);
-    // and the drafted subjects, classes 9 to 12
     expect(await n(`select board, string_agg(distinct subject, ', ' order by subject) subjects, min(class)::int lo, max(class)::int hi from games.chapters where subject <> 'Mathematics' group by 1 order by 1`)).toEqual([
       { board: 'CBSE', subjects: 'Biology, Chemistry, Economics, Geography, History, Physics, Political Science, Science', lo: 9, hi: 12 },
       { board: 'ICSE', subjects: 'Biology, Chemistry, Geography, History & Civics, Physics', lo: 9, hi: 10 },
@@ -501,68 +505,86 @@ describe('loading the list of chapters and topics (list.sql)', () => {
       { chapter_id: 'ICSE10HCV01', name: 'Parliament' }, { chapter_id: 'ICSE10HCV17', name: 'Post-WWII World' },
       { chapter_id: 'ISC12CHE04', name: 'The d- and f-Block Elements' }, { chapter_id: 'ISC12MAT13', name: 'Application of Calculus in Commerce and Economics' },
     ]);
-    // no dashes in a name (the site's rule), and no topics
-    expect(await n(`select name from games.chapters where name ~ '[\u2013\u2014]'`)).toEqual([]);
-    expect((await n('select count(*)::int n from games.topics'))[0].n).toBe(0);
+    expect(await n(`select name from games.chapters where name ~ '[–—]'`)).toEqual([]);
   }, 60_000);
 
-  it('skips a line that starts with # (a note), as it does a header row', async () => {
-    expect(await failure(fresh, withRows(`# a note about the next rows\n${SHEET}  # another, indented\n`)))
-      .toMatch(/Dry run passed: the list has 3 chapters and 3 topics/);
-  });
-
-  it('the dry run checks and counts, then keeps nothing', async () => {
-    expect(await failure(fresh, withRows(SHEET))).toMatch(/Dry run passed: the list has 3 chapters and 3 topics, of which 3 chapters and 3 topics are new/);
-    expect(await chapters()).toEqual([]);
-  });
-
-  it('adds the chapters and topics under the site\'s IDs and names, and the team sees them', async () => {
-    await fresh.exec(withRows(SHEET, 'no'));
-    expect(await chapters()).toEqual([
-      { chapter_id: 'CBSE07SCI04', board: 'CBSE', subject: 'Science', name: 'Heat' },
-      { chapter_id: 'CBSE07SCI05', board: 'CBSE', subject: 'Science', name: 'Acids, Bases and Salts' },
-      { chapter_id: 'ICSE06GEO02', board: 'ICSE', subject: 'Geography', name: 'Landforms of the Earth' },
+  it('adds chapters, with topics that fix them, all or nothing', async () => {
+    expect((await add([ch(1, 'Force'), ch(2, 'Work, Energy and Power', [{ topic_no: 1, name: 'Work' }, { topic_no: 2, name: 'Energy' }])])).rows![0].r)
+      .toEqual({ chapters: 2, topics: 2, already: 0 });
+    expect((await listed()).map((c) => [c.chapter_id, c.name, c.open, c.questions, c.topics.map((t: Json) => t.topic_id)])).toEqual([
+      ['ICSE10PHY01', 'Force', true, 0, []], ['ICSE10PHY02', 'Work, Energy and Power', false, 0, ['ICSE10PHY02T01', 'ICSE10PHY02T02']],
     ]);
-    const list = (await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.catalog() c')).rows![0].c;
-    expect(list.find((c: Json) => c.chapter_id === 'CBSE07SCI04').topics.map((t: Json) => t.topic_id)).toEqual(['CBSE07SCI04T01', 'CBSE07SCI04T02']);
-    expect(list.find((c: Json) => c.chapter_id === 'CBSE07SCI05').topics).toEqual([]);
+    refused(await add([ch(3, 'Machines'), ch(1, 'Forces')]), /^Chapter 1 \(ICSE class 10 Physics\) is already "Force", not "Forces"\. Rename it instead\.$/);
+    refused(await add([ch(4, 'force')]), /already has "Force" as chapter 1/);
+    refused(await add([ch(3, 'Machines', [], { subject: 'Physix' })]), /The subject "Physix" isn't on the site's list/);
+    refused(await add([ch(3, 'Machines', [{ topic_no: 1, name: 'Levers' }, { topic_no: 2, name: 'levers' }])]), /already has "Levers" as topic 1/);
+    expect((await listed()).map((c) => c.chapter_id)).toEqual(['ICSE10PHY01', 'ICSE10PHY02']); // Machines wasn't kept
+    // the team sees the list as admins left it
+    expect((await val('ann@x.in', 'select games.catalog()')).map((c: Json) => [c.chapter_id, c.open])).toEqual([['ICSE10PHY01', true], ['ICSE10PHY02', false]]);
   });
 
-  it('run again with more rows, it adds only the new ones', async () => {
-    expect(await failure(fresh, withRows(`${SHEET}CBSE | 7 | Science | 4 | Heat | 3 | Sea and Land Breezes\n`)))
-      .toMatch(/the list has 3 chapters and 4 topics, of which 0 chapters and 1 topics are new/);
+  it('renames a chapter or a topic, and its questions, waiting or approved, take the new name and keep their IDs', async () => {
+    const q = { chapter_id: 'ICSE10PHY02', topic_id: 'ICSE10PHY02T01', board: 'ICSE', class: 10, subject: 'Physics', chapter_no: 2,
+      chapter: 'Work, Energy and Power', topic_no: 1, topic: 'Work', question: 'SI unit of work', answer: 'Joule', difficulty: 'easy' };
+    const sent = (await on('ann@x.in', 'select games.submit_batch($1::jsonb) r', [JSON.stringify([q, { ...q, question: 'Work done by a force at right angles to the motion', answer: 'Zero' }])])).rows![0].r;
+    expect(sent.question_ids).toEqual(['ICSE10PHY02T01Q001', 'ICSE10PHY02T01Q002']);
+    await val('hod@x.in', `select games.hod_set_status(array['ICSE10PHY02T01Q001'], 'approved', '')`);
+    await val('mod@x.in', `select games.admin_rename('ICSE10PHY02', null, 'Work, Power and Energy')`);
+    await val('mod@x.in', `select games.admin_rename('ICSE10PHY02', 1, 'Work Done')`);
+    expect(await rows(`select question_id, chapter, topic, status from games.questions order by 1`)).toEqual([
+      { question_id: 'ICSE10PHY02T01Q001', chapter: 'Work, Power and Energy', topic: 'Work Done', status: 'approved' },
+      { question_id: 'ICSE10PHY02T01Q002', chapter: 'Work, Power and Energy', topic: 'Work Done', status: 'pending' },
+    ]);
+    expect(await rows(`select question_id, chapter, topic from games.question_bank`)).toEqual([{ question_id: 'ICSE10PHY02T01Q001', chapter: 'Work, Power and Energy', topic: 'Work Done' }]);
+    refused(await on('mod@x.in', `select games.admin_rename('ICSE10PHY02', 1, 'energy')`), /already has a topic called "energy"/);
+    refused(await on('mod@x.in', `select games.admin_rename('ICSE10PHY01', null, 'work, power and energy')`), /already has a chapter called/);
+    refused(await on('mod@x.in', `select games.admin_rename('ICSE10PHY02', null, '  ')`), /1 to 120 characters/);
+    // a question sent under the old name now needs the new one, as the page will say
+    refused(await on('ann@x.in', 'select games.submit_batch($1::jsonb) r', [JSON.stringify([{ ...q, question: 'Another?' }])]), /is called "Work, Power and Energy" on the list/);
   });
 
-  it('a topic already written with questions becomes the list\'s when the list names it, and fixes the chapter\'s topics', async () => {
-    await fresh.query(`insert into games.topics (topic_id, chapter_id, topic_no, name, from_list) values ('CBSE07SCI05T01', 'CBSE07SCI05', 1, 'Acids', false)`);
-    const open = async () => (await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.catalog() c')).rows![0].c.find((c: Json) => c.chapter_id === 'CBSE07SCI05').open;
+  it('changes a number, or deletes, only while nothing has been sent for it', async () => {
+    refused(await on('mod@x.in', `select games.admin_renumber('ICSE10PHY02', null, 5)`), /^Chapter 2 \(ICSE class 10 Physics\) has 2 questions, so its number stays: it is part of each question's ID\.$/);
+    refused(await on('mod@x.in', `select games.admin_delete_from_list('ICSE10PHY02', null)`), /has 2 questions, so it can't be deleted\. Rename it instead\./);
+    refused(await on('mod@x.in', `select games.admin_renumber('ICSE10PHY02', 1, 5)`), /^Topic 1 of Chapter 2 \(ICSE class 10 Physics\) has 2 questions/);
+    // topic 2 has none: it can move, and go
+    await val('mod@x.in', `select games.admin_renumber('ICSE10PHY02', 2, 5)`);
+    expect(await rows(`select topic_id, topic_no, name from games.topics where chapter_id = 'ICSE10PHY02' order by 2`)).toEqual([
+      { topic_id: 'ICSE10PHY02T01', topic_no: 1, name: 'Work Done' }, { topic_id: 'ICSE10PHY02T05', topic_no: 5, name: 'Energy' },
+    ]);
+    refused(await on('mod@x.in', `select games.admin_renumber('ICSE10PHY02', 5, 1)`), /already has a topic 1/);
+    await val('mod@x.in', `select games.admin_delete_from_list('ICSE10PHY02', 5)`);
+    // chapter 1 has none: with a topic of its own, it moves to 3, topic and all
+    await val('mod@x.in', `select games.admin_add_topic('ICSE10PHY01', 1, 'Moment of a Force')`);
+    refused(await on('mod@x.in', `select games.admin_renumber('ICSE10PHY01', null, 2)`), /already has a chapter 2/);
+    await val('mod@x.in', `select games.admin_renumber('ICSE10PHY01', null, 3)`);
+    expect(await rows(`select c.chapter_id, c.chapter_no, t.topic_id, t.from_list from games.chapters c left join games.topics t using (chapter_id) where c.chapter_id like 'ICSE10PHY0%' order by 1`)).toEqual([
+      { chapter_id: 'ICSE10PHY02', chapter_no: 2, topic_id: 'ICSE10PHY02T01', from_list: true },
+      { chapter_id: 'ICSE10PHY03', chapter_no: 3, topic_id: 'ICSE10PHY03T01', from_list: false },
+    ]);
+    await val('mod@x.in', `select games.admin_delete_from_list('ICSE10PHY03', null)`);
+    expect(await rows(`select count(*)::int n from games.topics where chapter_id = 'ICSE10PHY03'`)).toEqual([{ n: 0 }]);
+  });
+
+  it("opens or fixes a chapter's topics, and a topic added keeps the chapter as it was", async () => {
+    await add([ch(4, 'Machines')]);
+    refused(await on('mod@x.in', `select games.admin_set_topics_fixed('ICSE10PHY04', true)`), /has no topics yet: add them first, then fix them/);
+    await val('mod@x.in', `select games.admin_add_topic('ICSE10PHY04', 1, 'Levers')`);
+    const open = async () => (await listed()).find((c) => c.chapter_id === 'ICSE10PHY04').open;
     expect(await open()).toBe(true);
-    expect(await failure(fresh, withRows('CBSE | 7 | Science | 5 | Acids, Bases and Salts | 1 | Bases\n', 'no'))).toMatch(/topic 1 of chapter CBSE07SCI05 is already on the list as "Acids", not "Bases"/);
-    await fresh.exec(withRows('CBSE | 7 | Science | 5 | Acids, Bases and Salts | 1 | Acids\n', 'no'));
-    expect((await fresh.query<Json>(`select from_list from games.topics where topic_id = 'CBSE07SCI05T01'`)).rows[0].from_list).toBe(true);
-    expect(await open()).toBe(false);
+    await val('mod@x.in', `select games.admin_set_topics_fixed('ICSE10PHY04', true)`);
+    await val('mod@x.in', `select games.admin_add_topic('ICSE10PHY04', 2, 'Pulleys')`);
+    expect([await open(), await rows(`select topic_no, from_list from games.topics where chapter_id = 'ICSE10PHY04' order by 1`)])
+      .toEqual([false, [{ topic_no: 1, from_list: true }, { topic_no: 2, from_list: true }]]);
+    refused(await on('mod@x.in', `select games.admin_add_topic('ICSE10PHY04', 2, 'Gears')`), /Topic 2 of Chapter 4 \(ICSE class 10 Physics\) is already "Pulleys", not "Gears"/);
+    await val('mod@x.in', `select games.admin_set_topics_fixed('ICSE10PHY04', false)`);
+    expect(await open()).toBe(true);
   });
 
-  it('stops on a problem, naming the row as numbered in the sheet, and keeps nothing', async () => {
-    const before = await chapters();
-    const why = await failure(fresh, withRows([
-      'CBSE | 7 | Science | 4 | Heating | 1 | Hot and Cold', // row 2: already on the list as Heat
-      'CBSE | 13 | Science | 1 | Light | 1 | Mirrors', // row 3: no class 13
-      'Kolkata Board | 7 | Science | 1 | Light | 1 | Mirrors', // row 4
-      'CBSE | 7 | Sciences | 1 | Light | 1 | Mirrors', // row 5
-      'CBSE | 7 | Science | 6 | Light | 1', // row 6: a topic number with no name
-    ].join('\n') + '\n', 'no'));
-    expect(why).toMatch(/Nothing was kept/);
-    expect(why).toMatch(/row 3: the class "13"/);
-    expect(why).toMatch(/row 4: the board "Kolkata Board"/);
-    expect(why).toMatch(/row 5: the subject "Sciences"/);
-    expect(why).toMatch(/row 6 has 6 columns/);
-    // checked once the rows themselves are right
-    expect(await failure(fresh, withRows('CBSE | 7 | Science | 4 | Heating | 1 | Hot and Cold\n', 'no'))).toMatch(/row 2: chapter CBSE07SCI04 is already on the list as "Heat", not "Heating"/);
-    expect(await failure(fresh, withRows('CBSE | 7 | Science | 4 | Heat | 1 | Cold\n', 'no'))).toMatch(/topic 1 of chapter CBSE07SCI04 is already on the list as "Hot and Cold"/);
-    expect(await failure(fresh, withRows('CBSE | 7 | Science | 4 | Heat\n', 'no'))).toMatch(/already has topics on the list/);
-    expect(await failure(fresh, withRows('CBSE | 8 | Science | 1 | Crops | 1 | Kharif\nCBSE | 8 | Science | 1 | Crops\n', 'no'))).toMatch(/has rows with topics and a row without one/);
-    expect(await failure(fresh, withRows('CBSE | 8 | Science | 1 | Crops | 1 | Kharif\nCBSE | 8 | Science | 1 | Crop Production | 2 | Rabi\n', 'no'))).toMatch(/has more than one name/);
-    expect(await chapters()).toEqual(before);
+  it('notes every change, newest first, with who made it', async () => {
+    const log = (await val('mod@x.in', 'select games.admin_list()')).log as Json[];
+    expect(log[0]).toMatchObject({ by: 'mod@x.in', action: 'topics', detail: 'Chapter 4 (ICSE class 10 Physics): topics opened.' });
+    expect(new Set(log.map((l) => l.action))).toEqual(new Set(['add', 'rename', 'renumber', 'delete', 'topics']));
+    expect(log.find((l) => l.action === 'rename' && /topic 1/.test(l.detail)).detail).toBe('Chapter 2 (ICSE class 10 Physics) topic 1: "Work" renamed "Work Done".');
   });
 });

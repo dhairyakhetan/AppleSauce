@@ -1,7 +1,8 @@
-import { APPROVED_PAGE, BATCH_MAX, type GamesApi, type SaveResult, type SendResult } from '@/lib/games/api';
+import { APPROVED_PAGE, BATCH_MAX, type AddResult, type GamesApi, type SaveResult, type SendResult } from '@/lib/games/api';
 import { chapterId, checkBoard, checkSubject, pad2, topicId } from '@/lib/games/details';
 import { format } from '@/lib/games/format';
-import type { Bank, BankQuestion, Batch, ListChapter, Person, RoleCheck, Row, SentBack, Status } from '@/lib/games/rows';
+import type { NewChapter } from '@/lib/games/list-rows';
+import type { AdminList, Bank, BankQuestion, Batch, ListChange, ListChapter, Person, RoleCheck, Row, SentBack, Status } from '@/lib/games/rows';
 
 /* The games pages in dummy mode (D75): an in-memory stand-in for the `games` schema, with no sign-in. It keeps the
    same rules as the database: who may do what, duplicates skipped, questions numbered within their topic and never
@@ -14,7 +15,7 @@ import type { Bank, BankQuestion, Batch, ListChapter, Person, RoleCheck, Row, Se
 export const DUMMY_ME = { email: 'you@example.com', name: 'You (dummy)' };
 
 interface FakeQuestion extends BankQuestion { teacherEmail: string; reviewedBy: string | null; seenAt: string | null }
-interface State { team: Person[]; batches: Batch[]; questions: FakeQuestion[]; catalog: ListChapter[] }
+interface State { team: Person[]; batches: Batch[]; questions: FakeQuestion[]; catalog: ListChapter[]; log: ListChange[] }
 
 const MODERATOR = { email: 'asha.rao@example.com', name: 'Asha Rao' };
 const HOD = { email: 'vikram.singh@example.com', name: 'Vikram Singh' };
@@ -675,6 +676,7 @@ function seed(): State {
     batches: [],
     questions: [],
     catalog: structuredClone(DUMMY_LIST),
+    log: [{ at: hoursAgo(24 * 30), by: MODERATOR.name, action: 'add', detail: `Added ${DUMMY_LIST.length} chapters and ${DUMMY_LIST.reduce((n, c) => n + c.topics.length, 0)} topics.` }],
   };
   const put = (text: string, who: { email: string; name: string }, sentAt: string, status: Status, reviewedAt: string | null, note = '') => {
     const ids = add(s, format(text).rows, who, sentAt).ids;
@@ -821,6 +823,29 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
     if (what === 'admin' && r !== 'admin') throw new Error('Only an admin can do this.');
   };
   const nameOf = (email: string | null) => s.team.find((p) => p.email === email)?.name ?? 'Your HoD';
+  /** The list's helpers, as in the database (games.list_*). */
+  const label = (c: ListChapter) => `Chapter ${c.chapter_no} (${c.board} class ${c.class} ${c.subject})`;
+  const chapterOf = (id: string) => {
+    const ch = s.catalog.find((c) => c.chapter_id === id);
+    if (!ch) throw new Error("That chapter isn't on the list.");
+    return ch;
+  };
+  const note = (action: ListChange['action'], detail: string) => s.log.push({ at: new Date().toISOString(), by: DUMMY_ME.name, action, detail });
+  /** A topic for a chapter: its number and name must be free in it. False when it is there already. */
+  const addTopicTo = (ch: ListChapter, tno: number, tname: string) => {
+    const nm = tname.trim();
+    if (!(tno >= 1 && tno <= 99)) throw new Error(`A topic number must be from 1 to 99 (${label(ch)} "${nm}").`);
+    if (!nm || nm.length > 120) throw new Error(`A topic name must be 1 to 120 characters (${label(ch)} topic ${tno}).`);
+    const same = ch.topics.find((t) => t.topic_no === tno);
+    if (same) {
+      if (norm(same.name) !== norm(nm)) throw new Error(`Topic ${tno} of ${label(ch)} is already "${same.name}", not "${nm}". Rename it instead.`);
+      return false;
+    }
+    const named = ch.topics.find((t) => norm(t.name) === norm(nm));
+    if (named) throw new Error(`${label(ch)} already has "${named.name}" as topic ${named.topic_no}.`);
+    ch.topics = [...ch.topics, { topic_id: topicId(ch.chapter_id, tno)!, topic_no: tno, name: nm }].sort((a, b) => a.topic_no - b.topic_no);
+    return true;
+  };
   const bankOf = (qs: FakeQuestion[]): Bank => ({
     batches: s.batches.filter((b) => qs.some((q) => q.batch === b.id)),
     questions: qs.map(strip),
@@ -996,6 +1021,143 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       if (mail === DUMMY_ME.email) throw new Error("You can't remove yourself.");
       if (s.team.find((x) => x.email === mail)?.moderator) throw new Error("The moderator can't be removed.");
       s.team = s.team.filter((x) => x.email !== mail);
+    },
+
+    // ---------------------------------------------------------------- the list, for admins, by the database's rules
+
+    async loadList(): Promise<AdminList> {
+      await wait(200);
+      need('admin');
+      const count = (cid: string, tno?: number) => s.questions.filter((q) => q.chapter_id === cid && (tno === undefined || q.topic_no === tno)).length;
+      const chapters = [...s.catalog].sort((a, b) => a.board.localeCompare(b.board) || a.class - b.class || a.subject.localeCompare(b.subject) || a.chapter_no - b.chapter_no)
+        .map((c) => ({ ...structuredClone(c), open: c.open ?? !c.topics.length, questions: count(c.chapter_id), topics: c.topics.map((t) => ({ ...t, questions: count(c.chapter_id, t.topic_no) })) }));
+      return { chapters, log: structuredClone(s.log.slice(-30).reverse()) };
+    },
+
+    async addChapters(rows: NewChapter[]): Promise<AddResult> {
+      await wait(300);
+      need('admin');
+      if (!rows.length || rows.length > 2000) throw new Error('Add between 1 and 2,000 chapters at a time.');
+      // all of it or none: worked out on a copy of the list
+      const list = structuredClone(s.catalog);
+      const out = { chapters: 0, topics: 0, already: 0 };
+      for (const r of rows) {
+        const b = checkBoard(r.board);
+        const sub = checkSubject(r.subject);
+        if (!b.code) throw new Error(`The board "${r.board}" isn't on the site's list.`);
+        if (!sub.code) throw new Error(`The subject "${r.subject}" isn't on the site's list.`);
+        if (!(r.class >= 1 && r.class <= 12)) throw new Error(`The class "${r.class}" isn't a number from 1 to 12.`);
+        if (!(r.chapter_no >= 1 && r.chapter_no <= 99)) throw new Error(`The chapter number "${r.chapter_no}" isn't a number from 1 to 99.`);
+        const name = r.name.trim();
+        if (!name || name.length > 120) throw new Error(`A chapter name must be 1 to 120 characters (chapter ${r.chapter_no} of ${b.name} class ${r.class} ${sub.name}).`);
+        const cid = chapterId(b.code, r.class, sub.code, r.chapter_no)!;
+        let ch = list.find((c) => c.chapter_id === cid);
+        if (ch) {
+          if (norm(ch.name) !== norm(name)) throw new Error(`${label(ch)} is already "${ch.name}", not "${name}". Rename it instead.`);
+          out.already++;
+        } else {
+          const twin = list.find((c) => c.board === b.name && c.class === r.class && c.subject === sub.name && norm(c.name) === norm(name));
+          if (twin) throw new Error(`${b.name} class ${r.class} ${sub.name} already has "${twin.name}" as chapter ${twin.chapter_no}.`);
+          ch = { chapter_id: cid, board: b.name, class: r.class, subject: sub.name, chapter_no: r.chapter_no, name, topics: [], open: true };
+          list.push(ch);
+          out.chapters++;
+        }
+        for (const t of r.topics) if (addTopicTo(ch, t.topic_no, t.name)) out.topics++;
+        if (r.topics.length) ch.open = false; // a chapter the list gives topics has only the list's
+      }
+      s.catalog = list;
+      if (out.chapters + out.topics) note('add', `Added ${out.chapters} chapters and ${out.topics} topics.`);
+      return out;
+    },
+
+    async addTopic(chapterId_, topicNo, name) {
+      await wait();
+      need('admin');
+      const ch = chapterOf(chapterId_);
+      if (!addTopicTo(ch, topicNo, name)) throw new Error(`Topic ${topicNo} of ${label(ch)} is already "${name.trim()}".`);
+      note('add', `${label(ch)}: added topic ${topicNo} "${name.trim()}".`);
+    },
+
+    async renameInList(chapterId_, topicNo, name) {
+      await wait();
+      need('admin');
+      const ch = chapterOf(chapterId_);
+      const nm = name.trim();
+      if (!nm || nm.length > 120) throw new Error('A name must be 1 to 120 characters.');
+      if (topicNo === null) {
+        if (s.catalog.some((c) => c.board === ch.board && c.class === ch.class && c.subject === ch.subject && c.chapter_id !== ch.chapter_id && norm(c.name) === norm(nm))) {
+          throw new Error(`${ch.board} class ${ch.class} ${ch.subject} already has a chapter called "${nm}".`);
+        }
+        note('rename', `${label(ch)}: "${ch.name}" renamed "${nm}".`);
+        ch.name = nm;
+        for (const q of s.questions) if (q.chapter_id === ch.chapter_id) q.chapter = nm;
+      } else {
+        const t = ch.topics.find((x) => x.topic_no === topicNo);
+        if (!t) throw new Error(`${label(ch)} has no topic ${topicNo}.`);
+        if (ch.topics.some((x) => x.topic_no !== topicNo && norm(x.name) === norm(nm))) throw new Error(`${label(ch)} already has a topic called "${nm}".`);
+        note('rename', `${label(ch)} topic ${topicNo}: "${t.name}" renamed "${nm}".`);
+        t.name = nm;
+        for (const q of s.questions) if (q.chapter_id === ch.chapter_id && q.topic_no === topicNo) q.topic = nm;
+      }
+    },
+
+    async renumberInList(chapterId_, topicNo, newNo) {
+      await wait();
+      need('admin');
+      const ch = chapterOf(chapterId_);
+      if (!(newNo >= 1 && newNo <= 99)) throw new Error('A number must be from 1 to 99.');
+      if (topicNo === null) {
+        const n = s.questions.filter((q) => q.chapter_id === ch.chapter_id).length;
+        if (n) throw new Error(`${label(ch)} has ${n === 1 ? '1 question' : `${n} questions`}, so its number stays: it is part of each question's ID.`);
+        if (newNo === ch.chapter_no) return;
+        if (s.catalog.some((c) => c.board === ch.board && c.class === ch.class && c.subject === ch.subject && c.chapter_no === newNo)) {
+          throw new Error(`${ch.board} class ${ch.class} ${ch.subject} already has a chapter ${newNo}.`);
+        }
+        note('renumber', `${label(ch)} "${ch.name}" is now chapter ${newNo}.`);
+        ch.chapter_id = `${ch.chapter_id.slice(0, -2)}${pad2(newNo)}`;
+        ch.chapter_no = newNo;
+        ch.topics = ch.topics.map((t) => ({ ...t, topic_id: topicId(ch.chapter_id, t.topic_no)! }));
+      } else {
+        const t = ch.topics.find((x) => x.topic_no === topicNo);
+        if (!t) throw new Error(`${label(ch)} has no topic ${topicNo}.`);
+        const n = s.questions.filter((q) => q.chapter_id === ch.chapter_id && q.topic_no === topicNo).length;
+        if (n) throw new Error(`Topic ${topicNo} of ${label(ch)} has ${n === 1 ? '1 question' : `${n} questions`}, so its number stays: it is part of each question's ID.`);
+        if (newNo === topicNo) return;
+        if (ch.topics.some((x) => x.topic_no === newNo)) throw new Error(`${label(ch)} already has a topic ${newNo}.`);
+        note('renumber', `${label(ch)} topic ${topicNo} "${t.name}" is now topic ${newNo}.`);
+        t.topic_no = newNo;
+        t.topic_id = topicId(ch.chapter_id, newNo)!;
+        ch.topics.sort((a, b) => a.topic_no - b.topic_no);
+      }
+    },
+
+    async deleteFromList(chapterId_, topicNo) {
+      await wait();
+      need('admin');
+      const ch = chapterOf(chapterId_);
+      if (topicNo === null) {
+        const n = s.questions.filter((q) => q.chapter_id === ch.chapter_id).length;
+        if (n) throw new Error(`${label(ch)} has ${n === 1 ? '1 question' : `${n} questions`}, so it can't be deleted. Rename it instead.`);
+        s.catalog = s.catalog.filter((c) => c !== ch);
+        note('delete', `${label(ch)} "${ch.name}" deleted.`);
+      } else {
+        const t = ch.topics.find((x) => x.topic_no === topicNo);
+        if (!t) throw new Error(`${label(ch)} has no topic ${topicNo}.`);
+        const n = s.questions.filter((q) => q.chapter_id === ch.chapter_id && q.topic_no === topicNo).length;
+        if (n) throw new Error(`Topic ${topicNo} of ${label(ch)} has ${n === 1 ? '1 question' : `${n} questions`}, so it can't be deleted. Rename it instead.`);
+        ch.topics = ch.topics.filter((x) => x !== t);
+        if (!ch.topics.length) ch.open = true;
+        note('delete', `${label(ch)} topic ${topicNo} "${t.name}" deleted.`);
+      }
+    },
+
+    async setTopicsFixed(chapterId_, fixed) {
+      await wait();
+      need('admin');
+      const ch = chapterOf(chapterId_);
+      if (fixed && !ch.topics.length) throw new Error(`${label(ch)} has no topics yet: add them first, then fix them.`);
+      ch.open = !fixed;
+      note('topics', `${label(ch)}: topics ${fixed ? 'fixed' : 'opened'}.`);
     },
   };
 }
