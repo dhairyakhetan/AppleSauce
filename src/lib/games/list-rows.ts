@@ -1,5 +1,5 @@
 /**
- * Chapters as an admin pastes them on the Chapters page (and as the starting list has them): one row per topic,
+ * Chapters as an admin pastes them on the Chapters page: one row per topic,
  *
  *   Board | Class | Subject | Chapter number | Chapter | Topic number | Topic
  *

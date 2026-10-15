@@ -8,8 +8,6 @@ import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ALL_BOARDS, SUBJECTS } from './details';
-import { parseList } from './list-rows';
-import { STARTING_LIST } from './starting-list';
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Result = { rows?: Json[]; error?: string };
@@ -103,7 +101,8 @@ beforeAll(async () => {
   await admin(`insert into games.team (email, role) values ('hod@x.in', 'hod'), ('ann@x.in', 'member'), ('ben@x.in', 'member'),
     ('fay@x.in', 'member'), ('dan@x.in', 'member'), ('eve@x.in', 'member'), ('zed@x.in', 'member'), ('noname@x.in', 'member'),
     ('long@x.in', 'member'), ('bulk@x.in', 'member')`);
-  // a small list of chapters and topics, the way the real one is loaded
+  // a small list of chapters and topics of its own, in place of the starting list
+  await admin('delete from games.chapters');
   await admin(`insert into games.chapters (chapter_id, board, class, subject, chapter_no, name) values
     ('CBSE10SCI01', 'CBSE', 10, 'Science', 1, 'Chemical Reactions'), ('CBSE10SCI02', 'CBSE', 10, 'Science', 2, 'Acids, Bases and Salts'),
     ('MH10SCI01', 'Maharashtra State Board', 10, 'Science', 1, 'Gravitation'), ('CBSE10ROB01', 'CBSE', 10, 'Robotics', 1, 'Sensors')`);
@@ -116,21 +115,21 @@ describe('installing it', () => {
   it('as committed, it is a dry run with the moderator filled in, keeping nothing', async () => {
     expect(SQL).toContain(`select set_config('games_install.moderator', '${MODERATOR}', true);`);
     const fresh = await supabaseLike();
-    expect(await failure(fresh, SQL)).toMatch(/Dry run passed/);
+    expect(await failure(fresh, SQL)).toMatch(/^Dry run passed: everything worked \(with 564 chapters on the list\)/);
     expect(await schemas(fresh)).toBe(0);
-  });
+  }, 60_000);
 
   it('stops, keeping nothing, if the moderator line is not an email', async () => {
     const fresh = await supabaseLike();
     expect(await failure(fresh, installable('not an email'))).toMatch(/Put the moderator's Google email on the MODERATOR line/);
     expect(await schemas(fresh)).toBe(0);
-  });
+  }, 60_000);
 
   it('the dry run does everything, then undoes it', async () => {
     const fresh = await supabaseLike();
     expect(await failure(fresh, installable('mod@x.in', 'yes'))).toMatch(/Dry run passed/);
     expect(await schemas(fresh)).toBe(0);
-  });
+  }, 60_000);
 
   it('stops, keeping nothing, if anything outside games would change', async () => {
     for (const sneak of [
@@ -144,6 +143,21 @@ describe('installing it', () => {
       const script = installable().replace('-- ---------------------------------------------------------------- checks', `${sneak}\n-- -------- checks`);
       expect(await failure(fresh, script), sneak).toMatch(/Stopped: this would change something outside the games schema/);
       expect(await schemas(fresh), sneak).toBe(0);
+    }
+  }, 60_000);
+
+  it('stops, keeping nothing, if a row of the starting list is wrong', async () => {
+    const row = "('ISC', 12, 'Biology', 13, 'Biodiversity and Conservation');";
+    for (const [bad, why] of [
+      [row.replace('Biology', 'Biologyy'), /^The subject "Biologyy" isn't on the site's list\.$/],
+      [row.replace('13', '12'), /^Chapter 12 \(ISC class 12 Biology\) is already "/],
+      [row.replace('13', '0'), /^The chapter number "0" isn't a number from 1 to 99\.$/],
+      [`${row.slice(0, -1)},\n  ${row}`, /^Stopped: the starting list has 565 rows but 564 different chapters, so a chapter is on it twice\./],
+    ] as const) {
+      expect(SQL).toContain(row);
+      const fresh = await supabaseLike();
+      expect(await failure(fresh, installable().replace(row, bad)), bad).toMatch(why);
+      expect(await schemas(fresh)).toBe(0);
     }
   }, 60_000);
 
@@ -468,6 +482,7 @@ describe('the list of chapters, for admins (the Chapters page)', () => {
     site = await supabaseLike();
     await site.exec(installable());
     await site.query(`insert into games.team (email, role) values ('hod@x.in', 'hod'), ('ann@x.in', 'member')`);
+    await site.query('delete from games.chapters'); // these tests make a list of their own
   }, 60_000);
 
   it('only a games admin can see it or change it', async () => {
@@ -480,15 +495,19 @@ describe('the list of chapters, for admins (the Chapters page)', () => {
     refused(await run(site, 'anon', null, 'select games.admin_list()'), /permission denied/);
   });
 
-  it("the starting list goes in whole: the site's chapters and the drafted ones, under the site's IDs", async () => {
-    const { chapters, problems } = parseList(STARTING_LIST);
-    expect(problems).toEqual([]);
+  it("the install puts in the starting list: the site's chapters and the drafted ones, under the site's IDs", async () => {
     const fresh = await supabaseLike();
     await fresh.exec(installable());
-    const send = async () => (await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.admin_add_chapters($1::jsonb) r', [JSON.stringify(chapters)])).rows![0].r;
-    expect(await send()).toEqual({ chapters: 564, topics: 0, already: 0 });
-    expect(await send()).toEqual({ chapters: 0, topics: 0, already: 564 }); // again: nothing new
     const n = async (sql: string) => (await fresh.query<Json>(sql)).rows;
+    // 564 chapters, no topics (writers add their own), numbered from 1 in each subject with no gaps
+    expect(await n(`select count(*)::int n, (select count(*)::int from games.topics) topics from games.chapters`)).toEqual([{ n: 564, topics: 0 }]);
+    expect(await n(`select board, class, subject from games.chapters group by 1, 2, 3 having max(chapter_no) <> count(*)`)).toEqual([]);
+    expect(await n(`select count(distinct (board, class, subject))::int n from games.chapters`)).toEqual([{ n: 46 }]); // 12 from the site, 34 drafted
+    // the admin sees it, and where it came from; adding it again adds nothing
+    const list = (await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.admin_list() r')).rows![0].r;
+    expect([list.chapters.length, list.log]).toEqual([564, [expect.objectContaining({ by: 'the install script', action: 'add', detail: 'The starting list: added 564 chapters.' })]]);
+    const again = await run(fresh, 'authenticated', claims('mod@x.in'), 'select games.admin_add_chapters($1::jsonb) r', [JSON.stringify(list.chapters)]);
+    expect(again.rows![0].r).toEqual({ chapters: 0, topics: 0, already: 564 });
     expect(await n(`select board, class, count(*)::int n from games.chapters where subject = 'Mathematics' group by 1, 2 order by 1, 2`)).toEqual([
       ...[[9, 12], [10, 13], [11, 14], [12, 13]].map(([c, k]) => ({ board: 'CBSE', class: c, n: k })),
       ...[[3, 10], [4, 12], [5, 15], [6, 14], [7, 15], [8, 16], [9, 20], [10, 18]].map(([c, k]) => ({ board: 'ICSE', class: c, n: k })),

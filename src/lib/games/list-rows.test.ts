@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { parseList } from './list-rows';
-import { STARTING_LIST } from './starting-list';
 
 /* What an admin pastes on the Chapters page: one row per chapter (or per topic), each problem on its line, and nothing
    added while any remains. Names are read the way the Write page reads them. */
@@ -48,16 +47,5 @@ describe('pasted chapters', () => {
     expect(at(8)).toMatch(/has topics on other lines/);
     expect(at(9)).toMatch(/Topic 1 of chapter 4 is "Calorimetry" above/);
     expect(at(10)).toMatch(/"calorimetry" is already topic 1 of chapter 4/);
-  });
-
-  it('the starting list reads with no problems: 564 chapters, no topics, numbered from 1 in each subject', () => {
-    const { chapters, problems } = parseList(STARTING_LIST);
-    expect(problems).toEqual([]);
-    expect(chapters).toHaveLength(564);
-    expect(chapters.every((c) => !c.topics.length)).toBe(true);
-    const groups = new Map<string, number[]>();
-    for (const c of chapters) groups.set(`${c.board} ${c.class} ${c.subject}`, [...(groups.get(`${c.board} ${c.class} ${c.subject}`) ?? []), c.chapter_no]);
-    for (const [g, nos] of groups) expect(nos, g).toEqual(nos.map((_, i) => i + 1));
-    expect(groups.size).toBe(46); // 12 from the site, 34 drafted
   });
 });

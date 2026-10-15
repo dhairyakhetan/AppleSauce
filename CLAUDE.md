@@ -273,11 +273,12 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   link, which is also what happens until the schema is installed.
 - **The database:** `supabase/games/install.sql` makes the whole `games`
   schema in one transaction (a dry run by default; it stops if anything outside
-  `games` would change). The fixed list of chapters is then kept on the site,
-  on Chapters (`/games/chapters`, admins: `components/games/Chapters.tsx`,
-  the `games.admin_*` list functions), which can fill in the starting list
-  (`lib/games/starting-list.ts`: 564, the site's Mathematics chapters and
-  others drafted from the syllabus for classes 9 to 12, still to be checked).
+  `games` would change), and puts in the starting list of chapters (rows
+  near its end, through `games.list_add_chapters`, the checks the site's add
+  uses: 564, the site's Mathematics chapters and others drafted from the
+  syllabus for classes 9 to 12, still to be checked). From then on the list is
+  kept on the site, on Chapters (`/games/chapters`, admins:
+  `components/games/Chapters.tsx`, the `games.admin_*` list functions).
   It isn't installed on the live database yet; until
   then every call in `lib/games/api.ts` (`realGamesApi`) fails and the pages
   say so. The site calls functions only; no role can read the tables.

@@ -84,18 +84,18 @@ look.
   answer turns into the right one in place, without a jump.
 - **Team** (`/games/team`, admins). Add someone by their Google email as member, HoD or admin, change roles, remove
   people. The moderator can't be removed or demoted.
-- **Chapters** (`/games/chapters`, admins). The list of chapters questions can be written for: add one, or paste many
-  from a spreadsheet (each problem shown on its line first), or fill in the starting list; rename a chapter or topic
-  (its questions take the new name); change a number or delete while nothing has been sent for it; open or fix a
-  chapter's topics; see the latest changes and who made them.
+- **Chapters** (`/games/chapters`, admins). The list of chapters questions can be written for, which starts as the
+  starting list the install script puts in: add one, or paste many from a spreadsheet (each problem shown on its line
+  first); rename a chapter or topic (its questions take the new name); change a number or delete while nothing has
+  been sent for it; open or fix a chapter's topics; see the latest changes and who made them.
 - **Account menu.** A "Games team" group with Write questions (and Approve questions for HoDs and admins), only for
   people on the team.
 - **Top bar.** A "Games" link before About, in the same style as the others, only for people on the team (and in a
   test build's dummy mode).
 
-**The database part is one script, run by hand, not part of the deploy** (`supabase/games/install.sql`); the list of
-chapters is then added on the site's Chapters page. Everything goes in a new `games` schema. Nothing that already exists is changed, and the
-install script checks that itself. Until the scripts are run, nobody sees the games team's link, and `/games` says it
+**The database part is one script, run by hand, not part of the deploy** (`supabase/games/install.sql`), and it puts
+in the starting list of chapters too. Everything goes in a new `games` schema. Nothing that already exists is changed,
+and the install script checks that itself. Until the script is run, nobody sees the games team's link, and `/games` says it
 couldn't load. Dummy mode (`?dummy=1`, test builds only) runs every part against made-up questions: six chapters
 in Science, Geography, History and Mathematics, written the way the prompt asks (a test checks that every one passes
 the checker and makes every game).
@@ -104,7 +104,7 @@ the checker and makes every game).
 
 ## Setting up the database (for Kanishk)
 
-Run these in the Supabase dashboard's SQL editor. Neither script touches anything outside the `games` schema.
+Run it in the Supabase dashboard's SQL editor. It touches nothing outside the `games` schema.
 
 **Before anything: take a backup.** The project is on Supabase's free plan, so the dashboard has no backup to
 download: it has to be a `pg_dump` (or `supabase db dump`), which needs the database password from the project's
@@ -114,16 +114,18 @@ database settings. The database is about 490 MB.
 
 1. The **MODERATOR** line near the top already has `dhairyaplayz97@gmail.com`: the games team's first admin, whom
    nobody can remove or demote. Nothing to change there.
-2. Paste the whole file into the SQL editor and run it. This is a **dry run**: it builds everything, checks it, then
-   undoes it. It must end with an error that starts **"Dry run passed"**. Nothing is kept.
+2. The **starting list of chapters** is near the end of the file (below). Nothing to change there.
+3. Paste the whole file into the SQL editor and run it. This is a **dry run**: it builds everything, checks it, then
+   undoes it. It must end with an error that starts **"Dry run passed: everything worked (with 564 chapters on the
+   list)"**. Nothing is kept.
    - If it says anything else, stop and send me the message. Nothing was kept.
    - If the editor warns that tables will be made "without RLS", or that the query has "destructive operations",
      choose to run it as written: the script turns row-level security on for every table itself (and checks it), and
      the only `delete`s are inside its own functions.
    - If it stops saying something outside `games` would change, and names something you don't recognise, Supabase
      itself may have changed it during that second. Run it again; if it stops again, send me the message.
-3. On the **DRY RUN** line, change `'yes'` to `'no'`. Run the whole file again. This time it is kept.
-4. **Settings, then Data API** (API settings): add `games` to **Exposed schemas**, and save.
+4. On the **DRY RUN** line, change `'yes'` to `'no'`. Run the whole file again. This time it is kept.
+5. **Settings, then Data API** (API settings): add `games` to **Exposed schemas**, and save.
 
 What the script guarantees, all checked inside it before it keeps anything:
 
@@ -137,14 +139,13 @@ What the script guarantees, all checked inside it before it keeps anything:
 
 To remove all of it later: `drop schema games cascade;` (then take `games` out of the exposed schemas).
 
-### 2. Add the list of chapters, on the site
+### 2. The list of chapters
 
-Questions can only be sent for a chapter on the list, and the `games` schema starts with none. There is no second
-script: once the install is done, sign in with the moderator's Google account, open **Chapters** (`/games/chapters`,
-admins only), press **Fill in the starting list** (564 chapters: the site's, and drafted ones, below; check the drafted
-ones first), then **Check and add**.
+Questions can only be sent for a chapter on the list. The install puts in the starting list (564 chapters: the site's,
+and drafted ones, below), through the same checks as the site, and notes it as the first change on the list. There is
+no second script.
 
-The same page keeps the list from then on: add a chapter or many (pasted from a spreadsheet, one row per chapter or
+From then on the site's **Chapters** page (`/games/chapters`, admins only) keeps the list: add a chapter or many (pasted from a spreadsheet, one row per chapter or
 per topic: board, class, subject, chapter number, chapter, and topic number and topic to fix its topics), rename a
 chapter or topic (its questions take the new name), change a number or delete one while nothing has been sent for it
 (the number is part of every question's ID), and open or fix a chapter's topics. Each change is noted, with who made
@@ -181,11 +182,12 @@ it settled for the games team:
   are stored as Roman numerals, and ISC papers for classes XI and XII are partly filed under ICSE. The games list
   therefore has to be written: its chapter numbers, order and topics are set in `games`, not taken from Shikshaq.
 
-**The starting list** (`src/lib/games/starting-list.ts`, filled in on the Chapters page): 564 chapters, numbered in the order each syllabus teaches them, with no
-topics (the chatbot divides each chapter into topics; above). Two parts, each under its own `#` heading:
+**The starting list** (near the end of `supabase/games/install.sql`, one row per chapter): 564 chapters, numbered in
+the order each syllabus teaches them, with no topics (the chatbot divides each chapter into topics; above). Two parts,
+each under its own comment:
 
 1. **From the site (178):** every Mathematics chapter the site has, under the site's names.
-2. **Drafted (386), to be checked before loading:** chapters the site has no papers for, from each board's syllabus and
+2. **Drafted (386), to be checked before installing:** chapters the site has no papers for, from each board's syllabus and
    the usual textbooks (NCERT for CBSE; the CISCE syllabus in the chapters of the Concise and Total books for ICSE; the
    NCERT names for ISC 11 and 12, as the site's ISC Mathematics already uses). Classes 9 to 12, where 261 of the 355
    students with a class on their profile are. Each chapter is named as the textbook names it, written the site's way:
@@ -283,7 +285,7 @@ the games team. Also checked:
    games page.
 
 To try it against a real database instead, run a local Supabase (`npx supabase start`), run the install script on it,
-add `games` to `[api] schemas` in its `config.toml`, point `.env.local` at it, and add the list on Chapters.
+add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at it.
 
 ---
 
@@ -291,10 +293,9 @@ add `games` to `[api] schemas` in its `config.toml`, point `.env.local` at it, a
 
 | File | What it is |
 | --- | --- |
-| `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the moderator line and the outside-change check (above). Tables: settings, team, boards, subjects, chapters, topics, list_log, batches, questions, question_bank. The site calls functions only. |
+| `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the moderator line and the outside-change check (above), and the starting list of chapters. Tables: settings, team, boards, subjects, chapters, topics, list_log, batches, questions, question_bank. The site calls functions only. |
 | `src/components/games/Chapters.tsx` | Chapters (admins): the list of chapters and topics, added one at a time or pasted many at once, renamed, renumbered or deleted while nothing has been sent for them, topics opened or fixed, and the latest changes. |
 | `src/lib/games/list-rows.ts` | Reads pasted chapters (one row per chapter or topic), each problem on its line. |
-| `src/lib/games/starting-list.ts` | The starting list: the site's 178 Mathematics chapters and 386 drafted ones. |
 | `src/pages/Games.tsx` | The page: checks who you are (including the "sign in with Google" page for a password sign-in), loads the list of chapters, the links between the five parts, the "not for you" pages, and the real/dummy switch (the same pattern as `pages/Hod.tsx`). A part stays mounted once opened. |
 | `src/components/games/WriteQuestions.tsx` | Write questions: the four detail boxes (kept in step with the text; Chapter becomes a picker from the list), topic buttons, the Questions box with underlined problems, the check panel (each question with the games it can go in, or marked as needing a fix), the sent-back panel, the preview, Send and its "There are errors in the questions" popup, the guide, and the phone's "jump to results" button. |
 | `src/components/games/Revise.tsx` | The game picker and player: class, subject, chapter, topics (all in by default; tap one to leave it out) and a tab per game. Try the games uses it full size; the preview uses a small version. |
@@ -317,7 +318,7 @@ add `games` to `[api] schemas` in its `config.toml`, point `.env.local` at it, a
 | `src/hooks/useGamesRoleBadge.ts` | The account menu's check: your role on the games team, or none. Cached for 30 minutes, no retries. Any failure means no link. |
 | `src/dummy/games-fake-api.ts` | Dummy mode's made-up database and questions (six chapters across subjects, each question written in full). It keeps the real one's rules: the list, repeats skipped, numbering within a topic, sent-back questions not taken back unchanged, who may do what, the password case. |
 | `src/dummy/GamesDummy.tsx` | Dummy mode's wrapper and its purple bar. Reached only through the test-build-only lazy import, so it is compiled out of the live site. |
-| Tests | `src/lib/games/database.test.ts` (the install script on an in-memory Postgres: the dry run, the moderator line, every kind of outside change caught, who can call what, the sign-in rule, the list and the Chapters page's changes to it, sending, numbering, approving, the bank, paging; 40 tests), `src/lib/games/list-rows.test.ts` (pasted chapters, each problem on its line, and the starting list), `src/lib/games/catalog.test.ts` (the list check), `src/lib/games/format.test.ts` (every check of the checker, each on its line), `src/lib/games/prompt.test.ts` (both prompts agree with the checker), `src/lib/games/engine/answers.test.ts` (marking, with the wrong answers that used to pass), `engine.test.ts` and `engine-stress.test.ts` (every checker catches broken puzzles; thousands of puzzles checked; no rude word in 400 word searches), `src/dummy/games-fake-api.test.ts` (the dummy database keeps the rules, and every made-up question passes the checker). |
+| Tests | `src/lib/games/database.test.ts` (the install script on an in-memory Postgres: the dry run, the moderator line, every kind of outside change caught, who can call what, the sign-in rule, the starting list (and a wrong row in it stopping the install), the Chapters page's changes to the list, sending, numbering, approving, the bank, paging; 41 tests), `src/lib/games/list-rows.test.ts` (pasted chapters, each problem on its line), `src/lib/games/catalog.test.ts` (the list check), `src/lib/games/format.test.ts` (every check of the checker, each on its line), `src/lib/games/prompt.test.ts` (both prompts agree with the checker), `src/lib/games/engine/answers.test.ts` (marking, with the wrong answers that used to pass), `engine.test.ts` and `engine-stress.test.ts` (every checker catches broken puzzles; thousands of puzzles checked; no rude word in 400 word searches), `src/dummy/games-fake-api.test.ts` (the dummy database keeps the rules, and every made-up question passes the checker). |
 
 ## Changed Shikshaq files
 
@@ -372,21 +373,22 @@ add `games` to `[api] schemas` in its `config.toml`, point `.env.local` at it, a
 | `npx eslint .` | 0 errors, 212 warnings, the same 212 as before this change. The games files have none. |
 | `npm test` | 149 files, 2,304 tests, all pass (140 files and 2,085 tests before). |
 | Stand-in chatbots (AI agents given only the copied prompt, as a teacher would paste it) | Four chapters: Science (Heat, no material), History (From Trade to Territory, with notes), Mathematics (Basic Geometrical Ideas, no material) and Science with no topics (Nutrition in Animals); two smaller and two larger models. 181 questions in all, each reply one code block. Three were turned away: one was the checker's mistake ("Zero" with an Also "0" and numbers as options; fixed), and two repeated the answer as an Also line with a space ("End point" for "Endpoint"; the prompt now says not to). Every topic made all five games, in at most 25 ms. The fix prompt was given to a smaller model in a new chat, with a messy hand-written text (13 problems in 6 questions: a one-line question, a note in brackets, a degree sign, Yes as an answer, a repeated Also, a)/b) options, a made-up level). After two rounds of tightening the fix prompt (a short list of the rules, and that every question has all its lines), all 6 came back passing in one reply, in one code block. The fix prompt was then rewritten from the owner's review of one (it asked a Yes/No question for a Fill line, repeated the page's explanations, and gave the wrong advice for "37 °C"), and given to a smaller model with a text that also had two topics under the wrong numbers: all 9 questions came back passing in one round, the three good ones byte for byte, and the topics renumbered rather than renamed. Then, for chapters whose topics the list leaves open, a smaller model was given the prompt for ICSE 10 Mathematics "Quadratic Equations" and History & Civics "Parliament" (no material), each checked against the list read from a local database and sent to it as a team member: 60 questions under 3 topics of its own ("Standard Form and Roots", "Solving Quadratic Equations", "Nature of Roots") and 40 under 2 ("Composition of Parliament", "Functions of Parliament"), none turned away, all sent, and the topics added to their chapters. A second run for Parliament, with the prompt as it then was (its two topics in use) and a teacher's short notes, kept both topics exactly, added "Topic 3: Sessions and Sittings", and wrote 14 questions without padding; all sent. |
-| The install script on Supabase's own Postgres 17 (local) | After the Chapters page: the dry run passes and the real run keeps 10 tables and 31 functions (21 of them callable by the site). Then, through the API as the site calls it: a member is refused; the starting list goes in (564 chapters), and again adds nothing (564 already there); a rename reaches the questions and the bank; renumbering or deleting a chapter with questions is refused, with the reason; a topic is added, fixed and deleted; a HoD is refused; each change is in the log. After the topics change: the install's dry run passes and the real run keeps; the starting list goes in through `games.admin_add_chapters` (564 chapters). Before it, the install (the current script, run again after the last changes): as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions, with the `also`, `fill` and `wrong_options` columns; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. |
+| The install script on Supabase's own Postgres 17 (local) | After the starting list moved into it: as committed, the dry run ends "Dry run passed: everything worked (with 564 chapters on the list)" and keeps nothing (0.3 seconds); the real run keeps 10 tables, 32 functions (21 callable by the site; the add function the install and the page share is callable by nobody) and the 564 chapters, with "The starting list: added 564 chapters." as the first change, by the install script. Then, through the API as the site calls it: a member is refused; the admin sees the 564 and that change; adding 5 of them again adds nothing (5 already there); a rename reaches the questions and the bank; renumbering or deleting a chapter with questions is refused, with the reason; a topic is added, fixed and deleted; a HoD is refused; each change is in the log. After the topics change: the install's dry run passes and the real run keeps; the starting list goes in through `games.admin_add_chapters` (564 chapters). Before it, the install (the current script, run again after the last changes): as committed it is a dry run that ends "Dry run passed" and leaves nothing; the real run makes 9 tables and 20 functions, with the `also`, `fill` and `wrong_options` columns; running it again stops at `create schema games`. A sneaked-in change outside `games` (a function, a grant, a policy, a default permission, a role setting) is caught and nothing is kept. |
 | Real network calls, local Supabase, real OAuth sign-in | The site's calls go to `/rest/v1/rpc/<function>` with the `games` profile, and return 200. After the last changes: a question with other answers, a fill-in sentence and wrong options went in whole; a sentence with two blanks and an other answer repeating the answer were refused with their messages; the HoD saw the sender's name and email; approved, the bank held every part. A member wrote questions with the chapter picker and a topic button. An off-list topic was underlined and held back. One question was sent as batch `B20261012-01`. The HoD approved it, and Try the games played it from the bank. A password session got `reauth` from `games.my_role()` and the "Sign in with Google" page. Signed out: refused. Tables can't be read directly. |
 | Live-shaped build (`vite build` without `VITE_PREVIEW_TOOLS`) | Builds. No dummy code, made-up data or preview tools in it. The games pages are a separate download (149 kB script, 4 kB styles), fetched only when `/games` opens. |
-| Browser, dummy mode, desktop (1280 px) and phone (390 px) | All five parts and every role work, including the password case. No sideways scrolling on a phone, and no page errors. Chapters: a pasted row with a problem is named by its line and nothing is added, then added once fixed; a rename shows at once; a chapter with questions has Number and Delete greyed out, with the reason; filling in the starting list after renaming a chapter on it names the clash, and after renaming it back adds the rest ("Added 560 chapters and 0 topics (4 chapters were on the list already)"). After the topics change, a chapter with open topics: the page says its topics aren't fixed; two questions under two new topics were sent; the two topics then showed as buttons, with the next free number; a third question under "Topic 1: Teeth" was underlined ("Topic 1 of chapter 2 is already "Digestion in Humans"."). |
+| Browser, dummy mode, desktop (1280 px) and phone (390 px) | All five parts and every role work, including the password case. No sideways scrolling on a phone, and no page errors. Chapters: a pasted row with a problem is named by its line and nothing is added, then added once fixed; a rename shows at once; a chapter with questions has Number and Delete greyed out, with the reason. With the starting list in the install, the page has no "Fill in the starting list" button and doesn't mention it. After the topics change, a chapter with open topics: the page says its topics aren't fixed; two questions under two new topics were sent; the two topics then showed as buttons, with the next free number; a third question under "Topic 1: Teeth" was underlined ("Topic 1 of chapter 2 is already "Digestion in Humans"."). |
 
 `npm run build` (the full one) needs Shikshaq's live Supabase keys for its sitemap step, as before, so it was not run
 here.
 
 ## Still to do
 
-- **Check the drafted chapters** (386, under their own heading in the starting list) against the current textbooks
-  before adding them: a chapter is easy to add later and hard to take out once questions are sent for it. Least sure:
+- **Check the drafted chapters** (386, under their own comment in the starting list near the end of `install.sql`)
+  against the current textbooks before it is run: a chapter is easy to add later and hard to take out once questions
+  are sent for it. Least sure:
   ICSE 9 Biology and ICSE 9 History & Civics (the syllabus was trimmed recently), and ISC 11 Physics, Chemistry and
   Biology (the NCERT chapters; ISC may keep a few NCERT dropped).
 - **More subjects:** commerce, computer subjects and languages are not drafted yet (above).
 - **The dashboard settings** Kanishk's report left open: whether "Confirm email" and "Allow manual linking" are on,
   any auth hook, the redirect URLs, email sending limits, and the exposed schemas.
-- **Run the install script on the live database**, with a backup first (above), then add the list on Chapters.
+- **Run the install script on the live database**, with a backup first (above).

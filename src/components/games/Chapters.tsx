@@ -3,7 +3,6 @@ import { Plus } from 'lucide-react';
 import type { GamesApi } from '@/lib/games/api';
 import { parseList, type ListProblem } from '@/lib/games/list-rows';
 import type { AdminChapter, AdminList } from '@/lib/games/rows';
-import { STARTING_LIST } from '@/lib/games/starting-list';
 import { cn } from '@/lib/utils';
 import { btn, chip, FIELD, offerUndo, plural, when } from './helpers';
 import { Empty, Loading } from './shared';
@@ -182,9 +181,7 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
           )}
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={btn('brand')} disabled={busy || !pasted.trim()}><Plus aria-hidden /> Check and add</button>
-            <button type="button" className={btn('card')} disabled={busy} onClick={() => { setPasted(STARTING_LIST); setProblems([]); }}>Fill in the starting list</button>
           </div>
-          <p className="text-[12px] text-warm-meta">The starting list has 564 chapters: the site's Mathematics, and other subjects for classes 9 to 12 drafted from the syllabus. Check the drafted ones before adding them.</p>
         </form>
         {note && <p className="rounded-2xl bg-mint px-4 py-3 text-[14px] text-foreground" role="status">{note}</p>}
         {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">{error}</p>}
@@ -209,7 +206,7 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
         </div>
 
         {!list ? (error ? null : <Loading label="Loading the list of chapters" />) : !chapters.length ? (
-          <Empty>The list is empty. Paste chapters above, or fill in the starting list.</Empty>
+          <Empty>The list is empty. Paste chapters above.</Empty>
         ) : (
           <ul className="flex flex-col gap-2">
             {shown.map((c) => (
