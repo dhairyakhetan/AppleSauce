@@ -3,10 +3,10 @@ import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-/* A dropdown in Shikshaq's look, for the Chapters page's board, class and subject: a pill that opens an anchored panel
-   (scales and fades in from the pill, shorter on the way out), with the options that have chapters first and, for long
-   lists, a search box. Arrow keys, Home and End move, Enter picks, Escape closes; without a search box, typing a letter
-   jumps to the first option starting with it. */
+/* The games pages' dropdown, in place of the browser's own: a pill (or, in a form, a field) that opens an anchored panel,
+   quick in and quicker out, with options marked `on` first under their own heading and, for long lists, a search box.
+   Arrow keys, Home and End move, Enter picks, Escape closes; without a search box, typing a letter jumps to the first
+   option starting with it. */
 
 export interface PickerOption {
   value: string;
@@ -18,14 +18,29 @@ export interface PickerOption {
 }
 
 const EASE = 'ease-[cubic-bezier(0.2,0,0,1)]';
+const LOOK = {
+  /** A pill, for a row of choices above a list. */
+  pill: 'h-11 max-w-full rounded-full bg-card pl-4 pr-3 text-[14px] font-semibold',
+  /** A field, for a form: as wide as its column, like the text boxes (FIELD in helpers). */
+  field: 'h-11 w-full justify-between rounded-xl bg-card px-3 text-left text-base font-normal sm:text-[15px]',
+} as const;
 
-export function Picker({ label, value, options, onPick, searchable = false, className }: {
+export function Picker({ label, value, options, onPick, searchable = options.length > 12, look = 'pill', placeholder, disabled, invalid, id: triggerId, className }: {
   /** What it picks ("Board"): its accessible name, and the search box's placeholder. */
   label: string;
   value: string;
   options: PickerOption[];
   onPick: (value: string) => void;
+  /** A search box at the top; on by default for lists longer than 12. */
   searchable?: boolean;
+  look?: keyof typeof LOOK;
+  /** Shown when the value isn't one of the options. */
+  placeholder?: string;
+  disabled?: boolean;
+  /** Marked as needing a change (a red ring). */
+  invalid?: boolean;
+  /** For a <label htmlFor>. */
+  id?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -88,20 +103,22 @@ export function Picker({ label, value, options, onPick, searchable = false, clas
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={toggle}>
       <PopoverPrimitive.Trigger asChild>
-        <button type="button" aria-haspopup="listbox" aria-label={`${label}: ${current?.label ?? 'none'}`}
-          className={cn('group inline-flex h-11 max-w-full items-center gap-2 rounded-full bg-card pl-4 pr-3 text-[14px] font-semibold text-foreground ring-1 ring-border',
-            `transition-[transform,box-shadow] duration-150 ${EASE} hover:ring-warm-hairline active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand data-[state=open]:ring-2 data-[state=open]:ring-brand`, className)}>
-          <span className="truncate">{current?.label ?? label}</span>
-          <ChevronDown aria-hidden className={`size-4 shrink-0 text-warm-meta transition-transform duration-200 ${EASE} group-data-[state=open]:rotate-180`} />
+        <button type="button" id={triggerId} disabled={disabled} aria-haspopup="listbox" aria-label={`${label}: ${current?.label ?? placeholder ?? 'none'}`} aria-invalid={invalid || undefined}
+          className={cn('group inline-flex items-center gap-2 text-foreground ring-1 ring-border', LOOK[look],
+            `transition-[transform,box-shadow] duration-100 ${EASE} hover:ring-warm-hairline active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`,
+            'data-[state=open]:ring-2 data-[state=open]:ring-brand disabled:opacity-50 disabled:active:scale-100', invalid && 'ring-2 ring-destructive', className)}>
+          <span className={cn('min-w-0 truncate', !current && look === 'field' && 'text-warm-label')}>{current?.label ?? placeholder ?? label}</span>
+          <ChevronDown aria-hidden className={`size-4 shrink-0 text-warm-meta transition-transform duration-150 ${EASE} group-data-[state=open]:rotate-180`} />
         </button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content align="start" sideOffset={8} collisionPadding={16}
           onOpenAutoFocus={(e) => { e.preventDefault(); (searchRef.current ?? listRef.current)?.focus({ preventScroll: true }); }}
-          className={cn('z-50 flex w-[min(20rem,calc(100vw-32px))] flex-col rounded-[24px] bg-card p-1.5 text-foreground outline-none',
+          className={cn('z-50 flex max-w-[calc(100vw-32px)] flex-col rounded-[24px] bg-card p-1.5 text-foreground outline-none',
+            look === 'field' ? 'w-[var(--radix-popover-trigger-width)] min-w-[14rem]' : 'w-[20rem]',
             'shadow-[0_0_0_1px_hsl(var(--border)),0_18px_44px_rgba(0,0,0,.18)] origin-[--radix-popover-content-transform-origin]',
-            `data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:duration-200 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 ${EASE}`,
-            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:duration-150')}>
+            `data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:duration-150 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1 ${EASE}`,
+            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:duration-100')}>
           {searchable && (
             <div className="relative mb-1.5">
               <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-warm-meta" />
@@ -122,11 +139,11 @@ export function Picker({ label, value, options, onPick, searchable = false, clas
                   const picked = o.value === value;
                   return (
                     <div key={o.value} id={optionId(i)} data-i={i} role="option" aria-selected={picked} onPointerMove={() => active !== i && setActive(i)} onClick={() => choose(o)}
-                      className={cn('flex min-h-10 cursor-pointer select-none items-center gap-2 rounded-[18px] px-3 text-[14px] transition-colors duration-100',
+                      className={cn('flex min-h-10 cursor-pointer select-none items-center gap-2 rounded-[18px] px-3 text-[14px] transition-colors duration-75',
                         i === active ? 'bg-muted' : 'bg-transparent', picked ? 'font-semibold text-foreground' : 'text-warm-prose')}>
                       <span className="min-w-0 flex-1 truncate">{o.label}</span>
                       {o.meta && <span className="shrink-0 text-[12px] font-normal tabular-nums text-warm-meta">{o.meta}</span>}
-                      <Check aria-hidden className={cn('size-4 shrink-0 text-brand transition-opacity duration-150', picked ? 'opacity-100' : 'opacity-0')} />
+                      <Check aria-hidden className={cn('size-4 shrink-0 text-brand', picked ? 'opacity-100' : 'opacity-0')} />
                     </div>
                   );
                 })}

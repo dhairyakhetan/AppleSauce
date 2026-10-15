@@ -26,7 +26,7 @@ const EASE = 'ease-[cubic-bezier(0.2,0,0,1)]';
 const SMALL = cn(FIELD, 'h-9 rounded-full px-3');
 const LOCKED = "It has questions, so this can't change: the number is part of each question's ID.";
 const FIRST_SHOWN = 5;
-const OPEN_ANIM = 'overflow-hidden data-[state=open]:animate-[accordion-down_240ms_cubic-bezier(0.2,0,0,1)] data-[state=closed]:animate-[accordion-up_180ms_cubic-bezier(0.2,0,0,1)]';
+const OPEN_ANIM = 'overflow-hidden data-[state=open]:animate-[accordion-down_160ms_cubic-bezier(0.2,0,0,1)] data-[state=closed]:animate-[accordion-up_120ms_cubic-bezier(0.2,0,0,1)]';
 /** Whether the browser keeps what is on screen in place when something above it closes (not every browser does). */
 const ANCHORS = typeof CSS !== 'undefined' && !!CSS.supports?.('overflow-anchor', 'auto');
 const FALLBACK: ListGroup = { board: 'CBSE', class: 10, subject: 'Mathematics' };
@@ -266,7 +266,7 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
             const live = liveTopics(c);
             const tone = c.deleted ? 'gone' : ch.added ? 'new' : ch.renamed !== null || ch.renumbered !== null || ch.topics ? 'changed' : 'none';
             return (
-              <Accordion.Item key={c.key} value={c.key} className={cn('rounded-[20px] bg-muted transition-[background-color,box-shadow,opacity] duration-200', TONE[tone])}>
+              <Accordion.Item key={c.key} value={c.key} className={cn('rounded-[20px] bg-muted transition-[background-color,box-shadow,opacity] duration-150', TONE[tone])}>
                 <Accordion.Header className="flex">
                   <Accordion.Trigger className="group flex min-h-14 w-full items-start gap-3 rounded-[20px] px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand">
                     <span className="min-w-0 flex-1">
@@ -285,11 +285,11 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
                         {changedInside(c) && <Tag tone="changed">Topics changed</Tag>}
                       </Tags>
                     </span>
-                    <ChevronDown aria-hidden className={`mt-1 size-5 shrink-0 text-warm-meta transition-transform duration-200 ${EASE} group-data-[state=open]:rotate-180`} />
+                    <ChevronDown aria-hidden className={`mt-1 size-5 shrink-0 text-warm-meta transition-transform duration-150 ${EASE} group-data-[state=open]:rotate-180`} />
                   </Accordion.Trigger>
                 </Accordion.Header>
                 <Accordion.Content className={OPEN_ANIM}>
-                  <div className="flex animate-in flex-col gap-3 px-4 pb-4 duration-300 fade-in-0">
+                  <div className="flex animate-in flex-col gap-3 px-4 pb-4 duration-150 fade-in-0">
                     <div className="flex flex-col gap-2 border-t border-border pt-3">
                       {actions(c.key, c, c.chapter_no,
                         () => { if (edit(c.key, (d) => deleteChapter(d, c.key)) && !c.was) setOpenChapter(''); },
@@ -369,7 +369,7 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
       </form>
 
       {changes > 0 && (
-        <div className="sticky bottom-4 z-30 mt-1 animate-in fade-in-0 slide-in-from-bottom-3 duration-200">
+        <div className="sticky bottom-4 z-30 mt-1 animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
           <div role="region" aria-label="Changes not saved yet"
             className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[28px] bg-panel px-4 py-3 text-background shadow-[0_18px_44px_rgba(0,0,0,.28)] sm:px-5">
             <div className="min-w-[180px] flex-1">
@@ -431,7 +431,7 @@ function TopicItem({ value, open, quiet, topic, untopiced, actions, questions, o
   }, [open, value, onScrolledPast]);
 
   return (
-    <Accordion.Item ref={ref} value={value} className={cn('rounded-[14px] bg-card transition-[background-color,box-shadow,opacity] duration-200', TONE[tone])}>
+    <Accordion.Item ref={ref} value={value} className={cn('rounded-[14px] bg-card transition-[background-color,box-shadow,opacity] duration-150', TONE[tone])}>
       <Accordion.Header className="flex">
         <Accordion.Trigger className="group flex min-h-12 w-full items-start gap-2 rounded-[14px] px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand">
           <span className="min-w-0 flex-1">
@@ -448,11 +448,11 @@ function TopicItem({ value, open, quiet, topic, untopiced, actions, questions, o
               </Tags>
             )}
           </span>
-          <ChevronDown aria-hidden className={`mt-0.5 size-4 shrink-0 text-warm-meta transition-transform duration-200 ${EASE} group-data-[state=open]:rotate-180`} />
+          <ChevronDown aria-hidden className={`mt-0.5 size-4 shrink-0 text-warm-meta transition-transform duration-150 ${EASE} group-data-[state=open]:rotate-180`} />
         </Accordion.Trigger>
       </Accordion.Header>
       <Accordion.Content className={cn(OPEN_ANIM, quiet && 'data-[state=closed]:animate-none')}>
-        <div className="flex animate-in flex-col gap-2.5 px-3 pb-3 duration-300 fade-in-0">
+        <div className="flex animate-in flex-col gap-2.5 px-3 pb-3 duration-150 fade-in-0">
           {actions && <div className="flex flex-col gap-2 border-t border-border pt-2.5">{actions}</div>}
           {questions}
         </div>
@@ -496,8 +496,8 @@ function QuestionList({ count, got, load }: { count: number; got: TopicQuestions
     <div className="flex flex-col gap-1.5">
       <ol className="flex flex-col gap-1.5" aria-label="Questions">
         {got.questions.slice(0, shown).map((q, i) => (
-          <li key={q.question_id} className="flex animate-in flex-col gap-0.5 rounded-[12px] bg-muted px-3 py-2 fade-in-0 slide-in-from-top-1 duration-200"
-            style={{ animationDelay: `${Math.min(Math.max(0, i - (shown - FIRST_SHOWN)), 5) * 40}ms`, animationFillMode: 'both' }}>
+          <li key={q.question_id} className="flex animate-in flex-col gap-0.5 rounded-[12px] bg-muted px-3 py-2 fade-in-0 slide-in-from-top-1 duration-150"
+            style={{ animationDelay: `${Math.min(Math.max(0, i - (shown - FIRST_SHOWN)), 5) * 20}ms`, animationFillMode: 'both' }}>
             <span className="flex items-start gap-2">
               <span className="min-w-0 flex-1 text-[14px] text-foreground">{q.question}</span>
               <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[12px] font-semibold', STATUS[q.status].tone)}>{STATUS[q.status].label}</span>

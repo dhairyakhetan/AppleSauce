@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
 import { btn, chip, copyText, day, FIELD, GAME_NAMES, LINKISH, offerUndo, plural } from './helpers';
+import { Picker } from './Picker';
 import { ActionIcon, RowsTable } from './shared';
 import './games.css';
 
@@ -322,15 +323,13 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
                 return (
                   <div className="col-span-full flex flex-col gap-1" key={k}>
                     <label htmlFor="d-chapter" className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
-                    <select id="d-chapter" value={chosen ? String(chosen.chapter_no) : ''}
-                      className={cn(FIELD, 'h-11', details.chapter && !chosen && 'ring-2 ring-destructive')}
-                      onChange={(e) => {
-                        const c = listed.find((x) => String(x.chapter_no) === e.target.value);
+                    <Picker id="d-chapter" look="field" label={LABEL[k]} value={chosen ? String(chosen.chapter_no) : ''} invalid={!!details.chapter && !chosen}
+                      placeholder={details.chapter && !chosen ? `${details.chapter} (not on the list)` : 'Choose a chapter'}
+                      options={listed.map((c) => ({ value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}` }))}
+                      onPick={(v) => {
+                        const c = listed.find((x) => String(x.chapter_no) === v);
                         setRaw((r) => writeDetail(r, 'chapter', c ? `${c.chapter_no}: ${c.name}` : ''));
-                      }}>
-                      <option value="">{details.chapter && !chosen ? `${details.chapter} (not on the list)` : 'Choose a chapter'}</option>
-                      {listed.map((c) => <option key={c.chapter_id} value={String(c.chapter_no)}>{c.chapter_no}: {c.name}</option>)}
-                    </select>
+                      }} />
                   </div>
                 );
               }
@@ -596,13 +595,11 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
   const ch = chapters.find((c) => String(c.chapter_no) === pick.chapter) ?? (chapters.length === 1 ? chapters[0] : undefined);
 
   const field = (label: string, value: string, options: [string, string][], change: (v: string) => void, wide?: string) => (
-    <label className={cn('flex flex-col gap-1', wide)}>
-      <span className="text-[12px] font-semibold text-warm-secondary">{label}</span>
-      <select value={value} disabled={!options.length} onChange={(e) => change(e.target.value)} className={cn(FIELD, 'h-11 disabled:opacity-50')}>
-        <option value="">Choose</option>
-        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
-      </select>
-    </label>
+    <div className={cn('flex flex-col gap-1', wide)}>
+      <label htmlFor={`pick-${label.toLowerCase()}`} className="text-[12px] font-semibold text-warm-secondary">{label}</label>
+      <Picker id={`pick-${label.toLowerCase()}`} look="field" label={label} value={value} placeholder="Choose" disabled={!options.length}
+        options={options.map(([v, text]) => ({ value: v, label: text }))} onPick={change} />
+    </div>
   );
 
   return (

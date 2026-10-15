@@ -310,7 +310,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `details.ts` boards, subjects and IDs, `catalog.ts` the list check,
   `prompt.ts` what "Copy chatbot prompt" copies, `engine/` the games: each has a
   maker and a separate checker, and a puzzle is only shown after its checker
-  passes it; `answers.ts` marks typed answers), `components/games/` (the five parts, `Picker.tsx` the Chapters dropdowns, `Revise.tsx` the game
+  passes it; `answers.ts` marks typed answers), `components/games/` (the five parts, `Picker.tsx` the dropdown every games page uses instead of `<select>`, `Revise.tsx` the game
   picker and player used full size by Try the games and small by the preview,
   the guide; `games.css` is only what utility classes can't say, in Shikshaq's
   colour variables).

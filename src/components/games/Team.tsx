@@ -5,6 +5,7 @@ import { looksLikeEmail } from '@/lib/email-shape';
 import { ROLE_NAMES, type GamesRole, type Person } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { btn, chip, offerUndo } from './helpers';
+import { Picker, type PickerOption } from './Picker';
 import { Empty, Loading } from './shared';
 
 /* The games team: who may open the games pages, and what they may do there. Only emails on this list get in; signing
@@ -17,7 +18,7 @@ const ROLE_HINT: Record<GamesRole, string> = {
   hod: 'also approves questions or sends them back',
   admin: 'also manages this list',
 };
-const SELECT = 'h-11 rounded-full bg-card px-3 text-[14px] font-semibold text-foreground outline-none ring-1 ring-border focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50';
+const ROLES: PickerOption[] = (['member', 'hod', 'admin'] as const).map((r) => ({ value: r, label: ROLE_NAMES[r] }));
 
 export function Team({ api, me }: { api: GamesApi; me: string }) {
   const [people, setPeople] = useState<Person[] | null>(null);
@@ -73,14 +74,10 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
             <input type="email" autoComplete="off" placeholder="name@example.com" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }}
               className="h-11 w-full rounded-full bg-card px-4 text-base text-foreground placeholder:text-warm-label outline-none ring-1 ring-border focus-visible:ring-2 focus-visible:ring-brand sm:text-sm" />
           </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] font-semibold text-warm-secondary">Role</span>
-            <select value={role} onChange={(e) => setRole(e.target.value as GamesRole)} className={SELECT}>
-              <option value="member">Member</option>
-              <option value="hod">HoD</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="add-role" className="text-[12px] font-semibold text-warm-secondary">Role</label>
+            <Picker id="add-role" label="Role" value={role} options={ROLES} onPick={(r) => setRole(r as GamesRole)} />
+          </div>
           <button type="submit" className={btn('brand')} disabled={!email.trim() || busy}><UserPlus aria-hidden /> Add</button>
         </form>
         {note && <p className="rounded-2xl bg-mint px-4 py-3 text-[14px] text-foreground" role="status">{note}</p>}
@@ -105,12 +102,8 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
                     </span>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">
-                      <select aria-label={`Role for ${p.email}`} value={p.role} disabled={busy} className={SELECT}
-                        onChange={(e) => { const r = e.target.value as GamesRole; void change(() => api.setPersonRole(p.email, r), `${p.name ?? p.email} is now ${ROLE_NAMES[r]}.`); }}>
-                        <option value="member">Member</option>
-                        <option value="hod">HoD</option>
-                        <option value="admin">Admin</option>
-                      </select>
+                      <Picker label={`Role for ${p.email}`} value={p.role} options={ROLES} disabled={busy}
+                        onPick={(v) => { const r = v as GamesRole; if (r !== p.role) void change(() => api.setPersonRole(p.email, r), `${p.name ?? p.email} is now ${ROLE_NAMES[r]}.`); }} />
                       <button type="button" className={chip('card', 'text-destructive')} disabled={busy} onClick={() => remove(p)}>Remove</button>
                     </div>
                   )}
