@@ -202,6 +202,46 @@ export function keepTopic(d: DraftChapter[], chapterKey: string, key: string): D
   return putTopic(d, c, { ...t, deleted: false });
 }
 
+// ---------------------------------------------------------------- many at once
+
+/**
+ * Many chapters at once ("Bulk add"), one per line in the order given: "Heat", or with its number, "4. Heat" (or "4:",
+ * "4)"). A line starting with "-" (or "*", "•") under a chapter is one of its topics, numbered from 1 unless it gives
+ * its own ("- 2. Conduction"). Blank lines are skipped. Each is checked as if added on its own; a problem names its line,
+ * and then nothing is added.
+ */
+export function addMany(d: DraftChapter[], text: string): { draft: DraftChapter[]; chapters: number; topics: number } {
+  let draft = d;
+  let current: string | null = null;
+  let chapters = 0;
+  let topics = 0;
+  text.split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    const topic = /^[-*•]\s*(.*)$/.exec(line);
+    const body = (topic ? topic[1] : line).trim();
+    const numbered = /^(\d{1,2})\s*[.:)]\s*(.+)$/.exec(body);
+    const name = numbered ? numbered[2] : body;
+    try {
+      if (topic) {
+        if (!current) throw new Error('A topic needs its chapter on a line above it.');
+        const ch = chapterAt(draft, current);
+        draft = addTopic(draft, current, numbered ? Number(numbered[1]) : nextNumber(ch.topics), name);
+        topics++;
+      } else {
+        const no = numbered ? Number(numbered[1]) : nextNumber(draft);
+        draft = addChapter(draft, no, name);
+        current = draft.find((c) => !c.was && !c.deleted && c.chapter_no === no)!.key;
+        chapters++;
+      }
+    } catch (e) {
+      throw new Error(`Line ${i + 1}: ${(e as Error).message}`);
+    }
+  });
+  if (!chapters) throw new Error('Write at least one chapter, one per line.');
+  return { draft, chapters, topics };
+}
+
 // ---------------------------------------------------------------- what changed
 
 export interface Changed {
@@ -249,8 +289,8 @@ export function changeCount(d: DraftChapter[]): number {
   return n;
 }
 
-/** Whether anything under a chapter changed (to mark a closed chapter that has changes inside). */
-export const changedInside = (c: DraftChapter) => !c.deleted && c.topics.some((t) => counted(topicChanged(t)) > 0);
+/** Whether anything under a loaded chapter changed (to mark a closed chapter that has changes inside; a new one is new whole). */
+export const changedInside = (c: DraftChapter) => !c.deleted && c.orig !== null && c.topics.some((t) => counted(topicChanged(t)) > 0);
 
 // ---------------------------------------------------------------- saving
 

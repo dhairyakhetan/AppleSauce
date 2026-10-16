@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import * as Accordion from '@radix-ui/react-accordion';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, ListPlus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GamesApi } from '@/lib/games/api';
 import { ALL_BOARDS, SUBJECTS } from '@/lib/games/details';
 import {
-  addChapter, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
+  addChapter, addMany, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
   liveTopics, nextNumber, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged, type DraftChapter, type DraftTopic,
 } from '@/lib/games/list-draft';
 import { TOPIC_QUESTIONS_MAX, type AdminChapter, type AdminList, type ListGroup, type Status, type TopicQuestions } from '@/lib/games/rows';
@@ -120,6 +120,7 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [newChapter, setNewChapter] = useState({ no: '', name: '' });
+  const [bulk, setBulk] = useState<string | null>(null);
   const [newTopic, setNewTopic] = useState<Record<string, { no: string; name: string }>>({});
   const [questions, setQuestions] = useState<Record<string, TopicQuestions | Error>>({});
   const [openChapter, setOpenChapter] = useState(() => draft.find((c) => c.chapter_no === keepOpen.current.chapter)?.key ?? '');
@@ -250,6 +251,16 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
     }
   };
 
+  /** Bulk add: many chapters (and their topics) from lines of text, into the draft like any other edit. */
+  const addBulk = (e: FormEvent) => {
+    e.preventDefault();
+    let added = { chapters: 0, topics: 0 };
+    if (edit('bulk', (d) => { const r = addMany(d, bulk ?? ''); added = r; return r.draft; })) {
+      setBulk(null);
+      toast(`Added ${plural(added.chapters, 'chapter')}${added.topics ? ` and ${plural(added.topics, 'topic')}` : ''}. Save changes to keep them.`);
+    }
+  };
+
   return (
     <section aria-label={`Chapters of ${groupName}`} className="flex flex-col gap-3">
       <p className="text-[13px] text-warm-meta tabular-nums">
@@ -365,8 +376,30 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
         <input aria-label="Name of the new chapter" className={cn(SMALL, 'min-w-[200px] flex-1')} placeholder="Chapter name"
           value={newChapter.name} onChange={(e) => setNewChapter((n) => ({ ...n, name: e.target.value }))} />
         <button type="submit" className={chip('card')} disabled={!newChapter.name.trim()}><Plus aria-hidden /> Add chapter</button>
+        <button type="button" className={chip('card')} aria-expanded={bulk !== null} aria-controls="bulk-add"
+          onClick={() => { setBulk((b) => (b === null ? '' : null)); setProblem(null); }}><ListPlus aria-hidden /> Bulk add</button>
         {problem?.at === 'add-chapter' && <div className="basis-full">{problemAt('add-chapter')}</div>}
       </form>
+
+      {bulk !== null && (
+        <form id="bulk-add" className="flex animate-in flex-col gap-2 rounded-[20px] bg-muted px-4 py-3 duration-150 fade-in-0 slide-in-from-top-1" onSubmit={addBulk}>
+          <label htmlFor="bulk-text" className="text-[13px] font-semibold text-warm-secondary">Add many chapters to {groupName}</label>
+          <p id="bulk-how" className="text-[13px] text-warm-secondary">
+            One chapter per line. Start a line with a number (<b className="text-foreground">4. Heat</b>) to choose its number; otherwise it takes the next one.
+            A line starting with <b className="text-foreground">-</b> under a chapter is one of its topics. They are marked in the list, and kept when you save changes.
+          </p>
+          <textarea id="bulk-text" aria-describedby="bulk-how" rows={7} autoFocus value={bulk} spellCheck={false}
+            placeholder={'Force\nWork, Energy and Power\n- Work\n- Energy\n- Power\n12. Sound'}
+            onChange={(e) => { setBulk(e.target.value); if (problem?.at === 'bulk') setProblem(null); }}
+            onKeyDown={(e) => { if (e.key === 'Escape') { setBulk(null); setProblem(null); } }}
+            className={cn(FIELD, 'min-h-[150px] py-2 font-mono text-[14px] sm:text-[14px]')} />
+          {problemAt('bulk')}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className={chip('brand')} disabled={!bulk.trim()}><Plus aria-hidden /> Add to the list</button>
+            <button type="button" className={chip('card')} onClick={() => { setBulk(null); setProblem(null); }}>Cancel</button>
+          </div>
+        </form>
+      )}
 
       {changes > 0 && (
         <div className="sticky bottom-4 z-30 mt-1 animate-in fade-in-0 slide-in-from-bottom-2 duration-150">

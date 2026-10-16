@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addChapter, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
+  addChapter, addMany, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
   nextNumber, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged,
 } from './list-draft';
 import type { AdminChapter } from './rows';
@@ -129,5 +129,34 @@ describe('the draft of a subject\'s chapters', () => {
       ] },
       { chapter_id: null, chapter_no: 4, name: 'Tribals', open: true, topics: [] },
     ]);
+  });
+
+  it('adds many chapters at once, with their topics, numbered in order unless a line gives its number', () => {
+    const { draft, chapters, topics } = addMany(start(), [
+      'Civilising the Native',
+      '- Educating the Nation',
+      '- 3. The Agenda for National Education',
+      '',
+      '  Women, Caste and Reform  ',
+      '9) Colonialism and the City',
+      '* Delhi',
+    ].join('\n'));
+    expect([chapters, topics]).toEqual([3, 3]);
+    expect(draft.filter((c) => !c.was).map((c) => [c.chapter_no, c.name, c.topics.map((t) => `${t.topic_no} ${t.name}`)])).toEqual([
+      [4, 'Civilising the Native', ['1 Educating the Nation', '3 The Agenda for National Education']],
+      [5, 'Women, Caste and Reform', []],
+      [9, 'Colonialism and the City', ['1 Delhi']],
+    ]);
+    expect(changeCount(draft)).toBe(6);
+  });
+
+  it('names the line with a problem, and then adds none of them', () => {
+    const d = start();
+    expect(() => addMany(d, 'Tribals\nFrom Trade to Territory')).toThrow('Line 2: There is already a chapter called "From Trade to Territory".');
+    expect(() => addMany(d, '- Dates\nTribals')).toThrow('Line 1: A topic needs its chapter on a line above it.');
+    expect(() => addMany(d, 'Tribals\n2. Weavers')).toThrow('Line 2: Chapter 2 is "From Trade to Territory". Give the new one another number.');
+    expect(() => addMany(d, 'Tribals – Dikus')).toThrow('Line 1: No dashes in a name: use a colon or a comma.');
+    expect(() => addMany(d, '\n \n')).toThrow('Write at least one chapter, one per line.');
+    expect(d.filter((c) => !c.was)).toEqual([]);
   });
 });
