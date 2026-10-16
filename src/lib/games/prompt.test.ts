@@ -189,4 +189,3 @@ describe("the Chapters page's chatbot prompt (Bulk add)", () => {
     expect(groups.map((g) => `${g.group.board} ${g.group.class} ${g.group.subject}: ${g.chapters}`)).toEqual(['ICSE 10 Physics: 2', 'ISC 11 Chemistry: 1']);
   });
 });
-
