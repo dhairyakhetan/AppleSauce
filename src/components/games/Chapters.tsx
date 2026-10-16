@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import * as Accordion from '@radix-ui/react-accordion';
-import { ChevronDown, ListPlus, Plus } from 'lucide-react';
+import { Check, ChevronDown, Copy, ListPlus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GamesApi } from '@/lib/games/api';
 import { ALL_BOARDS, SUBJECTS } from '@/lib/games/details';
@@ -10,8 +10,9 @@ import {
   liveTopics, nextNumber, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged, type DraftChapter, type DraftTopic,
 } from '@/lib/games/list-draft';
 import { TOPIC_QUESTIONS_MAX, type AdminChapter, type AdminList, type ListGroup, type Status, type TopicQuestions } from '@/lib/games/rows';
+import { chapterListPrompt } from '@/lib/games/prompt';
 import { cn } from '@/lib/utils';
-import { btn, chip, FIELD, plural, when } from './helpers';
+import { btn, chip, copyText, FIELD, plural, when } from './helpers';
 import { Picker, type PickerOption } from './Picker';
 import { Empty, Loading } from './shared';
 
@@ -121,6 +122,7 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
   const [saveError, setSaveError] = useState('');
   const [newChapter, setNewChapter] = useState({ no: '', name: '' });
   const [bulk, setBulk] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [newTopic, setNewTopic] = useState<Record<string, { no: string; name: string }>>({});
   const [questions, setQuestions] = useState<Record<string, TopicQuestions | Error>>({});
   const [openChapter, setOpenChapter] = useState(() => draft.find((c) => c.chapter_no === keepOpen.current.chapter)?.key ?? '');
@@ -261,6 +263,13 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
     }
   };
 
+  /** The chatbot prompt for this subject's chapters, leaving out the ones in the list (saved or not). */
+  const copyPrompt = async () => {
+    if (!(await copyText(chapterListPrompt(group, draft.filter((c) => !c.deleted))))) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2500);
+  };
+
   return (
     <section aria-label={`Chapters of ${groupName}`} className="flex flex-col gap-3">
       <p className="text-[13px] text-warm-meta tabular-nums">
@@ -384,10 +393,11 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
       {bulk !== null && (
         <form id="bulk-add" className="flex animate-in flex-col gap-2 rounded-[20px] bg-muted px-4 py-3 duration-150 fade-in-0 slide-in-from-top-1" onSubmit={addBulk}>
           <label htmlFor="bulk-text" className="text-[13px] font-semibold text-warm-secondary">Add many chapters to {groupName}</label>
-          <p id="bulk-how" className="text-[13px] text-warm-secondary">
-            One chapter per line. Start a line with a number (<b className="text-foreground">4. Heat</b>) to choose its number; otherwise it takes the next one.
-            A line starting with <b className="text-foreground">-</b> under a chapter is one of its topics. They are marked in the list, and kept when you save changes.
-          </p>
+          <ul id="bulk-how" className="flex list-disc flex-col gap-0.5 pl-5 text-[13px] text-warm-secondary marker:text-warm-meta">
+            <li>One chapter per line, like <b className="text-foreground">4. Heat</b>. The number is optional.</li>
+            <li>A line starting with <b className="text-foreground">-</b> under a chapter adds a topic to it.</li>
+            <li>Or copy the chatbot prompt, paste it into ChatGPT, Gemini or Claude, and paste its reply here.</li>
+          </ul>
           <textarea id="bulk-text" aria-describedby="bulk-how" rows={7} autoFocus value={bulk} spellCheck={false}
             placeholder={'Force\nWork, Energy and Power\n- Work\n- Energy\n- Power\n12. Sound'}
             onChange={(e) => { setBulk(e.target.value); if (problem?.at === 'bulk') setProblem(null); }}
@@ -396,6 +406,9 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
           {problemAt('bulk')}
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={chip('brand')} disabled={!bulk.trim()}><Plus aria-hidden /> Add to the list</button>
+            <button type="button" className={chip('card')} onClick={() => void copyPrompt()}>
+              {copied ? <><Check aria-hidden /> Copied</> : <><Copy aria-hidden /> Copy chatbot prompt</>}
+            </button>
             <button type="button" className={chip('card')} onClick={() => { setBulk(null); setProblem(null); }}>Cancel</button>
           </div>
         </form>

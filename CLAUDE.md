@@ -308,7 +308,8 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   in with a password.
 - **Files:** `lib/games/` (rows and exports, `format.ts` the formatter,
   `details.ts` boards, subjects and IDs, `catalog.ts` the list check,
-  `prompt.ts` what "Copy chatbot prompt" copies, `engine/` the games: each has a
+  `prompt.ts` what "Copy chatbot prompt" copies (and the Chapters page's
+  Bulk add prompt), `engine/` the games: each has a
   maker and a separate checker, and a puzzle is only shown after its checker
   passes it; `answers.ts` marks typed answers), `components/games/` (the five parts, `Picker.tsx` the dropdown every games page uses instead of `<select>`, `Revise.tsx` the game
   picker and player used full size by Try the games and small by the preview,

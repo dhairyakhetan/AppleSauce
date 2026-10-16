@@ -207,8 +207,8 @@ export function keepTopic(d: DraftChapter[], chapterKey: string, key: string): D
 /**
  * Many chapters at once ("Bulk add"), one per line in the order given: "Heat", or with its number, "4. Heat" (or "4:",
  * "4)"). A line starting with "-" (or "*", "•") under a chapter is one of its topics, numbered from 1 unless it gives
- * its own ("- 2. Conduction"). Blank lines are skipped. Each is checked as if added on its own; a problem names its line,
- * and then nothing is added.
+ * its own ("- 2. Conduction"). Blank lines, and the fences of a code block, are skipped. Each is checked as if added on
+ * its own; a problem names its line, and then nothing is added.
  */
 export function addMany(d: DraftChapter[], text: string): { draft: DraftChapter[]; chapters: number; topics: number } {
   let draft = d;
@@ -217,7 +217,7 @@ export function addMany(d: DraftChapter[], text: string): { draft: DraftChapter[
   let topics = 0;
   text.split(/\r?\n/).forEach((raw, i) => {
     const line = raw.trim();
-    if (!line) return;
+    if (!line || line.startsWith('```')) return; // a chatbot's reply copied with its code block's fences
     const topic = /^[-*•]\s*(.*)$/.exec(line);
     const body = (topic ? topic[1] : line).trim();
     const numbered = /^(\d{1,2})\s*[.:)]\s*(.+)$/.exec(body);

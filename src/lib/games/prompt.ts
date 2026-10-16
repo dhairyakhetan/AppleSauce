@@ -8,6 +8,11 @@
  *   fixPrompt      "Copy prompt to fix them" (when sending with problems): the questions the page turned away and why,
  *                  the text as it is, and, last, to write the whole text again.
  *
+ * And one the Chapters page copies (admins), from its Bulk add box:
+ *
+ *   chapterListPrompt  the chapters of one board, class and subject, one per line, in the form Bulk add reads
+ *                      (addMany in list-draft.ts), leaving out the chapters already on the list.
+ *
  * The rules here are the checker's rules, said once and plainly: a chatbot that follows them writes text the page
  * accepts as it is. prompt.test.ts fails if the two drift apart (labels, limits, levels, examples), and stand-in
  * chatbots were run on it (CHANGES.md). Everyone on the team copies the same prompt, and the teacher is already on the
@@ -15,7 +20,7 @@
  */
 import { isOpen } from './catalog';
 import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, missing, problemsByRow, type Issue } from './format';
-import { DIFFICULTIES, type ListChapter, type Row } from './rows';
+import { DIFFICULTIES, type ListChapter, type ListGroup, type Row } from './rows';
 
 const FENCE = '```';
 const block = (lines: string) => `${FENCE}\n${lines}\n${FENCE}`;
@@ -214,3 +219,33 @@ ${fence}
 Write the entire text again, from the Board line to the last question, with these fixes and nothing else changed. Put all of it in ONE code block, so I can copy it at once.
 `;
 }
+
+/**
+ * The Chapters page's "Copy chatbot prompt" (Bulk add): the chapters of one board, class and subject, as the syllabus
+ * and its usual textbook have them, one per line in the form Bulk add reads. Chapters already on the list are named, to
+ * be left out, with their numbers kept free.
+ */
+export function chapterListPrompt(g: ListGroup, onList: { chapter_no: number; name: string }[]): string {
+  const have = [...onList].sort((a, b) => a.chapter_no - b.chapter_no);
+  return [
+    `List the chapters of ${g.board} class ${g.class} ${g.subject}, as in the current syllabus and its usual textbook, in the order they are taught.`,
+    '',
+    'Write one chapter per line: its number in the textbook, a full stop, a space, then its name. For example:',
+    '1. Name of the First Chapter',
+    '2. Name of the Second Chapter',
+    '',
+    'Rules:',
+    '- Name each chapter as the textbook names it, in Title Case, with British spelling.',
+    '- No long dashes in a name: use a colon or a comma instead.',
+    '- At most 120 characters in a name, and no two chapters with the same name.',
+    '- Numbers from 1 to 99, each used once.',
+    '- Only the chapters: no topics, notes, headings or blank lines.',
+    ...(have.length ? [
+      '- These chapters are on the list already. Leave them out, and don\'t use their numbers. If a chapter you list would have one of these numbers, write it without a number.',
+      ...have.map((c) => `  ${c.chapter_no}. ${c.name}`),
+    ] : []),
+    '',
+    `Reply with only the list, in ONE code block, so it can be copied with one click.`,
+  ].join('\n');
+}
+

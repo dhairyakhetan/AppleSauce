@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { format, MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, missing, NO_FILL } from './format';
 import { checkList } from './catalog';
-import { chapterLines, chatbotInstructions, chatbotPrompt, EXAMPLE_BLOCKS, fixPrompt, formatExample, topicLines } from './prompt';
+import { addMany, draftOf } from './list-draft';
+import { chapterLines, chapterListPrompt, chatbotInstructions, chatbotPrompt, EXAMPLE_BLOCKS, fixPrompt, formatExample, topicLines } from './prompt';
 import { DIFFICULTIES, type ListChapter } from './rows';
 
 /* The chatbot prompts and the checker must agree: a chatbot follows the prompt, and the checker reads what it writes.
@@ -168,3 +169,28 @@ describe('the guide for people', () => {
     expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
   });
 });
+
+describe("the Chapters page's chatbot prompt (Bulk add)", () => {
+  const G = { board: 'ICSE', class: 10, subject: 'Physics' };
+  const HAVE = [{ chapter_no: 2, name: 'Work, Energy and Power' }, { chapter_no: 1, name: 'Force' }];
+
+  it('asks for one subject, names what is on the list already, and its example goes into Bulk add as it is', () => {
+    const p = chapterListPrompt(G, HAVE);
+    expect(p).toMatch(/^List the chapters of ICSE class 10 Physics,/);
+    expect(p).toContain('  1. Force\n  2. Work, Energy and Power');
+    expect(p).toContain('ONE code block');
+    expect(p).not.toMatch(/[–—]/);
+    expect(chapterListPrompt(G, [])).not.toContain('on the list already');
+    const example = p.split('\n').filter((l) => /^\d+\. Name of the/.test(l)).join('\n');
+    expect(addMany([], example).chapters).toBe(2);
+  });
+
+  it("takes a reply in that form, its code block's fences included, around the chapters already there", () => {
+    const loaded = HAVE.map((c) => ({ chapter_id: `ICSE10PHY0${c.chapter_no}`, board: 'ICSE', class: 10, subject: 'Physics', open: true, questions: 0, topics: [], ...c }));
+    const reply = '```\n3. Machines\n4. Refraction of Light at Plane Surfaces\nSound\n```';
+    const { draft, chapters } = addMany(draftOf(loaded), reply);
+    expect(chapters).toBe(3);
+    expect(draft.map((c) => `${c.chapter_no} ${c.name}`)).toEqual(['1 Force', '2 Work, Energy and Power', '3 Machines', '4 Refraction of Light at Plane Surfaces', '5 Sound']);
+  });
+});
+
