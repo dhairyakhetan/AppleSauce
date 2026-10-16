@@ -4,8 +4,8 @@ Use this when making the pull request into the Shikshaq repo. Everything here is
 branch, `4cd7b5b` (Shikshaq-main exactly as downloaded on 11 October 2026), so `git diff 4cd7b5b..games` shows the
 same changes line by line. All work is on `games`; `feat/games-integration` is an older copy and is no longer updated.
 
-**Not for the Shikshaq repo:** this file, and the "Read first: this copy is the games branch" section at the top of
-`CLAUDE.md` (it is about this branch only). Leave both out of the PR.
+**Not for the Shikshaq repo:** this file, and the "Read first: this copy is the games branch" section near the top of
+`src/components/games/CLAUDE.md` (it is about this branch only). Leave both out of the PR.
 
 ---
 
@@ -307,6 +307,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `supabase/games/install.sql` | The whole `games` schema in one transaction, with the dry run, the moderator line and the outside-change check (above), and the starting list of chapters. Tables: settings, team, boards, subjects, chapters, topics, list_log, batches, questions, question_bank. The site calls functions only. |
 | `src/components/games/Chapters.tsx` | Chapters (admins): a board, class and subject's chapters, opening to topics and their first questions; edits marked in the list until "Save changes" or "Revert changes"; the latest changes. |
 | `src/components/games/Picker.tsx` | The games pages' dropdown, used everywhere on `/games` in place of the browser's own: the Chapters page's board, class and subject, the Team page's roles, and Write questions' Chapter box and chapter chooser. A pill, or in a form a field as wide as its column; options with chapters first, a search box for lists longer than 12, keys to move and pick, quick in (150 ms) and quicker out (100 ms). |
+| `src/components/games/CLAUDE.md` | The `/games` site's working notes (where things are, the rules the games code keeps), headed by a line saying to follow them only for changes in `/games`. The "Read first" branch note in it is not for the PR. |
 | `src/components/games/BulkAdd.tsx` | Bulk add, at the bottom of the Chapters page: the box, its chatbot prompt button, what it would add, the problems by line, and its save bar. |
 | `src/lib/games/list-draft.ts` | The Chapters page's unsaved changes: each edit checked the way the database checks it, what changed (for the marks and the count), and what "Save changes" sends. |
 | `src/pages/Games.tsx` | The page: checks who you are (including the "sign in with Google" page for a password sign-in), loads the list of chapters, the links between the five parts, the "not for you" pages, and the real/dummy switch (the same pattern as `pages/Hod.tsx`). A part stays mounted once opened. |
@@ -346,7 +347,7 @@ add `games` to `[api] schemas` in its `config.toml`, and point `.env.local` at i
 | `src/lib/chromeless-routes.ts` | The five games addresses added to `FOOTERLESS_ROUTES`. | Work screens without the footer, like `/hod` and `/checker`. |
 | `src/lib/role-home.test.ts` | Two more tests. | The games links show only for the games team, and resolve to the games route. |
 | `package.json`, `package-lock.json` | `@electric-sql/pglite` as a dev dependency. | `database.test.ts` runs the SQL scripts on it: a real Postgres in memory, no server, no network. Tests only, so it never reaches the site. |
-| `CLAUDE.md` | A "The games team (`/games`)" section. (The branch note at the top is not for the PR.) | So the next person knows where things are. |
+| `CLAUDE.md` | One row in the "Other documents" table, pointing to `src/components/games/CLAUDE.md`. The rest of the file here is the Shikshaq repo's current one (as given on 16 October 2026), so against today's Shikshaq only that row is new. | Whoever works on `/games` reads its notes first, and nobody follows them for anything else. |
 
 ## What changed in the games code on the way in
 
