@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import * as Accordion from '@radix-ui/react-accordion';
-import { Check, ChevronDown, Copy, ListPlus, Plus } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GamesApi } from '@/lib/games/api';
 import { ALL_BOARDS, SUBJECTS } from '@/lib/games/details';
 import {
-  addChapter, addMany, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
+  addChapter, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
   liveTopics, nextNumber, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged, type DraftChapter, type DraftTopic,
 } from '@/lib/games/list-draft';
 import { TOPIC_QUESTIONS_MAX, type AdminChapter, type AdminList, type ListGroup, type Status, type TopicQuestions } from '@/lib/games/rows';
-import { chapterListPrompt } from '@/lib/games/prompt';
 import { cn } from '@/lib/utils';
-import { btn, chip, copyText, FIELD, plural, when } from './helpers';
+import { BulkAdd } from './BulkAdd';
+import { btn, chip, FIELD, plural, when } from './helpers';
 import { Picker, type PickerOption } from './Picker';
 import { Empty, Loading } from './shared';
 
@@ -37,6 +37,8 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
   const [error, setError] = useState('');
   const [pick, setPick] = useState<ListGroup | null>(null);
   const [loadedAt, setLoadedAt] = useState(0);
+  /** Changes in the list not saved yet (Bulk add waits for them, as its save reloads the list). */
+  const [dirty, setDirty] = useState(0);
   /** The chapter and topic open, by number, so they stay open after saving. */
   const keepOpen = useRef<{ chapter: number | null; topic: number | null }>({ chapter: null, topic: null });
 
@@ -55,6 +57,13 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
     .map((k) => { const n = count((c) => c.board === group.board && c.class === k); return { value: String(k), label: `Class ${k}`, meta: meta(n), on: n > 0 }; });
   const subjectOptions: PickerOption[] = SUBJECTS.map((s) => s.name).sort((a, b) => a.localeCompare(b))
     .map((s) => { const n = count((c) => c.board === group.board && c.class === group.class && c.subject === s); return { value: s, label: s, meta: meta(n), on: n > 0 }; });
+
+  /** After a save (here or in Bulk add): says so, and shows the list as it is now. */
+  const saved = async (n: number) => {
+    toast(`Saved ${plural(n, 'change')}.`);
+    await load();
+    onChanged();
+  };
 
   /** Another board, class or subject: unsaved changes are dropped (the editor below starts again). A board or class with
    * chapters moves on to its first class and subject that has some. */
@@ -82,11 +91,7 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
       {error && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">{error}</p>}
       {!list ? (error ? null : <Loading label="Loading the list of chapters" />) : (
         <GroupEditor key={`${group.board}|${group.class}|${group.subject}|${loadedAt}`} api={api} group={group} loaded={chaptersOf(chapters, group)} keepOpen={keepOpen}
-          onSaved={async (n) => {
-            toast(`Saved ${plural(n, 'change')}.`);
-            await load();
-            onChanged();
-          }} />
+          onDirty={setDirty} onSaved={saved} />
       )}
 
       {list && list.log.length > 0 && (
@@ -99,6 +104,8 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
           </ul>
         </section>
       )}
+
+      {list && <BulkAdd api={api} list={chapters} blocked={dirty > 0} onSaved={saved} />}
     </div>
   );
 }
@@ -108,11 +115,13 @@ type Editing = { at: string; what: 'name' | 'number'; value: string };
 
 /** One board, class and subject: its draft, from the list as loaded. Remounted (so started again) for another one, and
  * after saving. */
-function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
+function GroupEditor({ api, group, loaded, keepOpen, onDirty, onSaved }: {
   api: GamesApi;
   group: ListGroup;
   loaded: AdminChapter[];
   keepOpen: { current: { chapter: number | null; topic: number | null } };
+  /** How many changes are not saved yet, whenever that changes. */
+  onDirty: (changes: number) => void;
   onSaved: (changes: number) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(() => draftOf(loaded));
@@ -121,8 +130,6 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [newChapter, setNewChapter] = useState({ no: '', name: '' });
-  const [bulk, setBulk] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [newTopic, setNewTopic] = useState<Record<string, { no: string; name: string }>>({});
   const [questions, setQuestions] = useState<Record<string, TopicQuestions | Error>>({});
   const [openChapter, setOpenChapter] = useState(() => draft.find((c) => c.chapter_no === keepOpen.current.chapter)?.key ?? '');
@@ -141,6 +148,8 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
     const t = c?.topics.find((x) => `${c.key}/${x.key}` === openTopic);
     keepOpen.current = { chapter: c?.chapter_no ?? null, topic: t?.topic_no ?? null };
   }, [draft, openChapter, openTopic, keepOpen]);
+
+  useEffect(() => { onDirty(changes); }, [changes, onDirty]);
 
   // leaving the site with changes not saved asks first
   useEffect(() => {
@@ -251,23 +260,6 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
       setOpenChapter(key);
       setOpenTopic('');
     }
-  };
-
-  /** Bulk add: many chapters (and their topics) from lines of text, into the draft like any other edit. */
-  const addBulk = (e: FormEvent) => {
-    e.preventDefault();
-    let added = { chapters: 0, topics: 0 };
-    if (edit('bulk', (d) => { const r = addMany(d, bulk ?? ''); added = r; return r.draft; })) {
-      setBulk(null);
-      toast(`Added ${plural(added.chapters, 'chapter')}${added.topics ? ` and ${plural(added.topics, 'topic')}` : ''}. Save changes to keep them.`);
-    }
-  };
-
-  /** The chatbot prompt for this subject's chapters, leaving out the ones in the list (saved or not). */
-  const copyPrompt = async () => {
-    if (!(await copyText(chapterListPrompt(group, draft.filter((c) => !c.deleted))))) return;
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2500);
   };
 
   return (
@@ -385,34 +377,8 @@ function GroupEditor({ api, group, loaded, keepOpen, onSaved }: {
         <input aria-label="Name of the new chapter" className={cn(SMALL, 'min-w-[200px] flex-1')} placeholder="Chapter name"
           value={newChapter.name} onChange={(e) => setNewChapter((n) => ({ ...n, name: e.target.value }))} />
         <button type="submit" className={chip('card')} disabled={!newChapter.name.trim()}><Plus aria-hidden /> Add chapter</button>
-        <button type="button" className={chip('card')} aria-expanded={bulk !== null} aria-controls="bulk-add"
-          onClick={() => { setBulk((b) => (b === null ? '' : null)); setProblem(null); }}><ListPlus aria-hidden /> Bulk add</button>
         {problem?.at === 'add-chapter' && <div className="basis-full">{problemAt('add-chapter')}</div>}
       </form>
-
-      {bulk !== null && (
-        <form id="bulk-add" className="flex animate-in flex-col gap-2 rounded-[20px] bg-muted px-4 py-3 duration-150 fade-in-0 slide-in-from-top-1" onSubmit={addBulk}>
-          <label htmlFor="bulk-text" className="text-[13px] font-semibold text-warm-secondary">Add many chapters to {groupName}</label>
-          <ul id="bulk-how" className="flex list-disc flex-col gap-0.5 pl-5 text-[13px] text-warm-secondary marker:text-warm-meta">
-            <li>One chapter per line, like <b className="text-foreground">4. Heat</b>. The number is optional.</li>
-            <li>A line starting with <b className="text-foreground">-</b> under a chapter adds a topic to it.</li>
-            <li>Or copy the chatbot prompt, paste it into ChatGPT, Gemini or Claude, and paste its reply here.</li>
-          </ul>
-          <textarea id="bulk-text" aria-describedby="bulk-how" rows={7} autoFocus value={bulk} spellCheck={false}
-            placeholder={'Force\nWork, Energy and Power\n- Work\n- Energy\n- Power\n12. Sound'}
-            onChange={(e) => { setBulk(e.target.value); if (problem?.at === 'bulk') setProblem(null); }}
-            onKeyDown={(e) => { if (e.key === 'Escape') { setBulk(null); setProblem(null); } }}
-            className={cn(FIELD, 'min-h-[150px] py-2 font-mono text-[14px] sm:text-[14px]')} />
-          {problemAt('bulk')}
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" className={chip('brand')} disabled={!bulk.trim()}><Plus aria-hidden /> Add to the list</button>
-            <button type="button" className={chip('card')} onClick={() => void copyPrompt()}>
-              {copied ? <><Check aria-hidden /> Copied</> : <><Copy aria-hidden /> Copy chatbot prompt</>}
-            </button>
-            <button type="button" className={chip('card')} onClick={() => { setBulk(null); setProblem(null); }}>Cancel</button>
-          </div>
-        </form>
-      )}
 
       {changes > 0 && (
         <div className="sticky bottom-4 z-30 mt-1 animate-in fade-in-0 slide-in-from-bottom-2 duration-150">

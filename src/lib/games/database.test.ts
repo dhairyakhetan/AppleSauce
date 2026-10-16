@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ALL_BOARDS, SUBJECTS } from './details';
 import {
-  addChapter, addTopic, changeCount, chaptersOf, deleteTopic, draftOf, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave,
+  addChapter, addTopic, changeCount, chaptersOf, deleteTopic, draftOf, readBulk, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave,
 } from './list-draft';
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -662,5 +662,21 @@ describe('the list of chapters, for admins (the Chapters page)', () => {
       'Chapter 3 (ICSE class 10 Physics) topic 1 "Moment of a Force" deleted.',
       'Chapter 2 (ICSE class 10 Physics) topic 2 "Energy" is now topic 5.',
     ]));
+  });
+
+  it('saves several subjects at once (Bulk add), all of them or none', async () => {
+    const list = (await val('mod@x.in', 'select games.admin_list()')).chapters;
+    const bulk = readBulk('Board: ICSE\nClass: 10\nSubject: Chemistry\n1. Periodic Table\n- Periodicity\n\nSubject: Biology\n1. Cell Cycle', list);
+    expect(bulk.problems).toEqual([]);
+    const saves = bulk.groups.map((g) => toSave(g.group, g.loaded, g.draft));
+    const stale = [saves[0], { ...saves[1], before: [{ chapter_id: 'ICSE10BIO01', chapter_no: 1, name: 'Old', open: true, topics: [] }] }];
+    refused(await save(stale), /^The chapters of ICSE class 10 Biology changed after you opened them/);
+    expect(await rows(`select count(*)::int n from games.chapters where subject in ('Chemistry', 'Biology')`)).toEqual([{ n: 0 }]);
+    expect(await saved(saves)).toBe(3);
+    expect(await rows(`select c.chapter_id, t.topic_id from games.chapters c left join games.topics t using (chapter_id) where c.subject in ('Chemistry', 'Biology') order by 1`)).toEqual([
+      { chapter_id: 'ICSE10BIO01', topic_id: null }, { chapter_id: 'ICSE10CHE01', topic_id: 'ICSE10CHE01T01' },
+    ]);
+    refused(await save([]), /^Save between 1 and 200 subjects at a time\.$/);
+    refused(await save([saves[0], 'x']), /changed after you opened them|Each subject to save must be one object/);
   });
 });

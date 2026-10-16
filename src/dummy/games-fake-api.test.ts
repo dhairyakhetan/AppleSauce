@@ -6,7 +6,7 @@ import { createFakeGamesApi, DUMMY_LIST, DUMMY_TEXTS } from '@/dummy/games-fake-
 import { checkList } from '@/lib/games/catalog';
 import { GAME_TYPES, makeGame } from '@/lib/games/engine';
 import { format } from '@/lib/games/format';
-import { addChapter, addTopic, changeCount, chaptersOf, deleteChapter, draftOf, renameChapter, renumberChapter, setOpen, toSave, type DraftChapter } from '@/lib/games/list-draft';
+import { addChapter, addTopic, changeCount, chaptersOf, deleteChapter, draftOf, readBulk, renameChapter, renumberChapter, setOpen, toSave, type DraftChapter } from '@/lib/games/list-draft';
 import type { AdminChapter } from '@/lib/games/rows';
 
 /* Dummy mode's stand-in for the `games` schema keeps the database's rules, so what people try in dummy mode is what
@@ -126,6 +126,18 @@ describe('the dummy games database', () => {
     expect((await api.loadList()).log.slice(0, 2).map((l) => l.detail)).toEqual([
       'Chapter 11 (CBSE class 7 Science) "Motion and Time" deleted.', 'Chapter 12 (CBSE class 7 Science) "Motion and Time" is now chapter 11.',
     ]);
+  });
+
+  it('saves several subjects at once (Bulk add), or none of them, as the database does', async () => {
+    const api = createFakeGamesApi(false);
+    const list = (await api.loadList()).chapters;
+    const bulk = readBulk('Board: CBSE\nClass: 7\nSubject: Science\n6. Motion and Time\n- Speed\n\nBoard: ICSE\nClass: 9\nSubject: Physics\nForce', list);
+    expect(bulk.problems).toEqual([]);
+    const saves = bulk.groups.map((g) => toSave(g.group, g.loaded, g.draft));
+    await expect(api.saveChapters([saves[0], { ...saves[1], before: [{ chapter_id: 'ICSE09PHY01', chapter_no: 1, name: 'Old', open: true, topics: [] }] }])).rejects.toThrow(/changed after you opened them/);
+    expect((await api.loadList()).chapters.length).toBe(list.length);
+    expect(await api.saveChapters(saves)).toEqual({ changes: 3 });
+    expect((await api.loadCatalog()).filter((c) => ['CBSE07SCI06', 'ICSE09PHY01'].includes(c.chapter_id)).map((c) => [c.name, c.topics.length])).toEqual([['Motion and Time', 1], ['Force', 0]]);
   });
 
   it("shows up to 20 of a topic's questions, in order, with how many it has", async () => {

@@ -52,10 +52,10 @@ export interface GamesApi {
   /** Admins: the list as the Chapters page shows it, with question counts and the latest changes. */
   loadList(): Promise<AdminList>;
   /**
-   * Admins: saves the changes made to one board, class and subject's chapters, all at once, or none of them if any is
-   * refused (or the list changed since `before`). Gives back how many changes were made.
+   * Admins: saves the changes made to one board, class and subject's chapters (or, from Bulk add, to several), all at
+   * once, or none of them if any is refused (or the list changed since `before`). Gives back how many changes were made.
    */
-  saveChapters(save: ListSave): Promise<{ changes: number }>;
+  saveChapters(save: ListSave | ListSave[]): Promise<{ changes: number }>;
   /** Admins: up to 20 of a topic's questions (`topicNo` null: the chapter's questions under no topic), and how many it has. */
   topicQuestions(chapterId: string, topicNo: number | null): Promise<TopicQuestions>;
 }

@@ -916,7 +916,8 @@ $$;
 -- name, open, topics: [{was (the topic's number until now; null for a new topic), topic_no, name}]}]. A chapter or topic
 -- left out of it is deleted. A name can change at any time, and its questions take the new one; a number changes, and a
 -- chapter or topic is deleted, only while it has no questions, as the number is part of each question's ID. All of it,
--- or none of it; each change is noted.
+-- or none of it; each change is noted. Bulk add saves several subjects at once: `changes` is then a list of these, and
+-- if any is refused, none is kept.
 create function games.admin_save_chapters(changes jsonb) returns jsonb language plpgsql security definer set search_path = ''
 as $$
 declare
@@ -944,6 +945,14 @@ declare
   done int := 0;
 begin
   perform games.list_check_admin();
+  if jsonb_typeof(changes) = 'array' then
+    if jsonb_array_length(changes) not between 1 and 200 then raise exception 'Save between 1 and 200 subjects at a time.'; end if;
+    for c in select y from jsonb_array_elements(changes) y loop
+      if jsonb_typeof(c) is distinct from 'object' then raise exception 'Each subject to save must be one object.'; end if;
+      done := done + (games.admin_save_chapters(c) ->> 'changes')::int;
+    end loop;
+    return jsonb_build_object('changes', done);
+  end if;
   select * into b from games.boards x where x.name = changes ->> 'board';
   if not found then raise exception 'The board "%" isn''t on the site''s list.', changes ->> 'board'; end if;
   select * into s from games.subjects x where x.name = changes ->> 'subject';

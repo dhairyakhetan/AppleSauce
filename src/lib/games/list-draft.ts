@@ -7,6 +7,7 @@
  * Pure: every edit gives back a new draft, or throws an Error whose message is what the page shows.
  */
 import { sameName } from './catalog';
+import { checkBoard, checkClass, checkSubject } from './details';
 import type { AdminChapter, ChapterToSave, ListGroup, ListSave, SavedChapter } from './rows';
 
 export interface DraftTopic {
@@ -202,44 +203,99 @@ export function keepTopic(d: DraftChapter[], chapterKey: string, key: string): D
   return putTopic(d, c, { ...t, deleted: false });
 }
 
-// ---------------------------------------------------------------- many at once
+// ---------------------------------------------------------------- Bulk add
+
+/** One board, class and subject in a Bulk add: its draft with the new chapters and topics, from the list as loaded. */
+export interface BulkGroup {
+  group: ListGroup;
+  loaded: AdminChapter[];
+  draft: DraftChapter[];
+  chapters: number;
+  topics: number;
+  /** Chapters (and topics) already on the list under that name, left as they are. */
+  already: number;
+}
+export interface BulkProblem { line: number; text: string }
+
+const BULK_HEAD = /^(board|class|subject)\s*:\s*(.*)$/i;
 
 /**
- * Many chapters at once ("Bulk add"), one per line in the order given: "Heat", or with its number, "4. Heat" (or "4:",
- * "4)"). A line starting with "-" (or "*", "•") under a chapter is one of its topics, numbered from 1 unless it gives
- * its own ("- 2. Conduction"). Blank lines, and the fences of a code block, are skipped. Each is checked as if added on
- * its own; a problem names its line, and then nothing is added.
+ * Bulk add (the bottom of the Chapters page): chapters for any boards, classes and subjects, from lines of text. Board,
+ * Class and Subject lines say where the chapters under them go, as in the Questions box (names read the same way: "icse",
+ * "X", "Maths"). Then one chapter per line, "Heat" or with its number "4. Heat" (or "4:", "4)"), and lines starting with
+ * "-" (or "*", "•") under a chapter for its topics, numbered from 1 unless they give their own. A chapter or topic
+ * already there under that name is left as it is, and topics under such a chapter are added to it. Blank lines and a
+ * code block's fences are skipped. Each is checked as if added on its own, and every problem is named on its line; the
+ * page saves nothing while there is one.
  */
-export function addMany(d: DraftChapter[], text: string): { draft: DraftChapter[]; chapters: number; topics: number } {
-  let draft = d;
-  let current: string | null = null;
-  let chapters = 0;
-  let topics = 0;
+export function readBulk(text: string, list: AdminChapter[]): { groups: BulkGroup[]; problems: BulkProblem[] } {
+  const groups = new Map<string, BulkGroup>();
+  const problems: BulkProblem[] = [];
+  const where = { board: '', class: 0, subject: '', bad: false };
+  let at: BulkGroup | null = null;
+  /** The chapter topic lines go under: its key, null before any, false after one that couldn't be added. */
+  let current: string | null | false = null;
+
   text.split(/\r?\n/).forEach((raw, i) => {
     const line = raw.trim();
-    if (!line || line.startsWith('```')) return; // a chatbot's reply copied with its code block's fences
+    const say = (t: string) => problems.push({ line: i + 1, text: t });
+    if (!line || line.startsWith('```')) return;
+    const head = BULK_HEAD.exec(line);
+    if (head) {
+      const v = head[2].trim();
+      const k = head[1].toLowerCase();
+      const checked = k === 'board' ? checkBoard(v) : k === 'subject' ? checkSubject(v) : null;
+      const cls = k === 'class' ? checkClass(v) : null;
+      const ok = checked ? !!checked.code : cls!.value !== null && cls!.value >= 1 && cls!.value <= 12;
+      if (!ok) say((checked ?? cls)!.problem?.text ?? `"${v}" isn't a ${k} on the site's list.`);
+      if (k === 'board') where.board = ok ? checked!.name : '';
+      if (k === 'subject') where.subject = ok ? checked!.name : '';
+      if (k === 'class') where.class = ok ? cls!.value! : 0;
+      where.bad = !ok;
+      at = null;
+      current = null;
+      return;
+    }
+    if (where.bad) return; // the Board, Class or Subject line above already says what is wrong
+    if (!where.board || !where.class || !where.subject) { say('Put Board, Class and Subject lines above the chapters.'); return; }
+    if (!at) {
+      const g = { board: where.board, class: where.class, subject: where.subject };
+      const id = `${g.board}|${g.class}|${g.subject}`;
+      if (!groups.has(id)) {
+        const loaded = chaptersOf(list, g);
+        groups.set(id, { group: g, loaded, draft: draftOf(loaded), chapters: 0, topics: 0, already: 0 });
+      }
+      at = groups.get(id)!;
+    }
+    const g = at;
     const topic = /^[-*•]\s*(.*)$/.exec(line);
     const body = (topic ? topic[1] : line).trim();
     const numbered = /^(\d{1,2})\s*[.:)]\s*(.+)$/.exec(body);
-    const name = numbered ? numbered[2] : body;
+    const no = numbered ? Number(numbered[1]) : null;
+    const name = (numbered ? numbered[2] : body).trim();
     try {
       if (topic) {
+        if (current === false) return; // its chapter has a problem of its own
         if (!current) throw new Error('A topic needs its chapter on a line above it.');
-        const ch = chapterAt(draft, current);
-        draft = addTopic(draft, current, numbered ? Number(numbered[1]) : nextNumber(ch.topics), name);
-        topics++;
+        const ch = chapterAt(g.draft, current);
+        const same = ch.topics.find((t) => !t.deleted && sameName(t.name, name));
+        if (same && (no === null || same.topic_no === no)) { if (same.was !== null) g.already++; return; }
+        g.draft = addTopic(g.draft, current, no ?? nextNumber(ch.topics), name);
+        g.topics++;
       } else {
-        const no = numbered ? Number(numbered[1]) : nextNumber(draft);
-        draft = addChapter(draft, no, name);
-        current = draft.find((c) => !c.was && !c.deleted && c.chapter_no === no)!.key;
-        chapters++;
+        const same = g.draft.find((c) => !c.deleted && sameName(c.name, name));
+        if (same && (no === null || same.chapter_no === no)) { current = same.key; if (same.was) g.already++; return; }
+        const n = no ?? nextNumber(g.draft);
+        current = false;
+        g.draft = addChapter(g.draft, n, name);
+        current = g.draft.find((c) => !c.was && !c.deleted && c.chapter_no === n)!.key;
+        g.chapters++;
       }
     } catch (e) {
-      throw new Error(`Line ${i + 1}: ${(e as Error).message}`);
+      say((e as Error).message);
     }
   });
-  if (!chapters) throw new Error('Write at least one chapter, one per line.');
-  return { draft, chapters, topics };
+  return { groups: [...groups.values()], problems };
 }
 
 // ---------------------------------------------------------------- what changed

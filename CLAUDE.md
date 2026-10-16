@@ -283,6 +283,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   edits kept and marked on the page (`lib/games/list-draft.ts`) until "Save
   changes" sends them all at once to `games.admin_save_chapters`, which checks
   them again and refuses a save from a list that changed since it was loaded.
+  Bulk add, at the bottom (`components/games/BulkAdd.tsx`, `readBulk`), takes
+  Board, Class and Subject lines with chapters under them, for any number of
+  subjects, and saves them all in one call (a list of saves, all or none).
   It isn't installed on the live database yet; until
   then every call in `lib/games/api.ts` (`realGamesApi`) fails and the pages
   say so. The site calls functions only; no role can read the tables.

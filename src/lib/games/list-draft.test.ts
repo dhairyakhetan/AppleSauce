@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addChapter, addMany, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
-  nextNumber, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged,
+  addChapter, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
+  nextNumber, readBulk, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged,
 } from './list-draft';
 import type { AdminChapter } from './rows';
 
@@ -131,32 +131,53 @@ describe('the draft of a subject\'s chapters', () => {
     ]);
   });
 
-  it('adds many chapters at once, with their topics, numbered in order unless a line gives its number', () => {
-    const { draft, chapters, topics } = addMany(start(), [
+  it('Bulk add reads chapters for any subjects under Board, Class and Subject lines, leaving those already there', () => {
+    const list = [...LOADED, { ...ch(1, 'Elsewhere', 0), subject: 'Geography' }];
+    const { groups, problems } = readBulk([
+      '```',
+      'Board: cbse',
+      'Class: VIII',
+      'Subject: History',
+      'How, When and Where', // already chapter 1: left as it is
+      '- Colonial Records', //   but a topic under it is added to it
+      '2. From Trade to Territory',
+      '- From Trade to Wars', // already its topic 2
       'Civilising the Native',
       '- Educating the Nation',
       '- 3. The Agenda for National Education',
       '',
-      '  Women, Caste and Reform  ',
-      '9) Colonialism and the City',
-      '* Delhi',
-    ].join('\n'));
-    expect([chapters, topics]).toEqual([3, 3]);
-    expect(draft.filter((c) => !c.was).map((c) => [c.chapter_no, c.name, c.topics.map((t) => `${t.topic_no} ${t.name}`)])).toEqual([
+      'Subject: Geography',
+      '9) Resources',
+      '```',
+    ].join('\n'), list);
+    expect(problems).toEqual([]);
+    expect(groups.map((g) => [g.group.subject, g.chapters, g.topics, g.already])).toEqual([['History', 1, 3, 3], ['Geography', 1, 0, 0]]);
+    const hist = groups[0].draft;
+    expect(hist.filter((c) => !c.was).map((c) => [c.chapter_no, c.name, c.topics.map((t) => `${t.topic_no} ${t.name}`)])).toEqual([
       [4, 'Civilising the Native', ['1 Educating the Nation', '3 The Agenda for National Education']],
-      [5, 'Women, Caste and Reform', []],
-      [9, 'Colonialism and the City', ['1 Delhi']],
     ]);
-    expect(changeCount(draft)).toBe(6);
+    expect(hist[0].topics.map((t) => [t.topic_no, t.name, t.was])).toEqual([[1, 'Colonial Records', null]]);
+    expect(groups[1].draft.map((c) => `${c.chapter_no} ${c.name}`)).toEqual(['1 Elsewhere', '9 Resources']);
+    expect(toSave(groups[0].group, groups[0].loaded, hist).after.map((c) => c.chapter_id)).toEqual(['CBSE08HIS01', 'CBSE08HIS02', 'CBSE08HIS03', null]);
   });
 
-  it('names the line with a problem, and then adds none of them', () => {
-    const d = start();
-    expect(() => addMany(d, 'Tribals\nFrom Trade to Territory')).toThrow('Line 2: There is already a chapter called "From Trade to Territory".');
-    expect(() => addMany(d, '- Dates\nTribals')).toThrow('Line 1: A topic needs its chapter on a line above it.');
-    expect(() => addMany(d, 'Tribals\n2. Weavers')).toThrow('Line 2: Chapter 2 is "From Trade to Territory". Give the new one another number.');
-    expect(() => addMany(d, 'Tribals – Dikus')).toThrow('Line 1: No dashes in a name: use a colon or a comma.');
-    expect(() => addMany(d, '\n \n')).toThrow('Write at least one chapter, one per line.');
-    expect(d.filter((c) => !c.was)).toEqual([]);
+  it('Bulk add names every line with a problem', () => {
+    const { problems } = readBulk([
+      'Tribals', // 1: no Board, Class and Subject yet
+      'Board: CBSE',
+      'Class: 13', // 3
+      'Weavers', //   (under a class that isn't one: only line 3 says so)
+      'Class: 8',
+      'Subject: History',
+      '- Dates', // 7: no chapter above it
+      '2. Weavers', // 8: chapter 2 is taken
+      '- Spinning', //   (under a chapter with a problem: skipped)
+      'Tribals – Dikus', // 10
+    ].join('\n'), LOADED);
+    expect(problems.map((p) => p.line)).toEqual([1, 3, 7, 8, 10]);
+    expect(problems.find((p) => p.line === 1)!.text).toBe('Put Board, Class and Subject lines above the chapters.');
+    expect(problems.find((p) => p.line === 7)!.text).toBe('A topic needs its chapter on a line above it.');
+    expect(problems.find((p) => p.line === 8)!.text).toBe('Chapter 2 is "From Trade to Territory". Give the new one another number.');
+    expect(problems.find((p) => p.line === 10)!.text).toBe('No dashes in a name: use a colon or a comma.');
   });
 });
