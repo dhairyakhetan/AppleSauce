@@ -284,6 +284,17 @@ export function schoolSearchTerms(raw: string | null | undefined): string[] {
   return [display];
 }
 
+/**
+ * The source name a paper can be shown under, or null when the paper does not
+ * record one. A board paper returns its board line ("ICSE board paper"), which
+ * is true and useful on a card. "School not recorded" returns null, so callers
+ * drop the line instead of announcing the gap. DISPLAY ONLY.
+ */
+export function paperSourceName(raw: string | null | undefined): string | null {
+  const label = displaySchool(raw);
+  return label === 'School not recorded' ? null : label;
+}
+
 /** True when a display label names an actual school, so it belongs in a
  *  school list or facet. Board-paper source lines ("ICSE board paper") and
  *  the "School not recorded" placeholder are true on a card but are not

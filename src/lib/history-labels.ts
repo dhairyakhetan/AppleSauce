@@ -52,10 +52,10 @@ export const MODEL_LABELS: Record<string, string> = {
 
 /** checker_kind values from content_checks (20261001090000). */
 export const CHECKER_KIND_LABELS: Record<string, string> = {
-  haiku: 'AI check (Haiku)',
-  haiku_paddle: 'AI check (Haiku, from the scan)',
-  haiku_pdf: 'AI check (Haiku, from the page)',
-  sonnet: 'AI check (Sonnet)',
+  haiku: 'AI check',
+  haiku_paddle: 'AI check',
+  haiku_pdf: 'AI check',
+  sonnet: 'AI check',
   student: 'Student checker',
   admin: 'Admin',
 };
@@ -117,10 +117,8 @@ export function actorLabel(a: ActorInput): string {
         ? 'admin'
         : 'ai'
     : normaliseActorKind(a.actor_kind);
-  if (kind === 'ai') {
-    const m = modelName(a.model) ?? modelName(a.checker_kind) ?? modelName(a.actor_name);
-    return m ? `AI check (${m})` : 'AI check';
-  }
+  // The model is never named on a log line: "AI check" is what the reader needs.
+  if (kind === 'ai') return 'AI check';
   if (kind === 'pipeline') return 'Pipeline (automatic)';
   const name = cleanPersonName(a.actor_name);
   if (kind === 'student') return name ? `${name} (student checker)` : 'A student checker';
@@ -389,6 +387,7 @@ export const ACTION_LABELS: Record<string, (c: Ctx) => string> = {
   checker_ask_help: (c) => `asked the HOD for help${c.on}`,
   checker_return_paper: () => 'handed a paper back',
   verifier_undo: () => 'undid their last answer',
+  verifier_reopen: () => 'reopened a Done question to edit it',
   verifier_or_separator: (c) => `marked ${c.q} as just the OR between two questions and linked the questions around it`,
   // the HOD and the AI trust levels
   admin_add_hod: () => 'made someone an HOD',

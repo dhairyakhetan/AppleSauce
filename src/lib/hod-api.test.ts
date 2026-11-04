@@ -12,6 +12,7 @@ import {
   normaliseEscalations,
   normaliseHistory,
   normaliseHods,
+  normaliseSubjects,
   normaliseTeam,
   normaliseUnassigned,
   normaliseVerifierProfiles,
@@ -91,6 +92,7 @@ describe('hod_team mapping', () => {
       edited: 20,
       escalated: 3,
       skipped: 1,
+      skipped_done: 1,
       overturned: 2,
       last_active: '2026-10-07T09:00:00Z',
     },
@@ -104,6 +106,14 @@ describe('hod_team mapping', () => {
     expect(m[0].reviewed_7d).toBe(30);
     expect(m[0].papers_reviewed).toBe(5);
     expect(m[0].overturned).toBe(2);
+  });
+
+  it('keeps "Later corrected" (skipped, then dealt with) apart from "Fixed by others" (passed, then fixed by someone else)', () => {
+    expect(m[0].skipped_done).toBe(1);
+    expect(normaliseTeam([{ user_id: 'u3' }])[0].skipped_done).toBe(0);
+    const byKey = Object.fromEntries(TEAM_COLUMNS.map((c) => [c.key, c.label]));
+    expect(byKey.skipped_done).toBe('Later corrected');
+    expect(byKey.overturned).toBe('Fixed by others');
   });
 
   it('missing numbers become zero', () => {
@@ -137,6 +147,7 @@ describe('hod_team mapping', () => {
       'Sent to HOD',
       'Skipped',
       'Later corrected',
+      'Fixed by others',
       'Last active',
     ]);
     expect(JSON.stringify(TEAM_COLUMNS)).not.toMatch(/[–—]|_id\b|rpc|audit_/i);
@@ -253,5 +264,25 @@ describe('the HODs list', () => {
     ]);
     expect(h.map((x) => x.active)).toEqual([true, false]);
     expect(h[1].name).toBeNull();
+  });
+});
+
+describe('hod_list_subjects mapping', () => {
+  it('keeps id, name and slug and drops rows without an id or a name', () => {
+    const out = normaliseSubjects([
+      { id: 's1', name: ' Mathematics ', slug: 'mathematics' },
+      { id: 's2', name: 'Physics', slug: null },
+      { id: null, name: 'No id', slug: 'x' },
+      { id: 's4', name: '  ', slug: 'blank' },
+      'junk',
+    ]);
+    expect(out).toEqual([
+      { id: 's1', name: 'Mathematics', slug: 'mathematics' },
+      { id: 's2', name: 'Physics', slug: null },
+    ]);
+  });
+  it('reads a non-list answer as empty', () => {
+    expect(normaliseSubjects(null)).toEqual([]);
+    expect(normaliseSubjects({})).toEqual([]);
   });
 });

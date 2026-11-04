@@ -1,4 +1,4 @@
-/* The one copy file for the admin area: what each group, page, button, tile
+/* The one copy file for the admin area: what each tab, section, button, tile
    and column means, in plain words. Every page reads its wording from here so
    the same thing is never described two ways.
 
@@ -7,15 +7,15 @@
    every nav page has a one-line description. */
 
 export type AdminPageKey =
-  | 'now'
   | 'library'
   | 'ready'
   | 'submissions'
-  | 'student-queue'
   | 'admin-queue'
   | 'checker-log'
+  | 'positions'
   | 'checkers'
-  | 'hod'
+  | 'hods'
+  | 'reviewers'
   | 'applications'
   | 'teachers'
   | 'reviews'
@@ -25,58 +25,96 @@ export type AdminPageKey =
   | 'pipeline'
   | 'audit';
 
-export type AdminGroupKey = 'now' | 'papers' | 'people' | 'teachers' | 'logs' | 'system';
+/** The four tabs of the Admin page, the same row-of-tabs layout as the HOD desk. */
+export type AdminTabKey = 'people' | 'teachers' | 'logs' | 'system';
 
-export interface AdminGroupCopy {
-  key: AdminGroupKey;
+export interface AdminSectionCopy {
+  /** In the address as ?section=. */
+  key: string;
   label: string;
-  /** One line, shown under the group's tabs. */
-  blurb: string;
-  pages: AdminPageKey[];
+  /** The page whose wording (one line, purpose, buttons) this section uses. */
+  page: AdminPageKey;
 }
 
-/* Six groups, by the job an admin is doing, not by how often a page is used.
-   Needs you is one page and the landing; the other five hold their pages in
-   reading order: queues first, reference last, and any link that leaves the
-   admin (the HOD desk, the student screen) at the very end of its group. */
-export const ADMIN_GROUPS: AdminGroupCopy[] = [
-  {
-    key: 'now',
-    label: 'Needs you',
-    blurb: 'Everything waiting on you, in one place.',
-    pages: ['now'],
-  },
-  {
-    key: 'papers',
-    label: 'Papers',
-    blurb: 'Papers waiting to go live, questions waiting for an admin, student uploads, and the whole library.',
-    pages: ['ready', 'admin-queue', 'submissions', 'library'],
-  },
+export interface AdminTabCopy {
+  key: AdminTabKey;
+  label: string;
+  /** Shown as the tab's tooltip. */
+  hint: string;
+  /** One sentence under the tab row: what this tab is for. */
+  summary: string;
+  sections: AdminSectionCopy[];
+}
+
+/* Four tabs, by the job an admin is doing. Papers are not here: everything
+   about getting a paper checked and live is on the HOD desk (/hod), which
+   admins can open too. A section is one of the old pages shown inside its tab,
+   so a tab with one section shows no second row. */
+export const ADMIN_TABS: AdminTabCopy[] = [
   {
     key: 'people',
     label: 'People',
-    blurb: 'The verifiers who check questions, how far they have got, and the screens they use.',
-    pages: ['checkers', 'team', 'hod', 'student-queue'],
+    hint: 'Positions, verifiers, HODs, teacher reviewers and how far the verifiers have got.',
+    summary: 'The people who work on the site: who holds each position, who checks papers, who leads them, who reviews teachers, and how much each has done.',
+    sections: [
+      { key: 'positions', label: 'Positions', page: 'positions' },
+      { key: 'verifiers', label: 'Verifiers', page: 'checkers' },
+      { key: 'hods', label: 'HODs', page: 'hods' },
+      { key: 'reviewers', label: 'Teacher reviewers', page: 'reviewers' },
+      { key: 'progress', label: 'Progress', page: 'team' },
+    ],
   },
   {
     key: 'teachers',
     label: 'Teachers',
-    blurb: 'Teachers who want to join, what parents say about them, and teachers already on the site.',
-    pages: ['applications', 'reviews', 'teachers'],
+    hint: 'Teachers who want to join, what parents say about them, and teachers already listed.',
+    summary: 'Teachers who want to join, what parents say about teachers, and teachers already on the site.',
+    sections: [
+      { key: 'applications', label: 'Applications', page: 'applications' },
+      { key: 'reviews', label: 'Reviews', page: 'reviews' },
+      { key: 'listed', label: 'Listed teachers', page: 'teachers' },
+    ],
   },
   {
     key: 'logs',
     label: 'Logs',
-    blurb: 'Who changed what: questions, verifier days and admin actions.',
-    pages: ['activity', 'checker-log', 'audit'],
+    hint: 'Who changed what: questions, verifier work and admin actions.',
+    summary: 'A read-only record of who changed what: questions, verifier work and admin actions.',
+    sections: [
+      { key: 'question-changes', label: 'Question changes', page: 'activity' },
+      { key: 'checker-activity', label: 'Checker activity', page: 'checker-log' },
+      { key: 'admin-actions', label: 'Admin actions', page: 'audit' },
+    ],
   },
   {
     key: 'system',
     label: 'System',
-    blurb: 'How the machine and the visitors are doing.',
-    pages: ['pipeline', 'feedback'],
+    hint: 'How far papers have got, and what visitors say about the site.',
+    summary: 'How the papers are moving, and how visitors rate the site.',
+    sections: [
+      { key: 'pipeline', label: 'Pipeline', page: 'pipeline' },
+      { key: 'feedback', label: 'Visitor feedback', page: 'feedback' },
+    ],
   },
 ];
+
+/** The address of a tab, or of one section inside it. */
+export function adminHref(tab: AdminTabKey, section?: string): string {
+  return section ? `/admin?tab=${tab}&section=${section}` : `/admin?tab=${tab}`;
+}
+
+/** The tab a page lives in, or null for a page that moved to the HOD desk. */
+export function tabOfPage(page: AdminPageKey): AdminTabCopy | null {
+  return ADMIN_TABS.find((t) => t.sections.some((s) => s.page === page)) ?? null;
+}
+
+/** Where a page is now, as a whole address. Pages that moved to the HOD desk say so. */
+export function adminPageHref(page: AdminPageKey): string {
+  const tab = tabOfPage(page);
+  const section = tab?.sections.find((s) => s.page === page);
+  if (tab && section) return adminHref(tab.key, section.key);
+  return ADMIN_PAGES[page].path;
+}
 
 export interface ButtonCopy {
   label: string;
@@ -98,19 +136,10 @@ export interface AdminPageCopy {
 }
 
 export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
-  now: {
-    key: 'now',
-    label: 'Needs you now',
-    path: '/admin',
-    short: 'Everything waiting on you, biggest pile first.',
-    purpose: 'Everything that is waiting on you, in one place.',
-    flow: 'Start with the top row. Each row opens the queue it counts.',
-    buttons: [{ label: 'Start with', does: 'Opens the queue with the most waiting, so you can begin at the top.' }],
-  },
   library: {
     key: 'library',
-    label: 'Library',
-    path: '/admin/library',
+    label: 'Live papers',
+    path: '/hod?tab=live',
     short: 'Every paper on the site. Find one, fix it, hide it or bring it back.',
     purpose:
       'Every past paper in the library, live or hidden. Use it to find a paper, see how far its checking has got, open it to fix a question, or hide it from visitors.',
@@ -128,11 +157,11 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
   ready: {
     key: 'ready',
     label: 'Ready to go live',
-    path: '/admin/paper-approvals',
-    short: 'Papers waiting for your yes. The count includes any that still have a question open.',
+    path: '/hod?tab=ready',
+    short: 'Papers waiting for a yes before they go on the site.',
     purpose:
-      'New papers are never published automatically. When every question on a paper has been checked, it waits here as To approve. You read it as visitors will, fix anything, and approve it. Papers already live that still need your yes are here too.',
-    flow: 'Open a paper marked To approve, read it, then approve it. A paper with Open questions cannot be approved yet. Switch to Already decided to see what was approved or rejected, by whom and why.',
+      'New papers are never published automatically. When every question on a paper has been checked, it waits here. You read it as visitors will, fix anything, and approve it.',
+    flow: 'Open a paper, read it, then approve it. A paper with open questions cannot be approved yet.',
     buttons: [
       { label: 'Review', does: 'Opens the paper. From there you can fix questions, set one aside, and approve the paper.' },
     ],
@@ -140,10 +169,10 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
   submissions: {
     key: 'submissions',
     label: 'Student uploads',
-    path: '/admin/papers',
+    path: '/hod?tab=uploads',
     short: 'Papers students sent in through the site, waiting for you to read and decide.',
     purpose:
-      'Papers that students uploaded themselves through the Submit a paper page. Open each one to read it and decide. Uploads you approved are listed too, and can be hidden or brought back. This is separate from the Library, which holds the checked papers.',
+      'Papers that students uploaded themselves through the Submit a paper page. Open each one to read it and decide. Uploads you approved are listed too, and can be hidden or brought back.',
     flow: 'Open an upload marked Pending, read it, then approve or reject it.',
     buttons: [
       { label: 'Review or View', does: 'Opens the upload so you can read it and decide. View is for uploads already decided.' },
@@ -152,21 +181,11 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
       { label: 'Restore', does: 'Puts a hidden upload back on the site.' },
     ],
   },
-  'student-queue': {
-    key: 'student-queue',
-    label: 'Try the student screen',
-    path: '/checker',
-    short: 'The screen verifiers use to check questions. Open it to try it yourself.',
-    purpose:
-      'This is the checking screen your verifiers use, one question at a time with a picture of the page. It opens in the same site so you can try it exactly as they see it.',
-    flow: 'Open it, check a question, and your work is logged like anyone else.',
-    buttons: [],
-  },
   'admin-queue': {
     key: 'admin-queue',
-    label: 'Admin queue',
-    path: '/admin/admin-queue',
-    short: 'Questions the checking could not settle, waiting for an admin to decide.',
+    label: 'Needs you',
+    path: '/hod?tab=needs-you',
+    short: 'Questions the checking could not settle, waiting for a person to decide.',
     purpose:
       'Questions that neither the AI nor a verifier could settle land here. Each shows the picture of the page it came from and, in words, why it was flagged. Decide each one: it is right, it needs a fix, or it should be set aside.',
     flow: 'Work down a paper at a time. Every decision is logged and can be undone from the paper history.',
@@ -176,50 +195,64 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
       { label: 'Set aside', does: 'Keeps the question off the site. You give a reason. The paper still goes live with an empty card in its place.' },
     ],
   },
-  'checker-log': {
-    key: 'checker-log',
-    label: 'Checker activity',
-    path: '/admin/checker-log',
-    short: 'What each verifier did, day by day.',
+  positions: {
+    key: 'positions',
+    label: 'Positions',
+    path: '/admin?tab=people&section=positions',
+    short: 'Everyone who is an admin, HOD, verifier or teacher reviewer. Add an email, change a position or remove one.',
     purpose:
-      'A record of every action your verifiers took: who, how many questions, and what they did with them. Use it to see who is active and to look into a single decision.',
-    flow: 'One line per person or machine. Open a name to read their days.',
-    buttons: [{ label: 'Open a person', does: 'Shows that person\'s actions, newest first.' }],
+      'One list of who holds each position. Type an email and pick a position to add someone, even if they have not signed up yet: they get it the first time they sign in with Google using that email. Change moves a person from one position to another in one step. You cannot remove or change your own admin position, and the owner account cannot be removed.',
+    flow: 'Type an email, pick a position, press Add. Use Change or Remove on a row to adjust it later.',
+    buttons: [
+      { label: 'Add', does: 'Gives that email the chosen position. With no account yet, it waits for their first Google sign-in.' },
+      { label: 'Change', does: 'Moves the person to another position in one step. If the new one cannot be given, nothing changes.' },
+      { label: 'Remove', does: 'Takes the position away after you confirm. On a waiting entry it cancels the grant.' },
+    ],
   },
   checkers: {
     key: 'checkers',
     label: 'Verifiers',
-    path: '/admin/checkers',
-    short: 'Who is allowed to verify papers. Search for a person, add them, then fill in their details.',
+    path: '/admin?tab=people&section=verifiers',
+    short: 'People allowed to check questions. Search for a person to add them, or remove one.',
     purpose:
-      'The list of verifiers: people allowed to open the verifying screen. To add someone, search by their name or email: they must have signed up on Shikshaq first. Right after you add them, fill in their grade, school and board; a verifier can also fill in their own details. A verifier with no details, or no grade, still gets papers with no class limit, as if they were in Class 12. Once a grade is recorded, papers are never given above it. If the details have expired, the verifier gets no new papers until you renew them. Removing someone stops their access but keeps everything they already verified. HODs, who lead the verifiers, are managed on this page too.',
-    flow: 'Search, press Add next to the right person, then fill in their details. Papers are given to them automatically.',
+      'The verifiers are the people allowed to open the checking screen. To add someone, search by their name or email. They must have signed up on Shikshaq first. Removing someone stops their access but keeps everything they already checked. Their grade, school and board are filled in on the HOD desk, where you can also see how each verifier is doing and which papers they hold.',
+    flow: 'Search, press Add next to the right person, then open the HOD desk to fill in their details.',
     buttons: [
-      { label: 'Add', does: 'Lets that person open the verifying screen. They need to reload the site once. You are asked for their details straight after.' },
-      { label: 'Details', does: 'Opens the form for their name, grade, school, board and the date the details are valid until.' },
-      { label: 'Remove', does: 'Stops them opening the verifying screen. Their earlier work stays.' },
+      { label: 'Add', does: 'Lets that person open the checking screen. They need to reload the site once.' },
+      { label: 'Details', does: 'Opens the HOD desk, where their grade, school, board and preferred subjects are saved.' },
+      { label: 'Remove', does: 'Stops them opening the checking screen. Their earlier work stays.' },
     ],
   },
-  hod: {
-    key: 'hod',
-    label: 'HOD desk',
-    path: '/hod',
-    short: 'What verifiers sent up, how each person is doing, and which paper each one holds.',
+  hods: {
+    key: 'hods',
+    label: 'HODs',
+    path: '/admin?tab=people&section=hods',
+    short: 'People who lead the verifiers and use the HOD desk. Only admins can add or remove them.',
     purpose:
-      'The Head of Department screen. It shows the questions verifiers asked about, how each verifier is getting on, and who holds which paper. Papers can be given to a verifier, moved or taken back from here. Admins can use it too.',
-    flow: 'Start with Escalated to me, then look at the team, then give out any papers nobody has.',
+      'An HOD is a Head of Department. They settle questions the verifiers could not, give out papers and watch how the team is doing, all on the HOD desk. Admins can open the HOD desk too, so you do not need to add yourself.',
+    flow: 'Search for a person, press Make HOD, and ask them to reload the site once.',
     buttons: [
-      { label: 'Pass', does: 'Says the question is right as it is.' },
-      { label: 'Fix', does: 'Lets you change the words, number or marks, then settles the question.' },
-      { label: 'Send back', does: 'Returns the question to the verifiers with a note.' },
-      { label: 'Set aside', does: 'Takes the question out of the checking for good. You must say why.' },
-      { label: 'Assign to', does: 'Gives a paper nobody holds to one verifier.' },
+      { label: 'Make HOD', does: 'Lets that person open the HOD desk.' },
+      { label: 'Remove', does: 'Stops them opening the HOD desk. Decisions they already made stay.' },
+    ],
+  },
+  reviewers: {
+    key: 'reviewers',
+    label: 'Teacher reviewers',
+    path: '/admin?tab=people&section=reviewers',
+    short: 'People who approve and edit teachers without being admins.',
+    purpose:
+      'Teacher reviewers approve, reject and edit teachers on the teacher review page. They cannot pause a teacher or open papers. The HOD desk shows the same list.',
+    flow: 'Search for a person and press Make teacher reviewer. Remove them when they no longer need it.',
+    buttons: [
+      { label: 'Make teacher reviewer', does: 'Lets that person open the teacher review page.' },
+      { label: 'Remove', does: 'Stops them opening the teacher review page. Decisions they already made stay.' },
     ],
   },
   applications: {
     key: 'applications',
     label: 'Applications',
-    path: '/admin/approvals',
+    path: '/admin?tab=teachers&section=applications',
     short: 'Teachers who applied to join. Approve or turn down each one.',
     purpose:
       'New teacher applications. Open one to read the details and documents, then approve or reject it. A count on the tab shows how many are waiting.',
@@ -232,26 +265,26 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
   teachers: {
     key: 'teachers',
     label: 'Listed teachers',
-    path: '/admin/teachers',
+    path: '/admin?tab=teachers&section=listed',
     short: 'Teachers already on the site. Edit a profile, pause or bring one back.',
     purpose:
       'Every teacher on the site. Use it to correct a profile, or pause a teacher so parents stop seeing them for a while.',
     flow: 'Find the teacher, then edit or pause. Pausing never deletes anything.',
     buttons: [
-      { label: 'Edit', does: 'Changes the teacher\'s profile details.' },
+      { label: 'Edit', does: "Changes the teacher's profile details." },
       { label: 'Pause or Unpause', does: 'Pause hides the teacher from parents without deleting anything. Unpause shows them again.' },
     ],
   },
   reviews: {
     key: 'reviews',
     label: 'Reviews',
-    path: '/admin/reviews',
+    path: '/admin?tab=teachers&section=reviews',
     short: 'What parents wrote about teachers, and teachers they recommended.',
     purpose:
       'Comments about teachers wait here before they show on the site, and so do teachers that parents recommended. Publish the good comments, remove the rest, and follow up on recommendations.',
     flow: 'Work from the top. A count on the tab shows how many are waiting.',
     buttons: [
-      { label: 'Publish', does: 'Shows the comment on the teacher\'s page.' },
+      { label: 'Publish', does: "Shows the comment on the teacher's page." },
       { label: 'Remove', does: 'Takes a published comment off the site.' },
       { label: 'Mark as contacted', does: 'Records that you reached out about a recommended teacher.' },
       { label: 'Dismiss', does: 'Closes a recommendation you will not follow up.' },
@@ -261,58 +294,61 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
   activity: {
     key: 'activity',
     label: 'Question changes',
-    path: '/admin/activity',
-    short: 'Every change a verifier, admin or AI check made to a question.',
+    path: '/admin?tab=logs&section=question-changes',
+    short: 'Every change a verifier, admin or the AI made to a question.',
     purpose:
-      'Every change a checker, admin or AI check made to a question, newest first. Open History on a row to see its versions or undo a change.',
+      'Every change a verifier, admin or the AI made to a question, newest first. Open History on a row to see its versions or undo a change.',
     flow: 'Scroll the newest changes. Open History on a row to see its versions or undo a change.',
     buttons: [{ label: 'History', does: 'Shows the versions of that question, and lets you undo a change.' }],
   },
-  feedback: {
-    key: 'feedback',
-    label: 'Visitor feedback',
-    path: '/admin/feedback',
-    short: 'Ratings and comments visitors left about the site.',
-    purpose: 'Star ratings and comments that visitors left about the site as a whole, newest first. This is not about one teacher.',
-    flow: 'Scroll the newest entries. Delete removes one for good.',
-    buttons: [{ label: 'Delete', does: 'Removes that entry for good. You are asked first.' }],
+  'checker-log': {
+    key: 'checker-log',
+    label: 'Checker activity',
+    path: '/admin?tab=logs&section=checker-activity',
+    short: 'What each verifier did, day by day.',
+    purpose:
+      'A record of every action your verifiers took: who, how many questions, and what they did with them. Use it to see who is active and to look into a single decision.',
+    flow: 'One line per person or machine. Open a name to read their days.',
+    buttons: [{ label: 'Open a person', does: "Shows that person's actions, newest first." }],
+  },
+  audit: {
+    key: 'audit',
+    label: 'Admin actions',
+    path: '/admin?tab=logs&section=admin-actions',
+    short: 'A record of every change an admin made, with who and when.',
+    purpose: 'Every admin action is written here with the person, the time and what changed. Use it to find out who did something.',
+    flow: 'Read only. Nothing here changes anything.',
+    buttons: [],
   },
   team: {
     key: 'team',
     label: 'Verifier progress',
-    path: '/admin/team',
+    path: '/admin?tab=people&section=progress',
     short: 'How many questions each verifier checked, and how the papers are moving.',
-    purpose: 'How many questions each verifier checked, and how the papers are moving.',
+    purpose: 'How many questions each verifier checked, and how the papers are moving. To give out papers or change a verifier, use the HOD desk.',
     flow: 'Read only. Nothing here changes anything.',
     buttons: [],
   },
   pipeline: {
     key: 'pipeline',
     label: 'Pipeline',
-    path: '/admin/pipeline',
-    short: 'How far each batch of papers has got, from scan to live.',
+    path: '/admin?tab=system&section=pipeline',
+    short: 'Every paper on its way from a PDF saved on the main computer to live.',
     purpose:
-      'Follow papers as they move from a scanned file to a live page: read by the AI, checked by verifiers, waiting for you, live. Use it to see where papers are piling up. The registry lists every source PDF the desk knows about, started or not. The library figures count papers published on the website.',
-    flow: 'Read only. The numbers update when you reload.',
+      "One picture of the whole route: PDFs saved on the main computer, read by the AI, pictures waiting, checking by students, needs you, ready to go live, live. HODs see the same route from the HOD desk. Use it to see where papers are piling up. The numbers are only as new as the desk's last sync, and the page says when that was.",
+    flow: 'Read only. The route checks again every 20 seconds. A stage that says ? has not been sent by the desk yet.',
     buttons: [],
   },
-  audit: {
-    key: 'audit',
-    label: 'Admin actions',
-    path: '/admin/audit',
-    short: 'A record of every change an admin made, with who and when.',
-    purpose: 'Every admin action is written here with the person, the time and what changed. Use it to find out who did something.',
-    flow: 'Read only. Nothing here changes anything.',
-    buttons: [],
+  feedback: {
+    key: 'feedback',
+    label: 'Visitor feedback',
+    path: '/admin?tab=system&section=feedback',
+    short: 'Ratings and comments visitors left about the site.',
+    purpose: 'Star ratings and comments that visitors left about the site as a whole, newest first. This is not about one teacher.',
+    flow: 'Scroll the newest entries. Delete removes one for good.',
+    buttons: [{ label: 'Delete', does: 'Removes that entry for good. You are asked first.' }],
   },
 };
-
-export const PAGE_ORDER: AdminPageKey[] = ADMIN_GROUPS.flatMap((g) => g.pages);
-
-/** The group a page belongs to. */
-export function groupOf(page: AdminPageKey): AdminGroupCopy {
-  return ADMIN_GROUPS.find((g) => g.pages.includes(page)) as AdminGroupCopy;
-}
 
 /** The one description of where a hide reason goes, for every Hide dialog.
  *  Visitors never see it: admins read it on the row and in the history. */

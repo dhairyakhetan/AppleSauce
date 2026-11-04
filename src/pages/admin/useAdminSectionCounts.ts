@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PREVIEW_TOOLS } from '@/lib/preview-tools';
 import { isDummyMode } from '@/lib/dummy-mode';
 import { useAdminConfirmedUserId } from '@/lib/admin-confirmed';
+import { realHodApi } from '@/lib/hod-api';
 
 /* Shared by every /admin/* page for its nav badges: real counts only, never a
    placeholder, head-count queries only (no row bodies).
@@ -12,27 +13,30 @@ import { useAdminConfirmedUserId } from '@/lib/admin-confirmed';
    10 min, refetched when the tab regains focus once stale), so a tab change
    costs nothing.
 
+   WHERE EACH NUMBER COMES FROM. The HOD desk chip and the HOD desk's own tab
+   badges must never disagree, so the three HOD numbers (ready papers, the
+   questions waiting for an HOD, student uploads) come from hod_desk_counts,
+   the same call the HOD desk reads (src/lib/hod-tabs.ts). Teacher applications
+   and reviews come from admin_nav_counts (20261003130000_admin_queue_library.sql),
+   or from plain head-counts if that one call is missing or fails.
+
    ZERO IS QUIET, UNKNOWN IS LOUD. A count that could not be read is left
    `undefined` and named in `failed`; it is never coerced to 0. The shell shows
    a muted "?" for it and offers Retry. A real 0 shows no badge at all.
 
-   If the server has admin_nav_counts() (20261003130000_admin_queue_library.sql),
-   one call returns four of the five numbers. If that call fails, the plain
-   head-counts answer for the three they can cover, and Ready to go live and
-   the Admin queue are reported as failed (status "partial"). The student
-   uploads count is always its own head-count, run in parallel. A missing
-   function is remembered for the session so it is not retried on every page. */
+   A missing admin_nav_counts function is remembered for the session so it is
+   not retried on every page. */
 
 export interface AdminSectionCounts {
   /** Teacher applications waiting. */
   approvals?: number;
   /** Teacher comments plus recommendations waiting. */
   reviews?: number;
-  /** Papers waiting in Ready to go live. */
+  /** Papers waiting in Ready to go live (hod_desk_counts: ready). */
   paperApprovals?: number;
-  /** Questions waiting in the Admin queue. */
+  /** Questions waiting for an HOD (hod_desk_counts: needs_you_questions). */
   adminQueue?: number;
-  /** Student uploads waiting to be read and decided. */
+  /** Student uploads waiting to be read and decided (hod_desk_counts: student_uploads_pending). */
   submissions?: number;
 }
 
@@ -70,12 +74,19 @@ function headCount(r: { count: number | null; error: unknown }): number | undefi
   return r.error ? undefined : typeof r.count === 'number' ? r.count : undefined;
 }
 
-/** Pending student uploads: the inbox (paper_submissions), not the papers library. */
-async function submissionsCount(): Promise<number | undefined> {
+/** The three HOD numbers, read from hod_desk_counts: the same call the HOD desk's
+ *  tab badges make, so the chip and the tabs agree by construction. A failed
+ *  read leaves the three fields out (undefined, listed in `failed`), never 0. */
+async function hodDeskNumbers(): Promise<Pick<AdminSectionCounts, 'paperApprovals' | 'adminQueue' | 'submissions'>> {
   try {
-    return headCount(await supabase.from('paper_submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'));
+    const desk = await realHodApi.deskCounts();
+    const out: Pick<AdminSectionCounts, 'paperApprovals' | 'adminQueue' | 'submissions'> = {};
+    if (typeof desk.ready === 'number') out.paperApprovals = desk.ready;
+    if (typeof desk.needs_you_questions === 'number') out.adminQueue = desk.needs_you_questions;
+    if (typeof desk.student_uploads_pending === 'number') out.submissions = desk.student_uploads_pending;
+    return out;
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -94,8 +105,6 @@ async function viaOneCall(): Promise<AdminSectionCounts | null> {
   return {
     approvals: num(d.applications),
     reviews: num(d.reviews),
-    paperApprovals: num(d.ready),
-    adminQueue: num(d.admin_queue),
   };
 }
 
@@ -117,12 +126,9 @@ async function viaCounts(): Promise<AdminSectionCounts> {
 /** Reads every count once. Never throws for a failed count; a field that could
  *  not be read is left out and listed in `failed`. */
 export async function fetchAdminCounts(): Promise<AdminCountsResult> {
-  const [oneCall, submissions] = await Promise.all([
-    viaOneCall().catch(() => null),
-    submissionsCount(),
-  ]);
+  const [oneCall, hod] = await Promise.all([viaOneCall().catch(() => null), hodDeskNumbers()]);
   const base: AdminSectionCounts = oneCall ?? (await viaCounts().catch(() => ({} as AdminSectionCounts)));
-  const counts: AdminSectionCounts = { ...base, submissions };
+  const counts: AdminSectionCounts = { ...base, ...hod };
   const failed = ADMIN_COUNT_FIELDS.filter((f) => counts[f] === undefined);
   return { counts, failed };
 }

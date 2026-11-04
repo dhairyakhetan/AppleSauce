@@ -30,7 +30,8 @@ describe('AI trust formatting', () => {
 
   it('says the check count one way, below the minimum or above it', () => {
     expect(checksNeeded({ checked: 60, min_checked: 100 })).toBe('60 of 100 checks');
-    expect(checksNeeded({ checked: 250, min_checked: 100 })).toBe('250 of 100 checks');
+    expect(checksNeeded({ checked: 100, min_checked: 100 })).toBe('100 of 100 checks, reached');
+    expect(checksNeeded({ checked: 250, min_checked: 100 })).toBe('100 of 100 checks, reached');
     expect(checksNeeded({ checked: 0, min_checked: 100 })).toBe('0 of 100 checks');
   });
 

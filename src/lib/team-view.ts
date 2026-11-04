@@ -32,6 +32,18 @@ export function summaryLine(t: TeamTotals): string {
   return parts.join(', ') + '.';
 }
 
+/** "2 of 3 verifiers checked a question": the header line. Active means checked at least one question in the range; the other listed verifiers are shown too, with zeros. */
+export function activeWords(stats: TeamStatsRow[]): string {
+  const active = stats.filter((r) => r.questions_checked > 0).length;
+  return `${active} of ${plural(stats.length, 'verifier', 'verifiers')} checked a question`;
+}
+
+/** What a paper's progress says: nothing assigned when it has no questions, otherwise "2 open · 90% done". */
+export function progressWords(row: { total: number; open_doubts: number; pct_done: number }): string {
+  if (row.total === 0) return 'Nothing assigned';
+  return `${row.open_doubts} open · ${row.pct_done}% done`;
+}
+
 export const PAPER_PAGE = 30;
 
 /** "Showing 30 of 47 papers", or "47 papers" when everything is shown. */

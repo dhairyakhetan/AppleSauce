@@ -241,6 +241,7 @@ export default function TeacherTermsAgreement() {
               <Button type="submit" variant="primary" size={54} disabled={loading || !termsAgreed} className="w-full">
                 {loading ? 'Verifying...' : 'Verify consent & continue'}
               </Button>
+              {!termsAgreed ? <p className="mt-2 text-center text-[13px] text-warm-secondary">Tick the box above to continue.</p> : null}
             </form>
           </BentoPanel>
         </BentoStack>

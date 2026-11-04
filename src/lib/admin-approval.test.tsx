@@ -35,7 +35,6 @@ import {
 import { HistoryList } from '@/components/admin/approval/HistoryPanel';
 import { ReviewQuestionCard } from '@/components/admin/approval/ReviewQuestionCard';
 import { actionCopy, type Action } from '@/pages/admin/paper-approval';
-import { viewFromParam } from '@/pages/admin/paper-approvals';
 import { HeldQuestionCard } from '@/components/papers/held-question-card';
 import { createFakeApprovalApi, FIXTURE_NOW, FIXTURE_PAPER_ID } from '@/dummy/approval-fake-api';
 
@@ -188,7 +187,7 @@ describe('rendered history reads like people', () => {
     const t = text(html);
     expect(t).toContain('Priya Sharma changed the marks on question 2');
     expect(t).toContain('Rahul Das (student checker) fixed a reading mistake in the question text on question 2');
-    expect(t).toContain('AI check (Sonnet) passed question 2, confidence 92%');
+    expect(t).toContain('AI check passed question 2, confidence 92%');
     expect(t).toContain('Pipeline (automatic) put the paper in the approval queue');
     expect(t).not.toMatch(UUID);
     expect(t).not.toMatch(/\b[a-z]+_[a-z_]+\b/);
@@ -426,22 +425,10 @@ describe('what the paper page says about open questions and the Approve button',
   });
 });
 
-describe('the views of Ready to go live live in the URL', () => {
-  it('knows its three views, falls back to waiting, and hides Live updates when there is no source', () => {
-    expect(viewFromParam(null, true)).toBe('waiting');
-    expect(viewFromParam('decided', true)).toBe('decided');
-    expect(viewFromParam('live-updates', true)).toBe('live-updates');
-    expect(viewFromParam('live-updates', false)).toBe('waiting');
-    expect(viewFromParam('nonsense', true)).toBe('waiting');
-  });
-});
-
 describe('copy and classes in the approval pages', () => {
   it('has no em or en dashes, no glued class names and no raw hex on Pass and Set aside', () => {
     for (const f of [
-      'src/pages/admin/paper-approvals.tsx',
       'src/pages/admin/paper-approval.tsx',
-      'src/pages/admin/admin-queue.tsx',
       'src/components/admin/approval/ReviewQuestionCard.tsx',
       'src/lib/admin-approval-shape.ts',
     ]) {

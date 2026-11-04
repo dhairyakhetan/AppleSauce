@@ -3,9 +3,10 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { useAuth } from '@/lib/auth-context';
 import { useAdminGuard, AdminGuardErrorState } from '@/components/AdminConsole';
 import { AdminHeader, AdminAuditNote, buildAdminNav } from '@/pages/admin/shell';
+import { AdminStack } from '@/pages/admin/embed';
 import { AdminPageIntroPanel, InfoTip } from '@/components/admin/AdminHelp';
 import { AdminPanelHeader } from '@/pages/admin/AdminTable';
-import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
+import { BentoPanel } from '@/components/layout/PageContainer';
 import { useAdminSectionCounts } from '@/pages/admin/useAdminSectionCounts';
 import { QuestionTimeline } from '@/components/admin/QuestionTimeline';
 import { AdminDialog } from '@/components/admin/AdminDialog';
@@ -15,7 +16,7 @@ import { AdminEmpty, AdminError, AdminLoading } from '@/components/admin/AdminSt
 import { DebugId } from '@/components/DebugId';
 import { formatSeconds } from '@/lib/format-seconds';
 import { loadView } from '@/lib/admin-load-view';
-import { PAPER_PAGE, moreCount, nextPaperLimit, papersShownText, summaryLine, totalsOf } from '@/lib/team-view';
+import { PAPER_PAGE, activeWords, moreCount, nextPaperLimit, papersShownText, progressWords, summaryLine, totalsOf } from '@/lib/team-view';
 import {
   realTeamDashboardApi,
   type TeamDashboardApi,
@@ -153,7 +154,7 @@ export function AdminTeamPage({
 
   if (checkingAdmin || !settled) {
     return (
-      <BentoStack className="min-h-screen bg-muted">
+      <AdminStack>
         <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
         <BentoPanel fill="card" className="px-1.5 py-[18px] lg:px-1.5 lg:py-[18px]">
           <div className="px-[18px]">
@@ -161,7 +162,7 @@ export function AdminTeamPage({
           </div>
         </BentoPanel>
         <AdminAuditNote />
-      </BentoStack>
+      </AdminStack>
     );
   }
   if (!isAdmin) return null;
@@ -169,13 +170,13 @@ export function AdminTeamPage({
   const view = loadView({ settled, error: loadError, count: stats.length + progress.length });
 
   return (
-    <BentoStack className="min-h-screen bg-muted">
+    <AdminStack>
       <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
       <AdminPageIntroPanel page="team" />
       {banner}
 
       <BentoPanel fill="card" className="px-1.5 py-[18px] lg:px-1.5 lg:py-[18px]">
-        <AdminPanelHeader title="Verifier progress" meta={view === 'list' || view === 'empty' ? `${stats.length} ${stats.length === 1 ? 'verifier' : 'verifiers'} active` : undefined} />
+        <AdminPanelHeader title="Verifier progress" meta={(view === 'list' || view === 'empty') && stats.length > 0 ? activeWords(stats) : undefined} />
 
         <div className="mb-3 px-[18px]">
           <AdminFilterChips
@@ -232,7 +233,7 @@ export function AdminTeamPage({
           />
         ) : null}
       </AdminDialog>
-    </BentoStack>
+    </AdminStack>
   );
 }
 
@@ -476,7 +477,7 @@ function PaperProgressCard({ row }: { row: PaperProgressRow }) {
           <DebugId label="paper" value={row.live_bank_paper_id ?? row.audit_paper_id} />
           <DebugId label="audit-paper" value={row.audit_paper_id} />
         </div>
-        <span className="text-[12px] tabular-nums text-warm-secondary">{row.open_doubts} open · {row.pct_done}% done</span>
+        <span className="text-[12px] tabular-nums text-warm-secondary">{progressWords(row)}</span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-warm-hairline">
         <div className="h-full rounded-full bg-mint" style={{ width: `${Math.min(100, row.pct_done)}%` }} />

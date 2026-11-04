@@ -109,8 +109,9 @@ export function formatRate(rate: number | null): string {
   return `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
 }
 
-/** One phrasing for the check count, below or above the minimum: "60 of 100 checks". A met minimum shows in the meter, not in different words. */
+/** The check count: "60 of 100 checks" below the minimum, "100 of 100 checks, reached" at or above it (never "250 of 100"). */
 export function checksNeeded(row: Pick<TrustRow, 'checked' | 'min_checked'>): string {
+  if (row.checked >= row.min_checked) return `${row.min_checked} of ${row.min_checked} checks, reached`;
   return `${row.checked} of ${row.min_checked} checks`;
 }
 

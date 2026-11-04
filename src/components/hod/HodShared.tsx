@@ -1,7 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { PaperPageFlip } from '@/components/checker/PaperPageFlip';
 import type { HodApi } from '@/lib/hod-api';
+import { actionToneClass } from '@/lib/checker-button-styles';
 import { cn } from '@/lib/utils';
 
 /* Small pieces the HOD tabs share. */
@@ -120,3 +123,47 @@ export function QuestionPicture({
     </div>
   );
 }
+
+/** A "Back to ..." link that also works as a Link to a tab. */
+export function BackLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className="tap-44 mb-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-blue hover:text-brand-blue-deep">
+      <ArrowLeft className="h-4 w-4" aria-hidden />
+      {children}
+    </Link>
+  );
+}
+
+/** The desk URL for a tab, optionally opened on one paper. */
+export function deskLink(tab: string, paper?: string | null): string {
+  const p = new URLSearchParams({ tab });
+  if (paper) p.set('paper', paper);
+  return `/hod?${p.toString()}`;
+}
+
+/** One paper-row card used by Needs you and Ready: title line, meta line, trail, actions. */
+export function PaperRow({ children, ...rest }: { children: ReactNode } & React.HTMLAttributes<HTMLLIElement>) {
+  return (
+    <li className="rounded-[18px] bg-muted p-4" {...rest}>
+      {children}
+    </li>
+  );
+}
+
+/** A small quiet status line that announces itself to screen readers. */
+export function Notice({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'good' | 'warn' }) {
+  return (
+    <p
+      role="status"
+      className={cn(
+        'rounded-2xl px-4 py-3 text-[14px] leading-snug',
+        tone === 'good' ? 'bg-mint text-foreground' : tone === 'warn' ? 'bg-brand-subtle text-foreground' : 'bg-muted text-warm-secondary',
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+/** A quiet button that reads on a grey card, a white panel and a printed sheet alike. */
+export const quietButton = cn(actionToneClass('muted'), 'bg-card text-foreground shadow-border');

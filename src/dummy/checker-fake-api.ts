@@ -12,7 +12,8 @@
  * lets the preview force the failure states a real checker hits.
  */
 
-import type { CheckerApi, CheckerQuestion, LeaderboardRow, QueueFacetRow, UndoResult } from '@/lib/checker-api';
+import type { CheckerApi, CheckerQuestion, LeaderboardRow, QueueFacetRow, UndoResult, VerdictAndNext } from '@/lib/checker-api';
+import { verdictAndNextArgs } from '@/lib/checker-verdict-next';
 import type { MyAssignment } from '@/lib/checker-progress';
 import { isVerifierGrade, type MyPaper, type PaperQuestion, type PaperQuestionState, type VerifierProfile } from '@/lib/verifier-papers';
 import type { PaperPage } from '@/lib/paper-pages';
@@ -441,6 +442,54 @@ export function createFakeCheckerApi(): FakeCheckerApi {
       return next ? decorate(next) : null;
     },
 
+    // Like verifier_verdict_and_next (20261012970000): the existing verdict
+    // first, with its own refusals (a refused verdict throws and serves nothing),
+    // then the next question of the paper and its context in the same answer.
+    async verdictAndNext(input): Promise<VerdictAndNext> {
+      verdictAndNextArgs(input); // the same up-front refusals as the real call
+      if (!PAPER_ORDER.some((k) => PAPERS[k].id === input.paperId)) {
+        throw pgError('42501', 'This paper is not assigned to you');
+      }
+      // ONE round trip: the network delay and the simulated refusals are paid
+      // once, then the verdict and the next question run inside it.
+      await gateSave();
+      oneCall = true;
+      try {
+        return await verdictAndNextInside(input);
+      } finally {
+        oneCall = false;
+      }
+    },
+
+    async passAndNext(questionId, version, paperId, options = {}) {
+      return api.verdictAndNext({ action: 'pass', questionId, paperId, version, includeSkipped: options.includeSkipped });
+    },
+
+    // Like checker_question_ai_sure (20261019110000): a whole percent for some questions, null for the rest, so the
+    // pill can be seen both ways. Spread by position in the queue: 92, none, 78, none, 99, none, 64, none ...
+    async questionAiSure(questionId) {
+      await gate();
+      const i = allQuestions.findIndex((x) => x.id === questionId);
+      if (i < 0 || i % 2 === 1) return null;
+      return [92, 78, 99, 64, 85][(i / 2) % 5];
+    },
+
+    // Like verifier_reopen_question (20261019100000): a Done question goes back to "to verify", leased to
+    // the caller, and is served first (the real nextInPaper serves the caller's own lease first).
+    async reopenQuestion(questionId) {
+      await gateSave();
+      const kept = allQuestions.find((x) => x.id === questionId);
+      const key = kept ? paperOf.get(kept.id) : undefined;
+      if (!kept || !key || returned.has(key)) throw pgError('42501', 'That question is not on a paper you hold');
+      if (outcome.get(questionId) !== 'done') {
+        throw pgError('22023', 'That question is not marked Done, so there is nothing to reopen.');
+      }
+      outcome.delete(questionId);
+      doneByPaper[key] = Math.max(0, (doneByPaper[key] ?? 0) - 1);
+      if (!queue.some((x) => x.id === questionId)) queue.unshift({ ...kept });
+      return decorate(queue.find((x) => x.id === questionId)!);
+    },
+
     async undoLast(paperId): Promise<UndoResult> {
       // Like verifier_undo_last (20261008140000): the caller's most recent
       // answer on the paper, inside 30 minutes, while nobody else touched it.
@@ -635,9 +684,40 @@ export function createFakeCheckerApi(): FakeCheckerApi {
     total++;
   }
 
+  /** The verdict, then the next question and its context; the delay is already paid by the caller. */
+  async function verdictAndNextInside(input: Parameters<CheckerApi['verdictAndNext']>[0]): Promise<VerdictAndNext> {
+    let verdictVersion: number | null = null;
+    if (input.action === 'pass') {
+      await api.passQuestion(input.questionId, input.version);
+      verdictVersion = typeof input.version === 'number' ? input.version : null;
+    } else if (input.action === 'fix') {
+      await api.fixQuestion(input.questionId, input.patch ?? {}, {
+        version: input.version,
+        printedTypo: input.printedTypo,
+        typoNote: input.typoNote,
+      });
+      verdictVersion = allQuestions.find((x) => x.id === input.questionId)?.version ?? null;
+    } else if (input.action === 'skip') {
+      await api.skipQuestion(input.questionId);
+    } else {
+      await api.askForHelp(input.questionId, input.reason ?? '');
+    }
+    const next = await api.nextInPaper(input.paperId, { includeSkipped: input.includeSkipped });
+    return {
+      verdict_ok: true,
+      verdict: input.action,
+      verdict_version: verdictVersion,
+      next: next ? { ...next, context: await api.questionContext(next.id) } : null,
+      next_paper_id: next ? input.paperId : null,
+    };
+  }
+
+  // True while verdictAndNext runs its inner steps: they are one round trip.
+  let oneCall = false;
+
   async function gate() {
     if (api.simulate === 'offline') throw new TypeError('Failed to fetch');
-    if (api.simulate === 'slow') await wait(1500);
+    if (api.simulate === 'slow' && !oneCall) await wait(1500);
   }
 
   async function gateSave() {

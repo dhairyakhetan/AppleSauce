@@ -44,7 +44,7 @@ describe('activity sentences', () => {
       'A student checker said this question matches the page',
     );
     expect(activitySentence({ action: 'check_printed_typo', actor_kind: 'ai', actor_label: 'ai:sonnet' })).toBe(
-      'AI check (Sonnet) found a typo printed on the paper',
+      'AI check found a typo printed on the paper',
     );
     expect(activitySentence({ action: 'version_update', actor_kind: 'admin', actor_label: null, question_label: '5(a)' })).toBe(
       'An admin changed question 5(a)',
@@ -133,8 +133,8 @@ describe('collapsing one edit that three logs recorded', () => {
 
 describe('the pipeline feed in words', () => {
   it('has a lookup of known actors with a safe fallback to the humanised label', () => {
-    expect(feedActorWords('ai:sonnet', 'ai')).toBe('AI check (Sonnet)');
-    expect(feedActorWords('haiku_pdf', 'ai')).toBe('AI check (Haiku)');
+    expect(feedActorWords('ai:sonnet', 'ai')).toBe('AI check');
+    expect(feedActorWords('haiku_pdf', 'ai')).toBe('AI check');
     expect(feedActorWords('pipeline', 'pipeline')).toBe('Pipeline (automatic)');
     expect(feedActorWords('checker', 'checker')).toBe('A student checker');
     expect(feedActorWords(null, 'admin')).toBe('An admin');

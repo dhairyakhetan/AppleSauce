@@ -16,9 +16,8 @@ import { AdminFilterChips, chipCountText } from '@/components/admin/AdminFilterC
 import { AdminEmpty, AdminError, AdminLoading, errorSentence } from '@/components/admin/AdminState';
 import { AdminPillButton, adminPillClass } from '@/components/admin/AdminPillButton';
 import { readRememberedOpen, writeRememberedOpen } from '@/lib/use-remembered-open';
-import { AdminHeaderView, CountsRetry, buildAdminNav, groupBadge, isAdminPath, navBadge } from '@/pages/admin/shell';
+import { AdminHeaderView, CountsRetry, buildAdminNav, hodBadge, navBadge } from '@/pages/admin/shell';
 import { AdminRowActions, AdminStatusPill, AdminTable, AdminPanelHeader, rowSubject } from '@/pages/admin/AdminTable';
-import { overviewRows, allClear } from '@/pages/admin/index';
 import { adminGuardStep } from '@/components/AdminConsole';
 import type { User } from '@supabase/supabase-js';
 import type { AdminCountsState } from '@/pages/admin/useAdminSectionCounts';
@@ -207,48 +206,63 @@ describe('use-remembered-open', () => {
 });
 
 describe('shell badges', () => {
-  const nav = buildAdminNav('library');
+  const nav = buildAdminNav('teachers');
   const item = (key: string) => nav.find((n) => n.key === key)!;
 
-  it('shows a number, nothing for zero, and ? for an unreadable count', () => {
-    const counts = { paperApprovals: 6, adminQueue: 0 };
-    expect(navBadge(item('ready'), state({ counts }))).toEqual({ kind: 'n', n: 6 });
-    expect(navBadge(item('admin-queue'), state({ counts }))).toBeNull();
-    expect(navBadge(item('submissions'), state({ counts, status: 'partial', failed: ['submissions'] }))).toEqual({ kind: 'unknown' });
-    expect(navBadge(item('library'), state({}))).toBeNull(); // not a counted page
-    expect(navBadge(item('submissions'), state({ status: 'loading' }))).toBeNull(); // still loading: quiet
+  it('shows the teachers tab a number, nothing for zero, and ? for an unreadable count', () => {
+    expect(navBadge(item('teachers'), state({ counts: { approvals: 4, reviews: 2 } }))).toEqual({ kind: 'n', n: 6 });
+    expect(navBadge(item('teachers'), state({ counts: { approvals: 0, reviews: 0 } }))).toBeNull();
+    expect(navBadge(item('teachers'), state({ status: 'error', failed: ['approvals', 'reviews'] }))).toEqual({ kind: 'unknown' });
+    expect(navBadge(item('teachers'), state({ status: 'loading' }))).toBeNull(); // still loading: quiet
+  });
+
+  it('a real number beats a ? for the other half of the same tab', () => {
+    expect(navBadge(item('teachers'), state({ status: 'partial', counts: { approvals: 3 }, failed: ['reviews'] }))).toEqual({ kind: 'n', n: 3 });
+  });
+
+  it('has no badge on the tabs that count nothing', () => {
+    const counts = { paperApprovals: 6, adminQueue: 41, submissions: 3, approvals: 4, reviews: 2 };
+    for (const key of ['people', 'logs', 'system']) expect(navBadge(item(key), state({ counts })), key).toBeNull();
   });
 
   it('lets a page override the shared count', () => {
-    expect(navBadge({ key: 'ready', count: 9 }, state({ counts: { paperApprovals: 6 } }))).toEqual({ kind: 'n', n: 9 });
+    expect(navBadge({ key: 'teachers', count: 9 }, state({ counts: { approvals: 1 } }))).toEqual({ kind: 'n', n: 9 });
+    expect(navBadge({ key: 'teachers', count: 0 }, state({ counts: { approvals: 1 } }))).toBeNull();
   });
 
-  it('sums a group, and the Needs you tab sums every queue', () => {
+  it('buildAdminNav adds the two teacher counts a page passes in', () => {
+    expect(buildAdminNav('teachers', { approvals: 12, reviews: 4 }).find((n) => n.key === 'teachers')?.count).toBe(16);
+    expect(buildAdminNav('teachers').find((n) => n.key === 'teachers')?.count).toBeUndefined();
+  });
+
+  it('puts every paper queue on the HOD desk chip, and no tab', () => {
     const counts = { paperApprovals: 6, adminQueue: 41, submissions: 3, approvals: 4, reviews: 2 };
-    expect(groupBadge(nav, 'papers', state({ counts }))).toEqual({ kind: 'n', n: 50 });
-    expect(groupBadge(nav, 'teachers', state({ counts }))).toEqual({ kind: 'n', n: 6 });
-    expect(groupBadge(nav, 'now', state({ counts }))).toEqual({ kind: 'n', n: 56 });
-    expect(groupBadge(nav, 'logs', state({ counts }))).toBeNull();
+    expect(hodBadge(state({ counts }))).toEqual({ kind: 'n', n: 50 });
+    expect(hodBadge(state({ counts: { paperApprovals: 0, adminQueue: 0, submissions: 0 } }))).toBeNull();
+    expect(hodBadge(state({ status: 'error', failed: ['paperApprovals', 'adminQueue', 'submissions'] }))).toEqual({ kind: 'unknown' });
   });
 
-  it('a group of unreadable counts is ?, not 0', () => {
-    expect(groupBadge(nav, 'teachers', state({ status: 'error', failed: ['approvals', 'reviews'] }))).toEqual({ kind: 'unknown' });
-  });
-
-  const render = (counts: AdminCountsState, active: Parameters<typeof buildAdminNav>[0] = 'library') =>
+  const render = (counts: AdminCountsState, active: Parameters<typeof buildAdminNav>[0] = 'teachers') =>
     renderToStaticMarkup(
       <StaticRouter location="/">
         <AdminHeaderView nav={buildAdminNav(active)} signedInEmail="staff@example.com" counts={counts} />
       </StaticRouter>,
     );
 
-  it('renders the six groups, a ? badge and a Retry button when counts failed', () => {
+  it('renders the four tabs as links, a ? badge and a Retry button when counts failed', () => {
     const refetch = vi.fn();
     const html = render(state({ status: 'partial', failed: ['reviews'], counts: { paperApprovals: 2 }, refetch }));
-    for (const label of ['Needs you', 'Papers', 'People', 'Teachers', 'Logs', 'System']) expect(html).toContain(`>${label}`);
+    for (const label of ['People', 'Teachers', 'Logs', 'System']) expect(html).toContain(`>${label}`);
+    for (const gone of ['Needs you', 'Papers', 'Library', 'Admin queue', 'Student uploads']) expect(html, gone).not.toContain(`>${gone}`);
+    expect(html).toContain('href="/admin?tab=people"');
     expect(html).toContain('Counts unavailable. Retry');
     expect(html).toContain('count unavailable');
     expect(html).not.toContain('>0<');
+  });
+
+  it('marks the tab of the page as current, and none for a page that moved to the HOD desk', () => {
+    expect(render(state({}), 'activity')).toMatch(/aria-current="page"[^>]*>Logs/);
+    expect(render(state({}), 'library')).not.toContain('aria-current');
   });
 
   it('has no Retry button when every count was read', () => {
@@ -262,22 +276,10 @@ describe('shell badges', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it('puts the arrow and the hidden label on links that leave the admin, only in People', () => {
-    const people = render(state({}), 'checkers');
-    expect(people).toContain('opens outside the admin');
-    expect(people.match(/opens outside the admin/g)?.length).toBeGreaterThanOrEqual(2);
-    const papers = render(state({}), 'library');
-    expect(papers).not.toContain('(opens outside the admin)');
-  });
-
-  it('shows one pill row for a single-page group, two otherwise, each a single-line scroller', () => {
-    const now = render(state({}), 'now');
-    expect(now).not.toContain('pages"');
-    const papers = render(state({}), 'library');
-    expect(papers).toContain('aria-label="Papers pages"');
-    expect(papers.match(/overflow-x-auto/g)?.length).toBe(2);
-    expect(papers).toContain('flex-nowrap');
-    expect(papers).not.toMatch(/<p[^>]*>[^<]*past papers/i); // the blurb paragraph is gone
+  it('links to the HOD desk with what is waiting there', () => {
+    const html = render(state({ counts: { paperApprovals: 2, adminQueue: 3, submissions: 1 } }));
+    expect(html).toContain('href="/hod"');
+    expect(html).toMatch(/HOD desk[\s\S]*>6<span class="sr-only"> waiting/);
   });
 
   it('has an account menu with the first letter of the email', () => {
@@ -355,50 +357,5 @@ describe('the admin guard does not bounce a signed-in admin on a cold load', () 
   it('checks the admin list for any user it has, loading or not', () => {
     expect(adminGuardStep(someone, true)).toBe('check');
     expect(adminGuardStep(someone, false)).toBe('check');
-  });
-});
-
-describe('Needs you now rows', () => {
-  it('sorts waiting rows first (biggest tie-broken by queue order), then unreadable, then clear', () => {
-    const rows = overviewRows({ counts: { paperApprovals: 0, adminQueue: 41, approvals: 4, reviews: 2 }, failed: ['submissions'] });
-    expect(rows.map((r) => [r.key, r.state])).toEqual([
-      ['admin-queue', 'waiting'],
-      ['applications', 'waiting'],
-      ['reviews', 'waiting'],
-      ['submissions', 'unknown'],
-      ['ready', 'clear'],
-    ]);
-  });
-
-  it('puts the biggest waiting pile first, even when a smaller queue comes earlier in the list', () => {
-    const rows = overviewRows({ counts: { paperApprovals: 2, adminQueue: 41, approvals: 7, reviews: 0, submissions: 0 }, failed: [] });
-    expect(rows.slice(0, 3).map((r) => [r.key, r.count])).toEqual([
-      ['admin-queue', 41],
-      ['applications', 7],
-      ['ready', 2],
-    ]);
-  });
-
-  it('keeps queue order when two piles are the same size', () => {
-    const rows = overviewRows({ counts: { paperApprovals: 3, adminQueue: 3, approvals: 3, reviews: 0, submissions: 0 }, failed: [] });
-    expect(rows.slice(0, 3).map((r) => r.key)).toEqual(['ready', 'admin-queue', 'applications']);
-  });
-
-  it('never calls an unreadable count clear', () => {
-    const rows = overviewRows({ counts: {}, failed: ['paperApprovals', 'adminQueue', 'submissions', 'approvals', 'reviews'] });
-    expect(rows.every((r) => r.state === 'unknown')).toBe(true);
-    expect(allClear({ status: 'error' }, rows)).toBe(false);
-    expect(allClear({ status: 'partial' }, overviewRows({ counts: { paperApprovals: 0 }, failed: ['adminQueue'] }))).toBe(false);
-  });
-
-  it('is all clear only when every count was read and is 0', () => {
-    const rows = overviewRows({ counts: { paperApprovals: 0, adminQueue: 0, submissions: 0, approvals: 0, reviews: 0 }, failed: [] });
-    expect(allClear({ status: 'ok' }, rows)).toBe(true);
-    const some = overviewRows({ counts: { paperApprovals: 1, adminQueue: 0, submissions: 0, approvals: 0, reviews: 0 }, failed: [] });
-    expect(allClear({ status: 'ok' }, some)).toBe(false);
-  });
-
-  it('links every row to a page inside the admin', () => {
-    for (const r of overviewRows({ counts: {}, failed: [] })) expect(isAdminPath(r.path), r.key).toBe(true);
   });
 });

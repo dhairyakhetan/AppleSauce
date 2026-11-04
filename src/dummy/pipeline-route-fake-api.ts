@@ -1,40 +1,38 @@
 import { normaliseRoute, type PipelineRoute, type PipelineRouteApi } from '@/lib/pipeline-route';
+import { EXAMPLE_ROUTE_RAW } from '@/lib/pipeline-route.fixture';
 
 /* The papers route's fake API for dummy mode (D75). The numbers start at the
-   real ones from 11 October 2026 and drift a little on every read, so the
-   count tween, the lanes and "Updated ... ago" can be watched working.
-   Nothing here is read from the real database. */
+   real ones from 12 October 2026 and drift a little on every read, so the
+   count tween, the lanes and "Checked ... ago" can be watched working. The
+   picture queue starts with something in it, so that stop shows more than zeros.
+   Nothing here is read from the real database.
 
-type Mode = 'full' | 'error' | 'flaky' | 'empty';
+   Modes: full, error (never loads), flaky (every third read after the first
+   fails), empty (nothing yet), unsynced (the desk has not sent the picture or
+   PDF numbers: those stops show "?"), stale (the desk last synced four days ago). */
 
-function start() {
-  return {
-    generated_at: new Date().toISOString(),
-    registry: {
-      total: 8038,
-      excluded: 7,
-      by_state: { live: 774, loaded: 101, ocr_done: 763, ai_checked: 294, ocr_queued: 101, not_started: 4869, awaiting_approval: 1 },
-      frozen_by_state: { live: 611, ocr_done: 255, ocr_queued: 254, fully_checked: 4, loaded: 4, ai_checked: 3, not_started: 3, awaiting_approval: 1 },
-      last_updated_at: new Date().toISOString(),
-    },
-    desk: {
-      papers: 403,
-      papers_by_status: { pending: 301, in_review: 62, passed: 33, red: 7 },
-      swarm_papers: 188,
-      swarm_questions: 5151,
-      questions: 14200,
-      questions_passed: 6210,
-    },
-    open: {
-      questions_by_pile: { kid: 7403, admin: 295, data: 16740, renderer: 32, none: 26665 },
-      papers_by_pile: { kid: 295, admin: 41, data: 188, renderer: 6, none: 402 },
-      student_papers_by_questions_left: { '1-5': 47, '6-15': 77, '16-40': 106, '41+': 65 },
-    },
-    checkers: { papers_assigned: 212, active_verifiers: 14 },
+type Mode = 'full' | 'error' | 'flaky' | 'empty' | 'unsynced' | 'stale';
+
+type Raw = typeof EXAMPLE_ROUTE_RAW;
+
+function start(): Raw {
+  const d = JSON.parse(JSON.stringify(EXAMPLE_ROUTE_RAW)) as Raw;
+  const now = Date.now();
+  const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
+  d.generated_at = iso(0);
+  d.pictures = {
+    ...d.pictures,
+    queued_papers: 3,
+    queued_pictures: 120,
+    queued_bytes: 52_428_800,
+    desk_synced_at: iso(20 * 60_000),
   };
+  d.drive.updated_at = iso(20 * 60_000);
+  d.synced = { desk_synced_at: iso(20 * 60_000), drive_synced_at: iso(20 * 60_000), registry_changed_at: iso(3 * 3_600_000) };
+  return d;
 }
 
-/** `mode` reaches the other states: error (never loads), flaky (every third read after the first fails), empty (nothing yet). */
+/** `mode` reaches the other states of the page. */
 export function createFakePipelineRouteApi(mode: Mode = 'full', delayMs = 700): PipelineRouteApi {
   const d = start();
   let calls = 0;
@@ -47,13 +45,13 @@ export function createFakePipelineRouteApi(mode: Mode = 'full', delayMs = 700): 
     s.not_started = Math.max(0, s.not_started - moved);
     s.ocr_queued += moved - step(moved);
     s.ocr_done += step(3);
-    s.ai_checked += step(2);
-    d.desk.swarm_papers += step(2);
-    d.desk.swarm_questions += step(60);
+    d.registry.swarm_read.papers += step(2);
     d.desk.questions_passed = Math.min(d.desk.questions, d.desk.questions_passed + step(40));
-    d.open.questions_by_pile.kid = Math.max(0, d.open.questions_by_pile.kid - step(30));
-    d.open.papers_by_pile.kid = Math.max(0, d.open.papers_by_pile.kid - (step(5) === 0 ? 1 : 0));
-    d.desk.papers_by_status.passed += step(1);
+    d.checking.questions = Math.max(0, d.checking.questions - step(30));
+    d.open.questions_by_pile.kid = d.checking.questions;
+    d.pictures.queued_pictures += step(4);
+    d.pictures.queued_bytes += step(4) * 430_000;
+    d.trust.checks_done = Math.min(d.trust.threshold, d.trust.checks_done + (step(3) === 0 ? 1 : 0));
     d.generated_at = new Date().toISOString();
   }
 
@@ -67,7 +65,17 @@ export function createFakePipelineRouteApi(mode: Mode = 'full', delayMs = 700): 
         return normaliseRoute({ generated_at: d.generated_at, registry: {}, desk: {}, open: {}, checkers: {} });
       }
       if (calls > 1) drift();
-      return normaliseRoute(JSON.parse(JSON.stringify(d)));
+      const raw = JSON.parse(JSON.stringify(d)) as Record<string, unknown>;
+      if (mode === 'unsynced') {
+        raw.pictures = null;
+        raw.drive = null;
+        raw.synced = { desk_synced_at: null, drive_synced_at: null, registry_changed_at: d.synced.registry_changed_at };
+      }
+      if (mode === 'stale') {
+        const old = new Date(Date.now() - 4 * 24 * 3_600_000).toISOString();
+        raw.synced = { desk_synced_at: old, drive_synced_at: old, registry_changed_at: old };
+      }
+      return normaliseRoute(raw);
     },
   };
 }

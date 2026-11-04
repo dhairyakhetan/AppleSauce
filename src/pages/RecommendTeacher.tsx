@@ -108,12 +108,12 @@ export default function RecommendTeacher() {
         if (submitError.message?.includes('RATE_LIMIT_EXCEEDED')) {
           throw new Error("You've reached the daily limit for recommendations. Please try again tomorrow.");
         }
-        throw new Error(submitError.message || 'Failed to submit recommendation');
+        throw new Error('Could not send that. Nothing was sent. Check your connection and try again.');
       }
 
       setSubmitted(true);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to submit recommendation');
+      toast.error(typeof err?.message === 'string' && /daily limit|Nothing was sent/.test(err.message) ? err.message : 'Could not send that. Nothing was sent. Check your connection and try again.');
     } finally {
       setLoading(false);
     }

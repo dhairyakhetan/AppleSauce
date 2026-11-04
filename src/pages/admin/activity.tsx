@@ -1,11 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { writeErrorWords } from '@/lib/admin-approval-shape';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useAdminGuard, AdminGuardErrorState } from '@/components/AdminConsole';
 import { AdminHeader, AdminAuditNote, buildAdminNav } from '@/pages/admin/shell';
+import { AdminStack } from '@/pages/admin/embed';
 import { AdminPageIntroPanel } from '@/components/admin/AdminHelp';
 import { AdminPanelHeader } from '@/pages/admin/AdminTable';
-import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
+import { BentoPanel } from '@/components/layout/PageContainer';
 import { useAdminSectionCounts } from '@/pages/admin/useAdminSectionCounts';
 import { VersionHistory } from '@/components/admin/VersionHistory';
 import { AdminDialog } from '@/components/admin/AdminDialog';
@@ -89,9 +91,14 @@ export function AdminActivityPage({
         if (id !== requestId.current) return;
         setRows(got);
         setDone(got.length < PAGE);
-      } catch {
+      } catch (e) {
         if (id !== requestId.current) return;
-        setError('Could not load the activity. Check your internet and try again.');
+        const code = (e as { code?: unknown } | null)?.code;
+        setError(
+          code === '42501'
+            ? writeErrorWords(e, '')
+            : 'Could not load the activity. Check your internet and try again.',
+        );
       }
     },
     [api],
@@ -130,13 +137,13 @@ export function AdminActivityPage({
 
   if (checkingAdmin) {
     return (
-      <BentoStack className="min-h-screen bg-muted">
+      <AdminStack>
         <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
         <BentoPanel fill="card" className="px-[18px] py-[18px] lg:px-[18px] lg:py-[18px]">
           <AdminLoading shape="rows" rows={5} label="Loading the activity" />
         </BentoPanel>
         <AdminAuditNote />
-      </BentoStack>
+      </AdminStack>
     );
   }
   if (guard.error && !dummy) return <AdminGuardErrorState onRetry={guard.retry} />;
@@ -145,7 +152,7 @@ export function AdminActivityPage({
   const hidden = rows ? rows.length - groups.length : 0;
 
   return (
-    <BentoStack className="min-h-screen bg-muted">
+    <AdminStack>
       <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
       <AdminPageIntroPanel page="activity" />
       {banner}
@@ -243,7 +250,7 @@ export function AdminActivityPage({
       >
         {open ? <VersionHistory api={api} table={open.table} rowId={open.rowId} /> : null}
       </AdminDialog>
-    </BentoStack>
+    </AdminStack>
   );
 }
 
@@ -264,9 +271,7 @@ export function ActivityItem({ group, onOpen }: { group: ActivityGroup<ActivityR
       <div className="min-w-0 flex-1 basis-[220px]">
         <p className="text-pretty text-[14px] font-semibold leading-[1.4] text-foreground">{activitySentence(row)}</p>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-warm-secondary">
-          <span className="font-mono" title={actor.full}>
-            {actor.who}
-          </span>
+          <span title={row.actor_user_id ? undefined : actor.full}>{actor.who}</span>
           {row.question_id ? <span>· {question}</span> : null}
           {row.paper_title ? <span>· {row.paper_title}</span> : null}
           {row.version != null ? <span className="tabular-nums">· v{row.version}</span> : null}
@@ -278,6 +283,7 @@ export function ActivityItem({ group, onOpen }: { group: ActivityGroup<ActivityR
           </p>
         ) : null}
         <span className="mt-1 inline-flex flex-wrap gap-1">
+          <DebugId label="person" value={row.actor_user_id} />
           <DebugId label="question" value={row.question_id} />
           <DebugId label="paper" value={row.paper_id} />
           <DebugFacts facts={{ stream: row.stream, event: row.event_id, action: row.action }} />

@@ -13,12 +13,22 @@ import { cn } from "@/lib/utils";
    11.5px/1.5 body at white/66%.
    `tone="bone"` keeps the original light treatment for any light surface. */
 export interface DisclaimerStripProps {
-  school: string;
+  /** The paper's source name (paperSourceName), or null when none is recorded. */
+  school: string | null;
+  /** A board's own paper: named as the source, never as property. */
+  isBoard?: boolean;
   tone?: "bone" | "dark";
 }
 
-function DisclaimerStrip({ school, tone = "bone" }: DisclaimerStripProps) {
+function DisclaimerStrip({ school, isBoard = false, tone = "bone" }: DisclaimerStripProps) {
   const dark = tone === "dark";
+  const nameClass = cn(dark && "font-semibold text-indigo-link-on-dark");
+  const lead =
+    school === null ? null : isBoard ? (
+      <>Source: <span className={nameClass}>{school}</span>.</>
+    ) : (
+      <>This paper is the property of <span className={nameClass}>{school}</span>.</>
+    );
 
   return (
     <div
@@ -41,10 +51,10 @@ function DisclaimerStrip({ school, tone = "bone" }: DisclaimerStripProps) {
           dark ? "text-[12px] leading-[1.5] text-white/60" : "text-body-secondary text-warm-prose",
         )}
       >
-        This paper is the property of{" "}
-        <span className={cn(dark && "font-semibold text-indigo-link-on-dark")}>{school}</span>. Shikshaq
-        claims no ownership over it. It was contributed by a student and is shared solely to assist exam
-        preparation. Reading is free, downloading and reposting are not.
+        {lead && <>{lead}{" "}</>}
+        Shikshaq claims no ownership over {school === null ? "this paper" : "it"}. It was contributed by a
+        student and is shared solely to assist exam preparation. Reading is free, downloading and reposting
+        are not.
       </span>
     </div>
   );

@@ -230,6 +230,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
               className="mb-[14px]"
             />
 
+            {!selectedRating ? <p className="mb-2 text-center text-[13px] text-warm-meta">Pick how it felt above to send.</p> : null}
             <Button
               onClick={handleSubmit}
               disabled={submitting || !selectedRating}

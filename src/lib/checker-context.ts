@@ -79,3 +79,54 @@ export function contextHeading(ctx: QuestionContext): string {
   const n = ctx.parent ? (ctx.parent.display_number ?? ctx.parent.number_path ?? '').trim() : '';
   return n ? `The whole question ${n}` : 'The whole question';
 }
+
+export interface WholeQuestionRow {
+  id: string;
+  /** The printed label ("(a)", "2(f)"), or "" for the stem. */
+  label: string;
+  body: string | null;
+  options: ContextRow['options'];
+  /** The row's own `source` (where its printed picture lives), as the RPC returned it. */
+  source: ContextRow['source'];
+  /** 0 for the stem, 1 and up for parts (a sub-part of a sub-part is 2). */
+  depth: number;
+  /** The part being checked: the one that is the editable card. */
+  current: boolean;
+  isParent: boolean;
+}
+
+/**
+ * The whole question from the top, in order: the stem (when there is one), then
+ * every part. The part being checked is flagged `current` and keeps its natural
+ * place in the sequence. Empty for a stand-alone question (no context), so the
+ * screen then shows the single card as before.
+ */
+export function wholeQuestionRows(ctx: QuestionContext | null): WholeQuestionRow[] {
+  if (!ctx) return [];
+  const rows: WholeQuestionRow[] = [];
+  if (ctx.parent) {
+    rows.push({
+      id: ctx.parent.id,
+      label: '',
+      body: ctx.parent.body,
+      options: ctx.parent.options,
+      source: ctx.parent.source,
+      depth: 0,
+      current: ctx.currentIsParent,
+      isParent: true,
+    });
+  }
+  ctx.parts.forEach((part, i) => {
+    rows.push({
+      id: part.id,
+      label: partLabel(part, i),
+      body: part.body,
+      options: part.options,
+      source: part.source,
+      depth: part.depth,
+      current: part.id === ctx.currentId,
+      isParent: false,
+    });
+  });
+  return rows;
+}

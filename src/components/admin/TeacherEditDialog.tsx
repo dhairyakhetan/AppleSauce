@@ -281,9 +281,9 @@ export function TeacherEditDialog({ teacher, saving, onSave, onClose, uploadHero
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="TEACHER'S HOME TUTORING">TEACHER'S HOME TUTORING</SelectItem>
-                    <SelectItem value="STUDENT'S HOME TUTORING ONLY">STUDENT'S HOME TUTORING ONLY</SelectItem>
-                    <SelectItem value="BOTH OPTIONS LISTED">BOTH OPTIONS LISTED</SelectItem>
+                    <SelectItem value="TEACHER'S HOME TUTORING">At the teacher's home only</SelectItem>
+                    <SelectItem value="STUDENT'S HOME TUTORING ONLY">At the student's home only</SelectItem>
+                    <SelectItem value="BOTH OPTIONS LISTED">Either the teacher's home or the student's home</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

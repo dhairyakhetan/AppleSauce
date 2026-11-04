@@ -24,16 +24,24 @@ export function shortId(id: string | null | undefined): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 
-/** Who did it, for a list row: a kind word plus an id or a label. */
+/** Who did it, for a list row. A person is named by their role ("Checker", "Admin"),
+ *  never by their id: the id is shown only in debug mode, through DebugId. A
+ *  machine or pipeline row has a label, and that is what is shown. */
 export function actorText(row: {
   actor_user_id: string | null;
   actor_label: string | null;
   actor_kind: string;
 }): { kind: string; who: string; full: string } {
   const kind = KIND_WORDS[row.actor_kind] ?? row.actor_kind;
-  if (row.actor_user_id) return { kind, who: shortId(row.actor_user_id), full: row.actor_user_id };
+  if (row.actor_user_id) return { kind, who: kind, full: row.actor_user_id };
   const label = row.actor_label ?? row.actor_kind ?? 'system';
   return { kind, who: label, full: label };
+}
+
+/** The role word for a version's actor text ("checker", "admin"), or "Person" for anything else. */
+export function personWords(actor: string | null | undefined): string {
+  const word = KIND_WORDS[(actor ?? '').trim().toLowerCase()];
+  return word && word !== 'Computer' && word !== 'Pipeline' && word !== 'System' ? word : 'Person';
 }
 
 const KIND_WORDS: Record<string, string> = {
@@ -129,7 +137,7 @@ function predicate(row: { action: string; question_label?: string | null }): str
   return words ? `made a change (${words})` : 'made a change';
 }
 
-/** Who did it, by role and never by name: "A student checker", "An admin", "AI check (Sonnet)". */
+/** Who did it, by role and never by name: "A student checker", "An admin", "AI check". */
 export function activityWho(row: { actor_kind: string; actor_label: string | null }): string {
   if (row.actor_kind === 'person') return 'Someone';
   return actorLabel({ actor_kind: row.actor_kind, actor_name: null, model: row.actor_label });
@@ -224,8 +232,7 @@ export function feedActorWords(label: string | null | undefined, kind: string | 
   const k = (kind ?? '').trim().toLowerCase();
   const known = FEED_ACTORS[l.toLowerCase()];
   if (known) return known;
-  const model = modelName(l);
-  if (model) return `AI check (${model})`;
+  if (modelName(l)) return 'AI check';
   if (!l && FEED_ACTORS[k]) return FEED_ACTORS[k];
   const raw = l || k || 'pipeline';
   if (/^[0-9a-f]{8}-/i.test(raw)) return FEED_ACTORS[k] ?? 'Someone';

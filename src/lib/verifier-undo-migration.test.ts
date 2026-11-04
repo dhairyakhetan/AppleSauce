@@ -246,8 +246,9 @@ describe('screen wiring', () => {
   });
 
   it('shows Back to my papers in the header and no longer disables Skip on the last question', () => {
+    // 12 Oct 2026: the top tile has one Menu button; Back to my papers is inside the Menu.
     expect(screen).toContain('Back to my papers');
-    expect(screen).toContain('data-testid="back-to-my-papers"');
+    expect(readFileSync('src/pages/Checker.tsx', 'utf8')).toContain('data-testid="back-to-my-papers"');
     expect(screen).not.toContain('lastOne');
     expect(screen).not.toContain('This is the last question left on this paper');
   });

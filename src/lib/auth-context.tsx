@@ -210,6 +210,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return { error: new Error('An account with this email already exists. Please sign in instead.') };
       }
+      // Keep the real reason for debugging; the user only sees a safe message.
+      const code = (signUpError as { code?: string }).code;
+      console.error('signUp failed', { status: signUpError.status, code, message: signUpError.message });
+      if (signUpError.status === 429 || code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit') {
+        return { error: new Error('Too many sign-up attempts right now. Please wait a few minutes, or use Continue with Google.') };
+      }
+      if (code === 'unexpected_failure' || (signUpError.status ?? 0) >= 500) {
+        // Seen on 2026-10-20: the confirmation email provider ran out of credits and rejected the send.
+        return { error: new Error("We couldn't send your confirmation email right now. Please use Continue with Google, or try again later.") };
+      }
+      if (code === 'weak_password') {
+        return { error: new Error('That password is too easy to guess. Please choose a longer, less common one.') };
+      }
       // Return generic error to prevent information disclosure
       return { error: new Error('Failed to create account. Please try again.') };
     }

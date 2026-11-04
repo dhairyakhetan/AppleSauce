@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText } from "lucide-react";
@@ -62,6 +63,7 @@ function GateSheet({ open, onOpenChange, redirectTo, paperTitle, paperSubject }:
       // Auth.tsx reads getAuthRedirect() and lands the user on `redirectTo`.
     } catch {
       setBusy(false);
+      toast.error('Google sign-in did not start. Try again, or use your email.');
     }
   };
 

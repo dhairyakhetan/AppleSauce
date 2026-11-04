@@ -11,7 +11,8 @@
    questions" covers — the bank sorts undated/board papers first at the top
    of any given year, so a naive slice(0, 10) landed on ten of them. */
 
-import { displaySchool } from '@/lib/school-display';
+import { paperSourceName } from '@/lib/school-display';
+import { isComingSoon } from '@/lib/readable-papers';
 
 /** The minimal shape coverPaper()/coverMeta()/pickVariedRecent() need. Both
  *  PastPapers.tsx's merged `Paper` (papers-table rows AND bank rows folded
@@ -58,9 +59,12 @@ export function coverPaper<T extends CoverSourcePaper>(p: T): T {
      board paper from the next. The database says which they are, so this no
      longer sniffs the display name for the words "board paper". */
   const schoolIsBoard = p._isBoard === true;
+  /* An unrecorded school is not announced: the headline falls back to the
+     subject, which is always known. */
+  const source = paperSourceName(p.school);
   return {
     ...p,
-    subject: schoolIsBoard && hasYear(year) ? year : displaySchool(p.school),
+    subject: schoolIsBoard && hasYear(year) ? year : (source ?? p.subject),
     board: schoolIsBoard ? p.board : [p.board, hasYear(year) ? year : null].filter(Boolean).join(' · '),
     title: p.exam_type.replace(/ Examination$/, '').replace(/^Pre-board.*/, 'Pre-board'),
     year: `${p._questions} questions` as unknown as number,
@@ -81,7 +85,7 @@ export function coverMeta(p: CoverSourcePaper): string[] {
   if (subject && subject !== String(shown.subject ?? '')) out.push(subject);
   if (p.class) out.push(`Class ${p.class}`);
   const headline = String(shown.subject ?? '');
-  const school = displaySchool(p.school);
+  const school = paperSourceName(p.school);
   if (school && school !== headline && !String(shown.board ?? '').includes(school)) out.push(school);
   return out;
 }
@@ -102,8 +106,8 @@ export function pickVariedRecent<T extends CoverSourcePaper>(papers: T[], limit:
   const sorted = [...papers].sort((a, b) => {
     const yearDiff = (b.year || 0) - (a.year || 0);
     if (yearDiff !== 0) return yearDiff;
-    const openA = a._needsReview ? 1 : 0;
-    const openB = b._needsReview ? 1 : 0;
+    const openA = isComingSoon(a) ? 1 : 0;
+    const openB = isComingSoon(b) ? 1 : 0;
     if (openA !== openB) return openA - openB;
     return a.school.localeCompare(b.school) || a.id.localeCompare(b.id);
   });

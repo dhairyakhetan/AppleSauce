@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AdminCheckersPage } from '@/pages/admin/checkers';
+import { AdminCheckersPage, type CheckersView } from '@/pages/admin/checkers';
 import { createFakeCheckerAdminApi } from '@/dummy/checker-admin-fake-api';
 import { createFakeHodAdminApi, createFakeHodApi } from '@/dummy/hod-fake-api';
 import { createFakeTeacherReviewerAdminApi } from '@/dummy/teacher-review-fake-api';
@@ -9,7 +9,7 @@ import { setDummyMode } from '@/lib/dummy-mode';
    fake, no sign-in and no real admin check. Test builds only, reached
    solely through the PREVIEW_TOOLS-gated lazy import in admin/checkers.tsx. */
 
-export default function AdminCheckersDummy() {
+export default function AdminCheckersDummy({ view }: { view?: CheckersView }) {
   const [api] = useState(createFakeCheckerAdminApi);
   const [hodApi] = useState(createFakeHodAdminApi);
   const [profileApi] = useState(createFakeHodApi);
@@ -38,5 +38,5 @@ export default function AdminCheckersDummy() {
     </div>
   );
 
-  return <AdminCheckersPage api={api} hodApi={hodApi} profileApi={profileApi} reviewerApi={reviewerApi} dummy banner={banner} />;
+  return <AdminCheckersPage api={api} hodApi={hodApi} profileApi={profileApi} reviewerApi={reviewerApi} view={view} dummy banner={banner} />;
 }

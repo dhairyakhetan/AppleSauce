@@ -2,10 +2,11 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useAdminGuard, AdminGuardErrorState } from '@/components/AdminConsole';
 import { AdminHeader, AdminAuditNote, buildAdminNav } from '@/pages/admin/shell';
+import { AdminStack } from '@/pages/admin/embed';
 import { AdminPageIntroPanel } from '@/components/admin/AdminHelp';
 import { AdminTable, AdminPanelHeader, AdminStatusPill, type AdminTableColumn, type AdminTableRow } from '@/pages/admin/AdminTable';
 import { AdminEmpty, AdminError, AdminLoading } from '@/components/admin/AdminState';
-import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
+import { BentoPanel } from '@/components/layout/PageContainer';
 import { useAdminSectionCounts } from '@/pages/admin/useAdminSectionCounts';
 import { AUDIT_LIMIT, realAuditApi, type AuditApi, type AuditRow } from '@/lib/audit-api';
 import { describeAction } from '@/lib/audit-describe';
@@ -71,12 +72,12 @@ export function AdminAuditPage({
 
   if (checkingAdmin) {
     return (
-      <BentoStack className="min-h-screen bg-muted">
+      <AdminStack>
         <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? signedInName} />
         <BentoPanel fill="card" className="px-[18px] py-[18px] lg:px-[18px] lg:py-[18px]">
           <AdminLoading shape="table" rows={8} label="Loading the admin actions" />
         </BentoPanel>
-      </BentoStack>
+      </AdminStack>
     );
   }
 
@@ -84,13 +85,13 @@ export function AdminAuditPage({
   if (!isAdmin) return null;
 
   return (
-    <BentoStack className="min-h-screen bg-muted">
+    <AdminStack>
       <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? signedInName} />
       <AdminPageIntroPanel page="audit" />
       {banner}
       <AuditPanel rows={rows} loadError={loadError} onRetry={() => void load()} searchQuery={searchQuery} onSearch={setSearchQuery} />
       {/* No AdminAuditNote here: it would link this page to itself. */}
-    </BentoStack>
+    </AdminStack>
   );
 }
 

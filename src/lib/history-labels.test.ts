@@ -173,15 +173,15 @@ describe('history labels cover every code', () => {
     expect(actorLabel({ actor_kind: 'admin', actor_name: '3f2a9c1e-0000-4000-8000-000000000001' })).toBe('An admin');
     expect(actorLabel({ actor_kind: 'admin' })).toBe('An admin');
     expect(actorLabel({ actor_kind: 'checker', actor_name: 'Rahul' })).toBe('Rahul (student checker)');
-    expect(actorLabel({ actor_kind: 'ai', actor_name: 'ai:haiku+haiku' })).toBe('AI check (Haiku)');
-    expect(actorLabel({ actor_kind: 'ai', model: 'sonnet' })).toBe('AI check (Sonnet)');
+    expect(actorLabel({ actor_kind: 'ai', actor_name: 'ai:haiku+haiku' })).toBe('AI check');
+    expect(actorLabel({ actor_kind: 'ai', model: 'sonnet' })).toBe('AI check');
     expect(actorLabel({ actor_kind: 'system' })).toBe('Pipeline (automatic)');
     expect(cleanPersonName('ai:sonnet')).toBeNull();
     // the server's own fallbacks (history_actor / history_person_name)
     expect(actorLabel({ actor_kind: 'student', actor_name: 'A student checker' })).toBe('A student checker');
     expect(actorLabel({ actor_kind: 'admin', actor_name: 'An admin' })).toBe('An admin');
-    expect(actorLabel({ actor_kind: 'ai', actor_name: 'AI check (Haiku)' })).toBe('AI check (Haiku)');
-    expect(actorLabel({ checker_kind: 'haiku', actor_name: 'AI check (Haiku)' })).toBe('AI check (Haiku)');
+    expect(actorLabel({ actor_kind: 'ai', actor_name: 'AI check (Haiku)' })).toBe('AI check');
+    expect(actorLabel({ checker_kind: 'haiku', actor_name: 'AI check (Haiku)' })).toBe('AI check');
   });
 
   it('writes the owner\'s own examples', () => {
@@ -202,7 +202,7 @@ describe('history labels cover every code', () => {
       { at: new Date('2026-10-02T13:05:00').toISOString(), actor_kind: 'ai', model: 'sonnet', action: 'ai_verdict', verdict: 'pass', confidence: 0.92 },
       now,
     );
-    expect(ai.line).toBe('AI check (Sonnet) passed this question, confidence 92% - 2 Oct, 1:05 pm');
+    expect(ai.line).toBe('AI check passed this question, confidence 92% - 2 Oct, 1:05 pm');
 
     const approve = historyLine(
       { at: new Date('2026-10-03T10:00:00').toISOString(), actor_kind: 'admin', actor_name: 'Kabir', action: 'admin_approve' },
@@ -347,7 +347,6 @@ describe('copy has no em or en dashes', () => {
       'src/lib/history-labels.ts',
       'src/lib/admin-approval.ts',
       'src/lib/admin-approval-shape.ts',
-      'src/pages/admin/paper-approvals.tsx',
       'src/pages/admin/paper-approval.tsx',
       'src/components/papers/held-question-card.tsx',
       ...readdirSync('src/components/admin/approval').map((f) => join('src/components/admin/approval', f)),

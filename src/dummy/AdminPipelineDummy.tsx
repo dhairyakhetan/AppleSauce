@@ -18,10 +18,12 @@ export default function AdminPipelineDummy() {
     return createFakePaperRegistryApi(m === 'empty' || m === 'error' ? m : 'full');
   });
 
-  // ?route=error, ?route=flaky (every third read fails) or ?route=empty reach the route's other states.
+  // ?route=error, flaky (every third read fails), empty, unsynced (picture and PDF numbers not sent) or stale (last sync four days ago) reach the route's other states.
   const [routeApi] = useState(() => {
     const m = new URLSearchParams(window.location.search).get('route');
-    return createFakePipelineRouteApi(m === 'error' || m === 'flaky' || m === 'empty' ? m : 'full');
+    return createFakePipelineRouteApi(
+      m === 'error' || m === 'flaky' || m === 'empty' || m === 'unsynced' || m === 'stale' ? m : 'full',
+    );
   });
 
   const banner = (

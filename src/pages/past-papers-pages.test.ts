@@ -76,6 +76,24 @@ describe('BankPaper', () => {
     expect(code).toContain("order('year', { ascending: false, nullsFirst: false })");
   });
 
+  it('a missing paper renders the site NotFound page, not an in-app message', () => {
+    expect(code).toContain('if (notFound) return <NotFound />;');
+    expect(code).toContain('const notFound = !loading && !failed && !paper;');
+    expect(code).not.toContain('We could not find that paper');
+  });
+
+  it('keeps loading and error distinct from not found', () => {
+    expect(code).toContain("if (failed) {");
+    expect(code).toContain('This paper did not load. Check your connection and try again.');
+    expect(code).toContain('NOT_FOUND_TITLE');
+  });
+
+  it('never prints "School not recorded" or "property of" for a board or unknown source', () => {
+    expect(code).not.toContain('{displaySchool(paper.school)}');
+    expect(code).not.toContain("displaySchool(paper.school)} Class");
+    expect(code).toContain('paperSourceName(paper.school)');
+  });
+
   it('the report confirmation timer is cleared with the form', () => {
     expect(code).toContain('window.clearTimeout(doneTimer.current)');
     expect(code).toContain('doneTimer.current = window.setTimeout(onDone, 1400)');

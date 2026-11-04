@@ -1,4 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { writeErrorWords } from '@/lib/admin-approval-shape';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Clock, FileText, Pencil } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
@@ -209,8 +210,7 @@ export default function AdminPaperEditPage() {
       setVerifyResult(result);
       await load();
     } catch (e) {
-      const msg = (e as { message?: string })?.message;
-      adminToast('Could not verify this paper', msg ? { description: msg } : undefined);
+      adminToast('Could not verify this paper', { description: writeErrorWords(e, 'Nothing was changed. Try again.') });
     } finally {
       setVerifying(false);
     }
@@ -746,6 +746,8 @@ const QuestionEditor = memo(function QuestionEditor({ row, depth, snippetUrl, on
         if (fresh) {
           baselineRef.current = editorStateFromRow(fresh).baseline;
           setFields(toFieldStrings(fresh));
+        } else {
+          adminToast('Could not load the newer version of this question', { description: 'Your text is kept below. Copy it, then reload the page.' });
         }
         return;
       }

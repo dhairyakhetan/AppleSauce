@@ -4,8 +4,8 @@ import { MathText } from '@/components/papers/math-text';
 import { OptionList } from '@/components/checker/OptionList';
 import { cn } from '@/lib/utils';
 import type { CheckerApi } from '@/lib/checker-api';
-import { describeLanes } from '@/lib/checker-lanes';
-import { contextHeading, partLabel, type QuestionContext } from '@/lib/checker-context';
+import { describeLanes, NOT_FOR_STUDENT_LINE } from '@/lib/checker-lanes';
+import type { WholeQuestionRow } from '@/lib/checker-context';
 import { canSplitAt, splitOrPlan, SPLIT_OR_NOTE } from '@/lib/checker-body';
 import { CHIP } from '@/lib/checker-button-styles';
 
@@ -44,6 +44,35 @@ export function useSignedUrl(api: CheckerApi, key: string, path: string): string
   return state.url;
 }
 
+/**
+ * Signed links for several pictures at once (one per part of a whole question).
+ * `key` names the set; an empty key asks for nothing. Each id is undefined while
+ * its link is on the way, then a URL, or null when it is missing or failed.
+ */
+export function useSignedUrls(api: CheckerApi, key: string, paths: Record<string, string>): Record<string, string | null | undefined> {
+  const [state, setState] = useState<{ key: string; urls: Record<string, string | null> } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    for (const [id, path] of Object.entries(paths)) {
+      api
+        .pictureUrl(path)
+        .catch(() => null)
+        .then((url) => {
+          if (cancelled) return;
+          setState((prev) => ({ key, urls: { ...(prev && prev.key === key ? prev.urls : {}), [id]: url } }));
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // `paths` is part of `key`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, api]);
+  if (!key || !state || state.key !== key) return {};
+  return state.urls;
+}
+
 const HIDE_TIPS_KEY = 'shikshaq.checker.hide-tips';
 
 function readTipsHidden(): boolean {
@@ -79,10 +108,13 @@ export function CheckGuidance({
   summary,
   line,
   detail,
+  className,
 }: {
   summary?: ReturnType<typeof describeLanes> | null;
   line?: string | null;
   detail?: string | null;
+  /** Replaces the default bottom margin. */
+  className?: string;
 }) {
   const [hidden, setHidden] = useState(readTipsHidden);
   const asked = summary ? summary.blocks.filter((b) => b.asked) : [];
@@ -98,11 +130,11 @@ export function CheckGuidance({
     writeTipsHidden(!hidden);
   };
   return (
-    <section aria-label="How to check" className="mb-4" data-testid="check-guidance">
+    <section aria-label="How to check" className={className ?? 'mb-4'} data-testid="check-guidance">
       <div className="flex items-center justify-between gap-3">
         <p className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-warm-meta">
           <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0">{soloLane ? `How to check: ${soloLane.lane.name}` : 'How to check'}</span>
+          <span className="min-w-0">{soloLane ? `How to check: ${soloLane.title}` : 'How to check'}</span>
         </p>
         <button
           type="button"
@@ -123,8 +155,8 @@ export function CheckGuidance({
           ) : null}
           {asked.map((b) => (
             <div key={b.lane.id} data-lane={b.lane.id}>
-              {soloLane ? null : <p className="text-[13px] font-semibold leading-snug text-warm-secondary">{b.lane.name}</p>}
-              <p className="text-[13px] leading-snug text-warm-secondary">{b.lane.what_to_do}</p>
+              {soloLane ? null : <p className="text-[13px] font-semibold leading-snug text-warm-secondary">{b.title}</p>}
+              <p className="text-[13px] leading-snug text-warm-secondary">{b.text}</p>
               {b.detail ? <p className="mt-0.5 text-[12px] text-warm-meta">What the computer noticed: {b.detail}</p> : null}
             </div>
           ))}
@@ -135,7 +167,7 @@ export function CheckGuidance({
           ))}
           {quiet.length > 0 ? (
             <p className="text-[12px] leading-snug text-warm-meta">
-              Not for you to settle: {quiet.map((b) => b.lane.name.toLowerCase()).join(', ')}. Someone else sorts that out.
+              {NOT_FOR_STUDENT_LINE}
             </p>
           ) : null}
           {note ? <p className="text-[12px] text-warm-meta">What the computer noticed: {note}</p> : null}
@@ -160,7 +192,7 @@ export function CheckerSkeleton() {
 
 export function Callout({ tone, title, children }: { tone: 'warn'; title: string; children: React.ReactNode }) {
   return (
-    <div role="note" className={cn('mb-3 rounded-2xl p-3', tone === 'warn' && 'bg-destructive/10')}>
+    <div role="note" className={cn('mb-3 rounded-[10px] p-3', tone === 'warn' && 'bg-destructive/10')}>
       <p className="text-[14px] font-semibold text-foreground">{title}</p>
       <p className="mt-0.5 text-[13px] leading-snug text-warm-secondary">{children}</p>
     </div>
@@ -275,53 +307,61 @@ export function Modal({
   );
 }
 
-/* W11: the whole question a sub-part belongs to, read-only, with the part
-   being checked highlighted. Bodies go through MathText verbatim. */
-export function WholeQuestion({ context }: { context: QuestionContext }) {
+/* W11: the whole question a part belongs to. The owner (12 Oct 2026): "you should
+   be showing me the entire paper question in the left pane, not just the
+   sub-part". So the verify screen lays the question out from its stem down, every
+   part in order and all visible; the part being checked is the one editable card
+   among them (PartCard), and every other row is this: read-only and calm, with no
+   box of its own, just a thin rule at its left, so the eye goes to the checked
+   part. Bodies are shown as stored, through MathText. */
+export function ContextPart({
+  row,
+  focused = false,
+  onFocus,
+}: {
+  row: WholeQuestionRow;
+  /** The highlight pair is on this row (a view aid only). */
+  focused?: boolean;
+  /** Tapping the row moves the highlight pair here. Never changes which question is checked. */
+  onFocus?: () => void;
+}) {
+  // The printed label, unless the body already starts with it ("(a)" over "(a) Name the...").
+  const showLabel = row.label !== '' && !(row.body ?? '').trimStart().startsWith(row.label);
+  const tappable = Boolean(onFocus);
   return (
-    <div className="mb-3 rounded-2xl border border-warm-hairline p-3">
-      <p className="mb-2 text-[13px] font-semibold text-foreground">{contextHeading(context)}</p>
-      {context.parent ? (
-        <div
-          aria-current={context.currentIsParent ? 'true' : undefined}
-          className={cn('rounded-xl p-2.5', context.currentIsParent ? 'bg-brand-subtle ring-2 ring-brand' : 'bg-muted')}
-        >
-          {context.currentIsParent ? <CheckingTag /> : null}
-          <MathText text={context.parent.body ?? ''} className="text-[14px] leading-relaxed text-foreground" />
-          <OptionList options={context.parent.options} />
-        </div>
-      ) : null}
-      <ol className="mt-2 space-y-2">
-        {context.parts.map((part, i) => {
-          const current = part.id === context.currentId;
-          return (
-            <li
-              key={part.id}
-              aria-current={current ? 'true' : undefined}
-              className={cn('rounded-xl p-2.5', current ? 'bg-brand-subtle ring-2 ring-brand' : 'bg-muted')}
-              style={{ marginLeft: Math.min(Math.max(part.depth - 1, 0), 3) * 12 }}
-            >
-              {current ? <CheckingTag /> : null}
-              {/* The printed label, unless the body already starts with it
-                  ("(a)" over "(a) Name the..." read twice). */}
-              {(part.body ?? '').trimStart().startsWith(partLabel(part, i)) ? null : (
-                <p className="mb-0.5 text-[12px] font-semibold text-warm-secondary">{partLabel(part, i)}</p>
-              )}
-              <MathText text={part.body ?? ''} className="text-[14px] leading-relaxed text-foreground" />
-              <OptionList options={part.options} />
-            </li>
-          );
-        })}
-      </ol>
+    <div
+      data-testid={row.isParent ? 'context-stem' : 'context-part'}
+      data-part-id={row.id}
+      data-focused={focused ? 'true' : undefined}
+      role={tappable ? 'button' : undefined}
+      tabIndex={tappable ? 0 : undefined}
+      aria-pressed={tappable ? focused : undefined}
+      aria-label={tappable ? (row.isParent ? 'Show the picture of the question' : `Show the picture of ${row.label || 'this part'}`) : undefined}
+      onClick={onFocus}
+      onKeyDown={
+        onFocus
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onFocus();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        'mb-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+        row.isParent ? 'rounded-[6px]' : 'rounded-r-[6px] border-l-2 pl-3',
+        row.isParent ? '' : focused ? 'border-brand' : 'border-warm-hairline',
+        focused && 'bg-brand-subtle py-1 pr-2',
+        row.isParent && focused && 'px-2',
+        tappable && 'cursor-pointer',
+      )}
+      style={row.isParent ? undefined : { marginLeft: Math.min(Math.max(row.depth - 1, 0), 3) * 12 }}
+    >
+      {showLabel ? <p className="mb-0.5 text-[12px] font-semibold text-warm-meta">{row.label}</p> : null}
+      <MathText text={row.body ?? ''} className={cn('break-words leading-relaxed', row.isParent ? 'text-[16px] text-foreground' : 'text-[15px] text-warm-secondary')} />
+      <OptionList options={row.options} />
     </div>
-  );
-}
-
-function CheckingTag() {
-  return (
-    <span className="mb-1 inline-block rounded-full bg-brand px-2 py-0.5 text-[12px] font-bold text-foreground">
-      You are checking this part
-    </span>
   );
 }
 

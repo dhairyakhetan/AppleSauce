@@ -54,6 +54,31 @@ export function positionLabel(pages: PaperPage[], index: number): string {
   return `${clampPageIndex(index, pages.length) + 1} of ${pages.length}`;
 }
 
+/** Page numbers below the last stored page that have no picture (a paper with pictures of pages 1 and 3 is missing 2). */
+export function missingPages(pages: PaperPage[]): number[] {
+  if (pages.length === 0) return [];
+  const have = new Set(pages.map((p) => p.page));
+  const last = pages[pages.length - 1].page;
+  const out: number[] = [];
+  for (let n = 1; n < last; n += 1) if (!have.has(n)) out.push(n);
+  return out;
+}
+
+/** "Page 3 of 5" from real page numbers, so a gap never reads as "2 of 2" beside "Page 3". The total is the last page we hold. */
+export function pageOfLabel(pages: PaperPage[], index: number): string {
+  if (pages.length === 0) return '';
+  const p = pages[clampPageIndex(index, pages.length)];
+  return `Page ${p.page} of ${pages[pages.length - 1].page}`;
+}
+
+/** Says plainly which pages have no picture yet; empty when the run of pages is complete. */
+export function missingPagesNote(pages: PaperPage[]): string {
+  const gaps = missingPages(pages);
+  if (gaps.length === 0) return '';
+  const list = gaps.length === 1 ? `Page ${gaps[0]} is` : `Pages ${gaps.slice(0, -1).join(', ')} and ${gaps[gaps.length - 1]} are`;
+  return `${list} not available yet, so the flip skips ahead. If the question is not on a page you can see, do not pass it.`;
+}
+
 export const WHOLE_PAPER_TITLE = 'No page matched this question, so here is the whole paper';
 export const WHOLE_PAPER_NOTE = 'Flip through the pages until you find the question, then check the typed words against it.';
 export const NO_PAGES_TITLE = 'This paper has no page pictures yet';

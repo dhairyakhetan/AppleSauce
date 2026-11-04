@@ -127,7 +127,7 @@ describe('the day in one sentence', () => {
 describe('checker log shapes', () => {
   it('reads admin_checker_list rows and never shows a key as a name', () => {
     expect(normaliseCheckerRow({ actor_key: 'ai:haiku', name: null, role: 'ai', total_actions: '12' })).toMatchObject({
-      name: 'AI check (Haiku)',
+      name: 'AI check',
       role: 'ai',
       total_actions: 12,
     });

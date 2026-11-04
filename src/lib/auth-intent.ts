@@ -12,6 +12,8 @@
  * behaviour are untouched by everything in this file.
  */
 
+import { isSafeRedirect } from '@/lib/safe-redirect';
+
 export type AuthIntent =
   | { kind: 'default' }
   | { kind: 'whatsapp'; teacherName: string; subject: string; area: string; fee?: string }
@@ -89,6 +91,26 @@ export function clearAuthIntent(): void {
   } catch {
     /* nothing to clear if storage is unavailable */
   }
+}
+
+const STAFF_ROOTS = ['/admin', '/hod', '/checker'];
+
+/** True only when the post-sign-in destination is a staff area. The staff
+ *  hero must follow where the person is going, not a remembered intent: the
+ *  admin guard leaves an `admin` intent behind for ten minutes, and a plain
+ *  /auth visit inside that window must not show staff framing to a parent. */
+export function isStaffRedirect(path: string | null | undefined): boolean {
+  if (!path || !isSafeRedirect(path)) return false;
+  const bare = path.split(/[?#]/)[0];
+  return STAFF_ROOTS.some((root) => bare === root || bare.startsWith(`${root}/`));
+}
+
+/** The intent the hero should render, given the stored intent and the
+ *  `redirect` query value. Staff framing only for a staff destination; a stale
+ *  `admin` intent never leaks onto an ordinary sign-in. */
+export function heroIntentFor(intent: AuthIntent, redirect: string | null | undefined): AuthIntent {
+  if (isStaffRedirect(redirect)) return { kind: 'admin' };
+  return intent.kind === 'admin' ? { kind: 'default' } : intent;
 }
 
 /** The heroes address the teacher by first name ("One step from Rupa"), but

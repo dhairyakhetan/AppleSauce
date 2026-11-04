@@ -1,6 +1,13 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { substituteGlyphs } from '@/lib/glyph-substitution';
 import katex from 'katex';
+import {
+  firstRowLooksLikeHeader,
+  parseHtmlTable,
+  splitIntoTablePieces,
+  type HtmlTableRow,
+  type TablePiece,
+} from '@/lib/question-tables';
 import 'katex/dist/katex.min.css';
 
 /* Renders a question exactly as the paper set it.
@@ -323,10 +330,6 @@ function Inline({ parts }: { parts: Seg[] }) {
   );
 }
 
-const isSeparator = (line: string) => /^\s*\|?[\s:|-]*-{2,}[\s:|-]*\|?\s*$/.test(line);
-const cells = (line: string) =>
-  line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
-
 /* ------------------------------------------------------------------------ *
  * HTML <table> with colspan/rowspan (Accounts ledgers, journal entries,
  * grouped-header frequency tables). GFM pipe tables (above) cover the simple
@@ -338,88 +341,101 @@ const cells = (line: string) =>
  * dangerouslySetInnerHTML, so a `<script>` or `onclick=` inside a cell is
  * just inert visible text, not a parsed, executable tag.
  * ------------------------------------------------------------------------ */
-interface HtmlTableCell {
-  tag: 'td' | 'th';
-  content: string;
-  colSpan?: number;
-  rowSpan?: number;
-}
-interface HtmlTableRow {
-  cells: HtmlTableCell[];
-}
+/* The parsing lives in src/lib/question-tables.ts (pure, no React) so it can
+   be unit-tested against real rows. Re-exported here because callers and tests
+   have always imported it from this file. */
+export { parseHtmlTable };
 
-const decodeBasicEntities = (s: string) =>
-  s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'")
-    .replace(/&amp;/g, '&');
+const TH_CLASS =
+  'border border-warm-hairline bg-card px-3 py-2 text-left align-top font-bold text-foreground max-w-[22rem]';
+const TD_CLASS = 'border border-warm-hairline px-3 py-2 align-top text-foreground max-w-[22rem]';
 
-function clampSpan(raw: string | undefined): number | undefined {
-  if (!raw) return undefined;
-  const n = parseInt(raw, 10);
-  if (!Number.isFinite(n) || n <= 1) return undefined;
-  return Math.min(50, n);
-}
-
-/** Parses a `<table>...</table>` string into rows of cells. Only ever reads
- *  `<tr>`, `<td>`/`<th>` and their `colspan`/`rowspan` attributes -- anything
- *  else in the markup (other tags, other attributes) is simply never looked
- *  at, which is the whitelist: nothing unrecognised gets a code path that
- *  could act on it. Returns null if the block doesn't actually contain a
- *  table with at least one row, so callers can fall through to the normal
- *  paragraph branch instead of rendering an empty table. */
-export function parseHtmlTable(block: string): HtmlTableRow[] | null {
-  const tableMatch = block.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
-  if (!tableMatch) return null;
-
-  const rowMatches = [...tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-  if (rowMatches.length === 0) return null;
-
-  const rows: HtmlTableRow[] = rowMatches.map((rowMatch) => {
-    const cellMatches = [...rowMatch[1].matchAll(/<(td|th)([^>]*)>([\s\S]*?)<\/\1>/gi)];
-    const rowCells: HtmlTableCell[] = cellMatches.map((cellMatch) => {
-      const tag = cellMatch[1].toLowerCase() as 'td' | 'th';
-      const attrs = cellMatch[2] ?? '';
-      const colspanMatch = attrs.match(/colspan\s*=\s*"?'?(\d+)"?'?/i);
-      const rowspanMatch = attrs.match(/rowspan\s*=\s*"?'?(\d+)"?'?/i);
-      return {
-        tag,
-        content: decodeBasicEntities(cellMatch[3]).trim(),
-        colSpan: clampSpan(colspanMatch?.[1]),
-        rowSpan: clampSpan(rowspanMatch?.[1]),
-      };
-    });
-    return { cells: rowCells };
-  });
-
-  return rows.some((r) => r.cells.length > 0) ? rows : null;
+/* One cell's text. OCR sometimes leaves an `<img ...>` or `<br>` tag inside a
+   cell. The tag is markup, not words: an image tag becomes a small "figure"
+   chip (the file it names is a local OCR crop that was never uploaded) and a
+   `<br>` becomes a line break. Every other character is rendered as written. */
+const CELL_TAG_RE = /(<img\b[^>]*>|<br\s*\/?>)/gi;
+function CellContent({ text }: { text: string }) {
+  if (!/<(?:img|br)\b/i.test(text)) return <Inline parts={segment(text)} />;
+  return (
+    <>
+      {text.split(CELL_TAG_RE).map((piece, i) => {
+        if (/^<br/i.test(piece)) return <br key={i} />;
+        if (/^<img/i.test(piece)) {
+          return (
+            <span
+              key={i}
+              title="A picture sat here in the printed paper"
+              className="rounded-[6px] bg-card px-1.5 py-0.5 text-[12px] italic text-warm-label shadow-border"
+            >
+              figure
+            </span>
+          );
+        }
+        return piece === '' ? null : <Inline key={i} parts={segment(piece)} />;
+      })}
+    </>
+  );
 }
 
 function HtmlTable({ rows }: { rows: HtmlTableRow[] }) {
+  // OCR writes header rows as plain <td>. When the first row is plainly a
+  // header (every cell has words, none is a bare number) it gets header
+  // styling; the cells' own text is untouched either way.
+  const promote = firstRowLooksLikeHeader(rows);
+  const renderRow = (row: HtmlTableRow, ri: number, asHeader: boolean) => (
+    <tr key={ri}>
+      {row.cells.map((cell, ci) => {
+        const isTh = cell.tag === 'th' || asHeader;
+        const content = <CellContent text={cell.content} />;
+        return isTh ? (
+          <th key={ci} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className={TH_CLASS}>
+            {content}
+          </th>
+        ) : (
+          <td key={ci} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className={TD_CLASS}>
+            {content}
+          </td>
+        );
+      })}
+    </tr>
+  );
   return (
-    <div className="my-3 -mx-1 overflow-x-auto px-1">
+    <div className="my-3 -mx-1 overflow-x-auto px-1" data-question-table="html">
       <table className="w-max min-w-full border-collapse text-[14px]">
+        {promote ? <thead>{renderRow(rows[0], 0, true)}</thead> : null}
+        <tbody>{rows.map((row, ri) => (promote && ri === 0 ? null : renderRow(row, ri, false)))}</tbody>
+      </table>
+    </div>
+  );
+}
+
+/* A table written as text: pipe rows with a --- separator, tab-separated
+   columns, or columns aligned with runs of spaces. Row 0 is the header. These
+   carry the data the question is ABOUT (a frequency distribution can be the
+   whole question), and as raw pipes or aligned spaces they were unreadable. */
+function GridTable({ rows, source }: { rows: string[][]; source: string }) {
+  const [head, ...body] = rows;
+  return (
+    <div className="my-3 -mx-1 overflow-x-auto px-1" data-question-table={source}>
+      <table className="w-max min-w-full border-collapse text-[14px]">
+        <thead>
+          <tr>
+            {head.map((c, i) => (
+              <th key={i} className={`${TH_CLASS} whitespace-nowrap`}>
+                <Inline parts={segment(c)} />
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
-          {rows.map((row, ri) => (
+          {body.map((r, ri) => (
             <tr key={ri}>
-              {row.cells.map((cell, ci) => {
-                const className =
-                  cell.tag === 'th'
-                    ? 'whitespace-nowrap border border-warm-hairline bg-card px-3 py-2 text-left font-bold text-foreground align-top'
-                    : 'border border-warm-hairline px-3 py-2 text-foreground align-top';
-                const content = <Inline parts={segment(cell.content)} />;
-                return cell.tag === 'th' ? (
-                  <th key={ci} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className={className}>
-                    {content}
-                  </th>
-                ) : (
-                  <td key={ci} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className={className}>
-                    {content}
-                  </td>
-                );
-              })}
+              {r.map((c, ci) => (
+                <td key={ci} className={`${TD_CLASS} whitespace-nowrap`}>
+                  <Inline parts={segment(c)} />
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -428,59 +444,10 @@ function HtmlTable({ rows }: { rows: HtmlTableRow[] }) {
   );
 }
 
+/* Prose, lists and display maths. Tables never reach this: MathText cuts them
+   out first (see splitIntoTablePieces). */
 function Block({ block }: { block: string }) {
-  // Raw HTML <table>, checked before the pipe-table branch: OCR emits this
-  // for merged-cell ledgers and grouped-header tables, which a pipe row can't
-  // express at all (see UnlimitedOCR/playbook/RENDERER_TODO.md item 3).
-  if (/^\s*<table[\s>]/i.test(block.trim())) {
-    const rows = parseHtmlTable(block);
-    if (rows) return <HtmlTable rows={rows} />;
-    // Malformed/unrecognised table markup: fall through to the normal
-    // paragraph path below rather than showing nothing.
-  }
-
   const lines = block.split('\n');
-  const pipeLines = lines.filter((l) => l.trim().startsWith('|'));
-
-  /* A table: pipe rows plus a --- separator. Rendered as a real table because
-     these carry the data the question is ABOUT (a frequency distribution is
-     the whole question), and as raw pipes they were unreadable. */
-  if (pipeLines.length >= 2 && lines.some(isSeparator)) {
-    const rows = pipeLines.filter((l) => !isSeparator(l)).map(cells);
-    const [head, ...body] = rows;
-    return (
-      <div className="my-3 -mx-1 overflow-x-auto px-1">
-        <table className="w-max min-w-full border-collapse text-[14px]">
-          <thead>
-            <tr>
-              {head.map((c, i) => (
-                <th
-                  key={i}
-                  className="whitespace-nowrap border border-warm-hairline bg-card px-3 py-2 text-left font-bold text-foreground"
-                >
-                  <Inline parts={segment(c)} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {body.map((r, ri) => (
-              <tr key={ri}>
-                {r.map((c, ci) => (
-                  <td
-                    key={ci}
-                    className="whitespace-nowrap border border-warm-hairline px-3 py-2 text-foreground"
-                  >
-                    <Inline parts={segment(c)} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
 
   /* A list: every non-empty line starts with a dash or star. */
   const listItems = lines.filter((l) => l.trim());
@@ -529,12 +496,23 @@ function Block({ block }: { block: string }) {
   );
 }
 
+type RenderPiece = { kind: 'text'; block: string } | Exclude<TablePiece, { kind: 'text' }>;
+
 export function MathText({ text, className = '' }: { text: string; className?: string }) {
   /* Blank lines are the source's own paragraph breaks. Splitting on them and
      spacing the blocks beats `whitespace-pre-wrap` over the whole string,
      which turned every one into a full empty line of dead space. */
-  const blocks = useMemo(
-    () => text.split(/\n\s*\n/).map((b) => b.replace(/\s+$/, '')).filter((b) => b.trim() !== ''),
+  const pieces = useMemo(
+    (): RenderPiece[] =>
+      splitIntoTablePieces(text).flatMap((piece): RenderPiece[] =>
+        piece.kind === 'text'
+          ? piece.raw
+              .split(/\n\s*\n/)
+              .map((b) => b.replace(/\s+$/, '').replace(/^\s*\n/, ''))
+              .filter((b) => b.trim() !== '')
+              .map((b) => ({ kind: 'text' as const, block: b }))
+          : [piece],
+      ),
     [text],
   );
 
@@ -557,9 +535,15 @@ export function MathText({ text, className = '' }: { text: string; className?: s
 
   return (
     <div className={className}>
-      {blocks.map((b, i) => (
-        <Block key={i} block={b} />
-      ))}
+      {pieces.map((piece, i) =>
+        piece.kind === 'text' ? (
+          <Block key={i} block={piece.block} />
+        ) : piece.kind === 'html-table' ? (
+          <HtmlTable key={i} rows={piece.rows} />
+        ) : (
+          <GridTable key={i} rows={piece.rows} source={piece.source} />
+        ),
+      )}
     </div>
   );
 }

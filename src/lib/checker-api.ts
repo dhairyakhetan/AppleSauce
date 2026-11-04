@@ -4,6 +4,16 @@ import { mergeQueueRows } from '@/lib/paper-review-filter';
 import { normaliseExtra, type LibraryExtra } from '@/lib/library-views';
 import type { RawOption } from '@/lib/checker-options';
 import { checkerSaveRoute, TYPO_NEEDS_VERSION } from '@/lib/checker-save';
+import {
+  normaliseVerdictAndNext,
+  verdictAndNextArgs,
+  type NextQuestionWithContext,
+  type VerdictAction,
+  type VerdictAndNext,
+  type VerdictAndNextInput,
+} from '@/lib/checker-verdict-next';
+
+export type { NextQuestionWithContext, VerdictAction, VerdictAndNext, VerdictAndNextInput };
 import { normaliseAssignment, type MyAssignment } from '@/lib/checker-progress';
 import {
   normaliseMyPapers,
@@ -306,6 +316,24 @@ export function checkerPictureUrl(path: string): Promise<string | null> {
     .catch(() => null);
 }
 
+/** 10-minute signed URLs for several objects of the audit-figures bucket in
+ *  ONE request. Keyed by object path; a path that failed has no entry. */
+export async function checkerPictureUrls(paths: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (unique.length === 0) return out;
+  try {
+    const { data, error } = await supabase.storage.from('audit-figures').createSignedUrls(unique, 600);
+    if (error || !data) return out;
+    data.forEach((d, i) => {
+      if (!d.error && d.signedUrl) out.set(unique[i], d.signedUrl);
+    });
+  } catch {
+    /* a failed warm-up is not an error */
+  }
+  return out;
+}
+
 /** The verifier's papers, with progress (verifier_my_papers). It hands out
  *  papers first when the verifier has none, so an empty list means nothing is
  *  available for them yet. */
@@ -336,6 +364,92 @@ export async function verifierNextInPaper(
   } as never);
   if (error) throw error;
   return rpcRow<CheckerQuestion>(data);
+}
+
+/** Open a question the caller already marked Done so it can be edited again
+ *  (verifier_reopen_question, 20261019100000). It comes back as the same row
+ *  verifier_next_in_paper returns, leased to the caller for 10 minutes. The
+ *  words are NOT changed here: saving goes through the ordinary Looks right /
+ *  Fix it path, which keeps every earlier wording in history. A refusal is a
+ *  plain sentence (errcode 22023) or "not yours" (42501). */
+export async function verifierReopenQuestion(questionId: string): Promise<CheckerQuestion> {
+  const { data, error } = await supabase.rpc('verifier_reopen_question' as never, { p_question_id: questionId } as never);
+  if (error) throw error;
+  const row = rpcRow<CheckerQuestion>(data);
+  if (!row) throw new Error('That question did not open. Try again.');
+  return row;
+}
+
+/** How sure the computer was about the question the caller has open, as a whole
+ *  percent (checker_question_ai_sure, 20261019110000), or null when it gave no
+ *  number (most questions today). Readable only while the question is leased to
+ *  the caller. It is a hint and never blocks checking, so any failure is null. */
+export async function checkerQuestionAiSure(questionId: string): Promise<number | null> {
+  const { data, error } = await supabase.rpc('checker_question_ai_sure' as never, { p_question_id: questionId } as never);
+  if (error || typeof data !== 'number' || !Number.isFinite(data)) return null;
+  return Math.min(100, Math.max(0, Math.round(data)));
+}
+
+/** One row of verifier_peek_next_in_paper: just enough to warm the next
+ *  card's pictures. No question text, by design. */
+export interface PeekedQuestion {
+  id: string;
+  ord: number;
+  display_number: string | null;
+  page: number | null;
+  /** Object path of the whole printed page in the audit-figures bucket. */
+  page_path: string | null;
+  /** Object path of the question's crop (own, else the whole-question crop). */
+  snippet_path: string | null;
+  /** True for the question the caller already holds (the card on screen). */
+  held_by_me: boolean;
+}
+
+/** The next questions of one paper in the order verifier_next_in_paper would
+ *  serve them, WITHOUT leasing anything (verifier_peek_next_in_paper,
+ *  20261012950000). The first row is the card on screen when held_by_me is
+ *  true; ask for 3 and drop held rows. Never throws: a prefetch is a help,
+ *  never a reason to block checking, so any failure returns []. */
+export async function peekNextInPaper(paperId: string, count = 2): Promise<PeekedQuestion[]> {
+  const { data, error } = await supabase.rpc('verifier_peek_next_in_paper' as never, {
+    p_audit_paper_id: paperId,
+    p_count: Math.min(Math.max(Math.trunc(count) || 2, 1), 3),
+  } as never);
+  if (error) return [];
+  return rpcRows<PeekedQuestion>(data);
+}
+
+/** Give the verdict (Looks right, Fix it, Skip, Ask the HOD) AND get the next
+ *  question of the paper, leased and with its context, in ONE round trip
+ *  (verifier_verdict_and_next, 20261012970000). The server runs the existing
+ *  verdict function first, with all its checks, then claims the next question
+ *  the way verifier_next_in_paper does, in the same transaction. A refused
+ *  verdict (lease expired 42501, stale text 40001, no words 22023, ...) throws
+ *  the same error as the plain function and claims nothing: treat it exactly
+ *  like a failed passQuestion / fixQuestion. */
+export async function verdictAndNext(input: VerdictAndNextInput): Promise<VerdictAndNext> {
+  const params = verdictAndNextArgs(input);
+  const { data, error } = await supabase.rpc('verifier_verdict_and_next' as never, params as never);
+  if (error) throw error;
+  return normaliseVerdictAndNext(data);
+}
+
+/** Pass ("Looks right") and get the next question in one call
+ *  (verifier_pass_and_next, 20261012970000). Same result and errors as verdictAndNext. */
+export async function passAndNext(
+  questionId: string,
+  version: number | null | undefined,
+  paperId: string,
+  options: { includeSkipped?: boolean } = {},
+): Promise<VerdictAndNext> {
+  const { data, error } = await supabase.rpc('verifier_pass_and_next' as never, {
+    p_question_id: questionId,
+    p_expected_version: version ?? null,
+    p_paper_id: paperId,
+    p_include_skipped: Boolean(options.includeSkipped),
+  } as never);
+  if (error) throw error;
+  return normaliseVerdictAndNext(data);
 }
 
 /** What verifier_undo_last (20261008140000) hands back: which kind of answer
@@ -436,7 +550,11 @@ export interface CheckerApi {
   myPapers: typeof verifierMyPapers;
   paperQuestions: typeof verifierPaperQuestions;
   nextInPaper: typeof verifierNextInPaper;
+  verdictAndNext: typeof verdictAndNext;
+  passAndNext: typeof passAndNext;
   undoLast: typeof verifierUndoLast;
+  reopenQuestion: typeof verifierReopenQuestion;
+  questionAiSure: typeof checkerQuestionAiSure;
   myProfile: typeof verifierMyProfile;
   setMyProfile: typeof verifierSetMyProfile;
   requestSubjects: typeof verifierRequestSubjects;
@@ -465,7 +583,11 @@ export const realCheckerApi: CheckerApi = {
   myPapers: verifierMyPapers,
   paperQuestions: verifierPaperQuestions,
   nextInPaper: verifierNextInPaper,
+  verdictAndNext,
+  passAndNext,
   undoLast: verifierUndoLast,
+  reopenQuestion: verifierReopenQuestion,
+  questionAiSure: checkerQuestionAiSure,
   myProfile: verifierMyProfile,
   setMyProfile: verifierSetMyProfile,
   requestSubjects: verifierRequestSubjects,

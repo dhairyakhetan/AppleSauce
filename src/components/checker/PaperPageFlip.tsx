@@ -5,8 +5,8 @@ import {
   NO_PAGES_NOTE,
   NO_PAGES_TITLE,
   PAGES_FAILED_NOTE,
-  pageLabel,
-  positionLabel,
+  missingPagesNote,
+  pageOfLabel,
   startPageIndex,
   WHOLE_PAPER_NOTE,
   WHOLE_PAPER_TITLE,
@@ -108,6 +108,7 @@ export function PaperPageFlip({
   }
 
   const i = clampPageIndex(index, pages.length);
+  const gapNote = missingPagesNote(pages);
   const ready = shown && current && shown.path === current.object_path ? shown : null;
   return (
     <div className={box} data-testid="paper-page-flip">
@@ -125,7 +126,7 @@ export function PaperPageFlip({
           Previous
         </button>
         <p className="text-center text-[13px] font-semibold tabular-nums text-foreground" aria-live="polite">
-          {pageLabel(pages, i)} <span className="font-normal text-warm-secondary">({positionLabel(pages, i)})</span>
+          {pageOfLabel(pages, i)}
         </p>
         <button
           type="button"
@@ -136,6 +137,11 @@ export function PaperPageFlip({
           Next
         </button>
       </div>
+      {gapNote ? (
+        <p className="rounded-2xl bg-muted px-3 py-2 text-[13px] leading-snug text-warm-secondary" role="note" data-testid="paper-pages-gap">
+          {gapNote}
+        </p>
+      ) : null}
       <div
         className="max-h-[56vh] w-full overflow-auto rounded-[14px] bg-white lg:max-h-[68vh]"
         tabIndex={0}

@@ -139,6 +139,7 @@ export function ReviewerListBody({
 }
 
 export function HodSection({
+  part = 'both',
   hodApi,
   reviewerApi,
   searchUsers,
@@ -150,6 +151,8 @@ export function HodSection({
   user,
   actorName,
 }: {
+  /** Which list to show: just the HODs, just the teacher reviewers, or both (the page on its own). */
+  part?: 'hods' | 'reviewers' | 'both';
   hodApi: HodAdminApi;
   reviewerApi: TeacherReviewerAdminApi;
   searchUsers: CheckerAdminApi['searchUsers'];
@@ -237,44 +240,50 @@ export function HodSection({
   return (
     <section aria-labelledby="hods-heading" data-testid="hod-section">
       <h2 id="hods-heading" className="sr-only">
-        HODs and teacher reviewers
+        {part === 'hods' ? 'HODs' : part === 'reviewers' ? 'Teacher reviewers' : 'HODs and teacher reviewers'}
       </h2>
-      <HodGuide />
-      <AdminPanelHeader
-        title="HODs"
-        subtitle="They lead the verifiers and use the HOD desk."
-        meta={hods ? `${activeHods.length} ${activeHods.length === 1 ? 'HOD' : 'HODs'}` : undefined}
-      />
-      <PeoplePicker
-        label="Find a person to make an HOD"
-        ariaLabel="Search by name or email to make an HOD"
-        resultsLabel="People found for HOD"
-        searchUsers={searchUsers}
-        onAdd={addHod}
-        actionLabel={() => 'Make HOD'}
-        isAlready={(u) => activeHods.some((h) => h.user_id === u.user_id)}
-        alreadyLabel="Already an HOD"
-      />
-      <HodListBody hods={hods} error={hodsError} onRetry={() => void onReload()} onRemove={removeHod} />
+      {part !== 'reviewers' ? (
+        <>
+          <HodGuide />
+          <AdminPanelHeader
+            title="HODs"
+            subtitle="They lead the verifiers and use the HOD desk."
+            meta={hods ? `${activeHods.length} ${activeHods.length === 1 ? 'HOD' : 'HODs'}` : undefined}
+          />
+          <PeoplePicker
+            label="Find a person to make an HOD"
+            ariaLabel="Search by name or email to make an HOD"
+            resultsLabel="People found for HOD"
+            searchUsers={searchUsers}
+            onAdd={addHod}
+            actionLabel={() => 'Make HOD'}
+            isAlready={(u) => activeHods.some((h) => h.user_id === u.user_id)}
+            alreadyLabel="Already an HOD"
+          />
+          <HodListBody hods={hods} error={hodsError} onRetry={() => void onReload()} onRemove={removeHod} />
+        </>
+      ) : null}
 
-      <div className="mt-8" data-testid="reviewer-section">
-        <AdminPanelHeader
-          title="Teacher reviewers"
-          subtitle="They approve, reject and edit teachers on the teacher review page. They cannot pause a teacher or open papers."
-          meta={reviewers ? `${activeReviewers.length} active` : undefined}
-        />
-        <PeoplePicker
-          label="Find a person to make a teacher reviewer"
-          ariaLabel="Search by name or email to make a teacher reviewer"
-          resultsLabel="People found for teacher reviewer"
-          searchUsers={searchUsers}
-          onAdd={addReviewer}
-          actionLabel={() => 'Make teacher reviewer'}
-          isAlready={(u) => activeReviewers.some((r) => r.user_id === u.user_id)}
-          alreadyLabel="Already a teacher reviewer"
-        />
-        <ReviewerListBody reviewers={reviewers} error={reviewersError} onRetry={() => void onReload()} onRemove={removeReviewer} />
-      </div>
+      {part !== 'hods' ? (
+        <div className={part === 'both' ? 'mt-8' : undefined} data-testid="reviewer-section">
+          <AdminPanelHeader
+            title="Teacher reviewers"
+            subtitle="They approve, reject and edit teachers on the teacher review page. They cannot pause a teacher or open papers."
+            meta={reviewers ? `${activeReviewers.length} active` : undefined}
+          />
+          <PeoplePicker
+            label="Find a person to make a teacher reviewer"
+            ariaLabel="Search by name or email to make a teacher reviewer"
+            resultsLabel="People found for teacher reviewer"
+            searchUsers={searchUsers}
+            onAdd={addReviewer}
+            actionLabel={() => 'Make teacher reviewer'}
+            isAlready={(u) => activeReviewers.some((r) => r.user_id === u.user_id)}
+            alreadyLabel="Already a teacher reviewer"
+          />
+          <ReviewerListBody reviewers={reviewers} error={reviewersError} onRetry={() => void onReload()} onRemove={removeReviewer} />
+        </div>
+      ) : null}
       {confirmDialog}
     </section>
   );

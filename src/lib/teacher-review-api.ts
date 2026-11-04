@@ -270,6 +270,18 @@ export function docsLabel(a: { hero_image_url: string | null; reference_name: st
   return 'No photo or references';
 }
 
+/** Where a teacher will teach, in plain words. The stored values are the form's option names, which are not for reading. */
+export function placeWords(v: string | null | undefined): string {
+  const s = (v ?? '').trim();
+  if (!s) return 'Not said';
+  const key = s.toUpperCase();
+  if (key === "TEACHER'S HOME TUTORING") return "At the teacher's home only";
+  if (key === "STUDENT'S HOME TUTORING ONLY") return "At the student's home only";
+  if (key === 'BOTH OPTIONS LISTED') return "Either the teacher's home or the student's home";
+  const lower = s.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
 /** React Query keys, one place, scoped so the dummy and the real data never mix. */
 export const APPLICATIONS_KEY = (scope: string) => ['teacher-review', scope, 'applications'] as const;
 export const TEACHERS_KEY = (scope: string) => ['teacher-review', scope, 'teachers'] as const;

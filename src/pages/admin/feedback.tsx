@@ -4,9 +4,10 @@ import { useAuth } from '@/lib/auth-context';
 import { recordAdminAction } from '@/lib/audit';
 import { adminToast, useAdminGuard, AdminGuardErrorState } from '@/components/AdminConsole';
 import { AdminHeader, AdminAuditNote, buildAdminNav } from '@/pages/admin/shell';
+import { AdminStack } from '@/pages/admin/embed';
 import { AdminPageIntroPanel } from '@/components/admin/AdminHelp';
 import { AdminTable, AdminPanelHeader, type AdminTableColumn, type AdminTableRow } from '@/pages/admin/AdminTable';
-import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
+import { BentoPanel } from '@/components/layout/PageContainer';
 import { AdminEmpty, AdminError, AdminLoading } from '@/components/admin/AdminState';
 import { AdminPillButton } from '@/components/admin/AdminPillButton';
 import { useConfirm } from '@/components/ui/use-confirm';
@@ -197,7 +198,7 @@ export function AdminFeedbackPage({
 
   if (checkingAdmin || !settled) {
     return (
-      <BentoStack className="min-h-screen bg-muted">
+      <AdminStack>
         <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
         <BentoPanel fill="card" className="px-1.5 py-[18px] lg:px-1.5 lg:py-[18px]">
           <div className="px-[18px]">
@@ -205,7 +206,7 @@ export function AdminFeedbackPage({
           </div>
         </BentoPanel>
         <AdminAuditNote />
-      </BentoStack>
+      </AdminStack>
     );
   }
 
@@ -215,7 +216,7 @@ export function AdminFeedbackPage({
   const showMeta = !loadError || rows.length > 0;
 
   return (
-    <BentoStack className="min-h-screen bg-muted">
+    <AdminStack>
       <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
       <AdminPageIntroPanel page="feedback" />
       {banner}
@@ -261,7 +262,7 @@ export function AdminFeedbackPage({
 
       <AdminAuditNote />
       {confirmDialog}
-    </BentoStack>
+    </AdminStack>
   );
 }
 

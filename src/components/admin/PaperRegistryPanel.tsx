@@ -9,6 +9,7 @@ import { AdminPillButton, adminPillClass } from '@/components/admin/AdminPillBut
 import { reportLoadError } from '@/lib/load-error';
 import { useRememberedOpen } from '@/lib/use-remembered-open';
 import { cn } from '@/lib/utils';
+import type { Audience } from '@/lib/pipeline-route';
 import { realPaperRegistryApi } from '@/lib/paper-registry-api';
 import {
   PROCESSED_STATES,
@@ -77,7 +78,7 @@ function Headline({ label, value, sub, tone, wide }: { label: string; value: num
   return (
     <div className={cn('min-w-0 rounded-2xl px-4 py-3', wide && 'col-span-2 sm:col-span-1', toneClass)}>
       <p className="text-[12px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums">{value.toLocaleString()}</p>
+      <p className="mt-1 text-2xl font-extrabold tabular-nums">{value.toLocaleString()}</p>
       <p className="mt-0.5 text-[13px] opacity-80">{sub}</p>
     </div>
   );
@@ -113,13 +114,13 @@ function StateLegend({ counts }: { counts: (s: ProcessedState) => number }) {
   );
 }
 
-function RowItem({ row }: { row: RegistryRow }) {
+function RowItem({ row, audience }: { row: RegistryRow; audience: Audience }) {
   const href = adminPaperHref(row);
   const sub = rowSubline(row);
   const qs = questionsLine(row);
   const showOpen = row.open_student != null || row.open_admin != null;
   return (
-    <li className="flex flex-col gap-3 px-[18px] py-3.5 md:grid md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center md:gap-4">
+    <li className="flex flex-col gap-3 px-[14px] py-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center md:gap-4">
       <div className="min-w-0">
         <p className="break-words text-[15px] font-bold leading-snug text-foreground">{rowHeading(row)}</p>
         <p className="mt-0.5 break-words text-[13px] text-warm-meta">{sub || 'Details not sent yet'}</p>
@@ -142,10 +143,13 @@ function RowItem({ row }: { row: RegistryRow }) {
         ) : null}
       </div>
       <div className="md:justify-self-end">
-        {href ? (
+        {href && audience === 'admin' ? (
           <Link to={href} className={adminPillClass('secondary', 'md', 'px-4 text-foreground')}>
             Open paper
           </Link>
+        ) : href ? (
+          // An HOD cannot open the admin Library page, so the row only says where the paper is.
+          <span className="text-[13px] text-warm-meta">In the library</span>
         ) : (
           <span className="text-[13px] text-warm-meta">Not in the library yet</span>
         )}
@@ -158,8 +162,11 @@ export function PaperRegistryPanel({
   api = realPaperRegistryApi,
   onSummary,
   focus,
+  audience = 'admin',
 }: {
   api?: PaperRegistryApi;
+  /** An HOD sees the same list but no link into the admin Library. */
+  audience?: Audience;
   /** Told whenever the summary changes, so the page can show Not started elsewhere. */
   onSummary?: (summary: RegistrySummary | null, status: RegistrySummaryStatus) => void;
   /** Filter the list to these states (none = every paper) and scroll to it. A new `nonce` repeats the request. */
@@ -335,7 +342,7 @@ export function PaperRegistryPanel({
                   onClick={() => setStateFilter(on && stateFilter.length === 1 ? [] : [s])}
                   title={STATE_LOOK[s].hint}
                   className={cn(
-                    'tap-44 inline-flex min-h-11 items-center gap-2 rounded-full px-3.5 text-[13px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97] disabled:opacity-50',
+                    'relative inline-flex h-10 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold transition-colors duration-150 before:absolute before:-inset-[2px] before:content-[""] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97] disabled:opacity-50',
                     on ? 'bg-foreground text-background' : 'bg-muted text-foreground hover:bg-warm-hairline',
                   )}
                 >
@@ -405,7 +412,7 @@ export function PaperRegistryPanel({
         ) : (
           <ul className={cn('divide-y divide-warm-hairline transition-opacity duration-150', listLoading && 'opacity-50')}
             aria-busy={listLoading}>
-            {rows.map((r) => <RowItem key={r.registry_key} row={r} />)}
+            {rows.map((r) => <RowItem key={r.registry_key} row={r} audience={audience} />)}
           </ul>
         )}
 

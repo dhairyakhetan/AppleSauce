@@ -1282,7 +1282,7 @@ export default function TeacherDashboard() {
                 </IconDisc>
                 <span>
                   <span className="block text-[15px] font-semibold text-foreground">
-                    {isPaused ? 'Resume your listing' : 'Pause your listing'}
+                    {pausing ? 'Saving...' : isPaused ? 'Resume your listing' : 'Pause your listing'}
                   </span>
                   <span className="mt-1 block text-[13px] text-warm-secondary">
                     {isPaused

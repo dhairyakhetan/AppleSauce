@@ -35,7 +35,7 @@
  *     some parts, say so
  */
 
-import type { QuestionContext } from '@/lib/checker-context';
+import type { QuestionContext, WholeQuestionRow } from '@/lib/checker-context';
 
 /**
  * Crops matched worse than this are treated as the wrong question. 0.9, not
@@ -134,4 +134,63 @@ export function planCheckerPicture(
 /** The small caption over the picture. */
 export function pictureHeading(plan: PicturePlan | null): string {
   return plan && plan.kind !== 'own' ? 'The printed paper, whole question' : 'The printed paper';
+}
+
+/* ------------------------------------------------------------------ one tile per part */
+
+/** One slot in the right-hand column: the printed picture of one row of the whole question. */
+export interface PartPicture {
+  id: string;
+  /** "(b)", "2(f)", or "The question" for the stem. */
+  label: string;
+  /** Bucket path of this row's own crop, or null when it has none we trust. */
+  path: string | null;
+  /** The part being checked (its leased question). */
+  current: boolean;
+  isParent: boolean;
+  depth: number;
+}
+
+export const STEM_PICTURE_LABEL = 'The question';
+
+/** "No separate picture for (b)": the small tile a part gets when it has no crop of its own. */
+export function noPictureLine(label: string): string {
+  return `No separate picture for ${label}`;
+}
+
+/**
+ * The right pane mirrors the left: one picture per row of the whole question, in
+ * the same order. Each row uses its own crop (same rules as the single picture:
+ * a doubtful crop is never shown). A stem with no crop of its own simply has no
+ * tile; a part with none keeps its slot as a "no separate picture" tile.
+ *
+ * Null (the old single-picture behaviour, unchanged) for a stand-alone question
+ * and whenever NO row has a trustworthy crop of its own: then the whole-question
+ * crop, the whole page or the page-flip is the picture, exactly as before.
+ */
+export function planPartPictures(rows: WholeQuestionRow[]): PartPicture[] | null {
+  if (rows.length === 0) return null;
+  const slots: PartPicture[] = rows.map((r) => {
+    const own = snippetObject(r.source);
+    return {
+      id: r.id,
+      label: r.isParent ? STEM_PICTURE_LABEL : r.label || '(part)',
+      path: own && !isDoubtfulCrop(r.source) ? own : null,
+      current: r.current,
+      isParent: r.isParent,
+      depth: r.depth,
+    };
+  });
+  if (!slots.some((s) => s.path)) return null;
+  // A stem with nothing of its own is left out; a part keeps its slot.
+  return slots.filter((s) => !(s.isParent && !s.path && !s.current));
+}
+
+/**
+ * Which row the highlight pair is on. The view aid only: it defaults to the part
+ * being checked, and a stale pick (another question, or a row that is gone) falls
+ * back to it. It never decides which question is leased or saved.
+ */
+export function focusedPartId(pick: { questionId: string; partId: string } | null, questionId: string, rowIds: string[]): string {
+  return pick && pick.questionId === questionId && rowIds.includes(pick.partId) ? pick.partId : questionId;
 }

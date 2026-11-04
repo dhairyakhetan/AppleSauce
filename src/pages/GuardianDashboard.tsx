@@ -121,6 +121,7 @@ export default function GuardianDashboard() {
   const [boards, setBoards] = useState<string[]>([]);
   const [studentSubjects, setStudentSubjects] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const { likedCount } = useLikes();
   const { studiesWithCount } = useStudiesWith();
@@ -233,6 +234,7 @@ export default function GuardianDashboard() {
         if (import.meta.env.DEV) {
           console.error('Error:', error);
         }
+        setLoadFailed(true);
       } finally {
         setLoading(false);
       }
@@ -269,6 +271,10 @@ export default function GuardianDashboard() {
 
   const handleSave = async () => {
     if (!user || !profile) return;
+    if (loadFailed) {
+      toast.error('Your saved details did not load, so saving now could overwrite them. Reload the page first.');
+      return;
+    }
 
     // Validate phone number if provided (must be exactly 10 digits)
     if (formData.phone.trim() && formData.phone.trim().length !== 10) {
@@ -769,10 +775,19 @@ export default function GuardianDashboard() {
               </Accordion>
             </div>
 
+            {loadFailed ? (
+              <p role="alert" className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-destructive">
+                Your saved details did not load, so the form may look empty. Saving is off until you reload the page.{' '}
+                <button type="button" className="font-semibold underline" onClick={() => window.location.reload()}>
+                  Reload
+                </button>
+              </p>
+            ) : null}
+
             {/* Save Button — pinned below the accordion so it saves whichever section is open */}
             <Button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || loadFailed}
               variant="primary"
               size={52}
               className="mt-4 w-full gap-2 sm:w-auto"

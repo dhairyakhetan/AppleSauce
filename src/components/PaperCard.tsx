@@ -48,6 +48,8 @@ export function PaperCard({ paper, variant = 'result', sticker }: PaperCardProps
   const isCompact = variant === 'compact';
   const isRecent = variant === 'recent';
   const isResult = variant === 'result';
+  // 0 means undated (bank rows); it is not a year and is never printed.
+  const year = Number.isFinite(paper.year) && paper.year > 0 ? paper.year : null;
 
   const stats = isResult
     ? [
@@ -120,13 +122,13 @@ export function PaperCard({ paper, variant = 'result', sticker }: PaperCardProps
           style={{ color: colors.meta, boxShadow: `inset 0 1px 0 ${colors.meta}` }}
         >
           <span className="truncate">Paper © {paper.school}</span>
-          <span className="flex-none font-bold tabular-nums">{paper.year}</span>
+          {year !== null && <span className="flex-none font-bold tabular-nums">{year}</span>}
         </span>
       )}
 
       {isCompact && (
         <span className="mt-3 block text-meta tabular-nums" style={{ color: colors.meta }}>
-          {paper.board} · Class {paper.class} · {paper.exam_type} {paper.year}
+          {paper.board} · Class {paper.class} · {paper.exam_type}{year !== null ? ` ${year}` : ''}
         </span>
       )}
     </Link>

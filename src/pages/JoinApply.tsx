@@ -155,14 +155,38 @@ interface FormData {
   mou_consent: boolean;
 }
 
+const DRAFT_KEY = 'shikshaq_join_apply_draft';
+
+function readDraft(): { step: number; formData: Partial<FormData> } | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { step?: unknown; formData?: unknown };
+    if (!parsed || typeof parsed.formData !== 'object' || parsed.formData === null) return null;
+    const step = typeof parsed.step === 'number' && parsed.step >= 0 && parsed.step <= 10 ? parsed.step : 0;
+    return { step, formData: parsed.formData as Partial<FormData> };
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+}
+
 export default function JoinApply() {
   usePageMeta(
     'Teacher Application Form | Shikshaq',
     'Complete your tuition teacher profile in five steps. Name, subjects, location and fees, then a quick verification.',
   );
 
-  const [step, setStep] = useState(0);
-  const [formData, setFormData] = useState<FormData>({
+  const [step, setStep] = useState(() => readDraft()?.step ?? 0);
+  const [draftRestored] = useState(() => readDraft() !== null);
+  const [formData, setFormData] = useState<FormData>(() => ({
     name: '',
     email: '',
     phone_number: '',
@@ -185,14 +209,28 @@ export default function JoinApply() {
     min_fees: '',
     max_fees: '',
     free_first_class: false,
+    ...(readDraft()?.formData ?? {}),
+    // Consent is always asked again on the last step, never restored.
     mou_consent: false,
-  });
+  }));
+
 
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Keeps what has been typed in this tab only (sessionStorage, gone when the tab closes), so a
+  // refresh or an accidental back swipe does not throw the application away.
+  useEffect(() => {
+    if (submitted) return;
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ step, formData: { ...formData, mou_consent: false } }));
+    } catch {
+      /* storage unavailable: the form still works, it just cannot be restored */
+    }
+  }, [step, formData, submitted]);
 
   // Step content otherwise keeps whatever scroll offset the previous step left
   // behind — a user who reads to the bottom of a long step (J4/J5) and taps
@@ -526,6 +564,7 @@ export default function JoinApply() {
         return;
       }
 
+      clearDraft();
       setSubmitted(true);
       toast.success('Application submitted successfully! We will review it and get back to you soon.');
     } catch (error) {
@@ -703,6 +742,9 @@ export default function JoinApply() {
         <div className="mt-3 text-[12px] font-bold uppercase tracking-[0.04em] text-background/50">{currentStep.label}</div>
         <h1 className="mt-1.5 font-display text-[30px] font-black leading-[1.02] tracking-[-0.04em] text-background">{currentStep.head}</h1>
         <p className="mt-2 text-[15px] leading-[1.5] text-background/65">{currentStep.lede}</p>
+        <p className="mt-2 text-[13px] leading-[1.5] text-background/60" data-testid="draft-note">
+          {draftRestored ? 'We put back what you had typed. ' : ''}Your answers are kept in this browser tab until you send the form. Closing the tab clears them.
+        </p>
       </BentoPanel>
 
       <BentoPanel fill="card" className="min-h-0 flex-1 overflow-y-auto p-5">

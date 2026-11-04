@@ -11,6 +11,9 @@ import {
   NO_PICTURE_TITLE,
   NO_PICTURE_NOTE,
   SPLIT_FROM_SENTENCE,
+  AI_SURE_TITLE,
+  aiSureLabel,
+  studentSafe,
 } from './checker-kid-reasons';
 
 /**
@@ -250,5 +253,34 @@ describe('whatToCheck', () => {
       JSON.stringify({ marks_mismatch: 'the marks printed do not add up to the paper total' }),
     );
     expect(detail).toBe('the marks printed do not add up to the paper total');
+  });
+});
+
+/* The "Computer 92% sure" pill (owner, 19 Oct 2026). The word-blocklist for pipeline text is unchanged; the pill is the one
+   place a computer's sureness is shown, built only from a whole number and two fixed lines written in the student vocabulary. */
+describe('the sureness pill', () => {
+  it('says "Computer N% sure" with a whole percent, clamped to 0 to 100', () => {
+    expect(aiSureLabel(92)).toBe('Computer 92% sure');
+    expect(aiSureLabel(92.4)).toBe('Computer 92% sure');
+    expect(aiSureLabel(0)).toBe('Computer 0% sure');
+    expect(aiSureLabel(140)).toBe('Computer 100% sure');
+    expect(aiSureLabel(-5)).toBe('Computer 0% sure');
+  });
+
+  it('is absent, not guessed, when the computer gave no number', () => {
+    expect(aiSureLabel(null)).toBeNull();
+    expect(aiSureLabel(undefined)).toBeNull();
+    expect(aiSureLabel(Number.NaN)).toBeNull();
+  });
+
+  it('uses only words a student may read, and no dashes', () => {
+    expect(studentSafe(aiSureLabel(92))).toBe(true);
+    expect(studentSafe(AI_SURE_TITLE)).toBe(true);
+    expect(`${aiSureLabel(92)} ${AI_SURE_TITLE}`).not.toMatch(/[–—]/);
+  });
+
+  it('leaves the blocklist as it was: pipeline text with "confidence" is still kept from students', () => {
+    expect(studentSafe('The model had low confidence')).toBe(false);
+    expect(studentSafe('AI was 92% confident')).toBe(false);
   });
 });

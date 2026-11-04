@@ -3,9 +3,12 @@ import { formatDistanceToNow } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
 import { UserPlus } from 'lucide-react';
 import { useConfirm } from '@/components/ui/use-confirm';
+import { EmptyNote } from '@/components/hod/HodShared';
+import { actionToneClass } from '@/lib/checker-button-styles';
 import { looksLikeEmail } from '@/lib/email-shape';
 import { realTeacherReviewerAdminApi, type ReviewerRow, type TeacherReviewerAdminApi } from '@/lib/teacher-review-api';
 import type { HodTabProps } from '@/pages/Hod';
+import { cn } from '@/lib/utils';
 
 /* Teacher reviewers: the people on the teachers team, who can approve, reject
    and edit teachers at /teacher-review without being admin. An HOD or an admin
@@ -59,7 +62,9 @@ export function TeacherReviewersSection({ api }: { api: TeacherReviewerAdminApi 
       setError(
         err instanceof Error && /no account|not found|sign up/i.test(err.message)
           ? 'No Shikshaq account has that email yet. They may not have signed up, or they used a different email.'
-          : 'Could not add that person. Check the email and try again.',
+          : err && typeof err === 'object' && (err as { code?: unknown }).code === '42501'
+            ? 'Your account cannot change the teacher reviewers. Ask an admin or the HOD. Nothing was changed.'
+            : 'Could not add that person. Nothing was changed. Check the email and try again.',
       );
     } finally {
       setAdding(false);
@@ -94,7 +99,7 @@ export function TeacherReviewersSection({ api }: { api: TeacherReviewerAdminApi 
 
       <form onSubmit={add} className="mt-4 flex max-w-xl flex-wrap items-end gap-2">
         <label className="flex min-w-[220px] flex-1 flex-col gap-1">
-          <span className="text-[12px] font-semibold text-warm-secondary">Email of the person to add</span>
+          <span className="text-[13px] font-semibold text-warm-secondary">Email of the person to add</span>
           <input
             type="email"
             value={email}
@@ -103,13 +108,13 @@ export function TeacherReviewersSection({ api }: { api: TeacherReviewerAdminApi 
               setError(null);
             }}
             placeholder="name@example.com"
-            className="h-11 w-full rounded-full bg-muted px-4 text-sm text-foreground placeholder:text-warm-label outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="h-10 w-full rounded-full bg-muted px-4 text-[13px] text-foreground placeholder:text-warm-label outline-none focus-visible:ring-2 focus-visible:ring-brand"
           />
         </label>
         <button
           type="submit"
           disabled={adding || email.trim() === ''}
-          className="flex h-11 items-center gap-1.5 rounded-full bg-brand px-5 text-sm font-semibold text-foreground transition-transform duration-150 active:scale-[0.97] disabled:opacity-50"
+          className={cn('flex items-center gap-1.5', actionToneClass('brand'), 'h-[46.5px]')}
         >
           <UserPlus className="h-4 w-4" aria-hidden />
           {adding ? 'Adding...' : 'Add to teachers team'}
@@ -132,13 +137,11 @@ export function TeacherReviewersSection({ api }: { api: TeacherReviewerAdminApi 
         ) : rows === null ? (
           <div className="h-14 animate-pulse rounded-2xl bg-muted" role="status" aria-label="Loading the teacher reviewers" />
         ) : active.length === 0 ? (
-          <p className="rounded-2xl bg-muted px-4 py-8 text-center text-[14px] text-warm-secondary">
-            Nobody is on the teachers team yet. Admins can always open the teacher review page.
-          </p>
+          <EmptyNote>Nobody is on the teachers team yet. Admins can always open the teacher review page.</EmptyNote>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {active.map((r) => (
-              <li key={r.user_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted px-4 py-3">
+              <li key={r.user_id} className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-muted p-4">
                 <div className="min-w-0">
                   <p className="truncate text-[14px] font-semibold text-foreground">{r.name || r.email || 'Unnamed account'}</p>
                   <p className="truncate text-[12px] text-warm-meta">
@@ -150,7 +153,7 @@ export function TeacherReviewersSection({ api }: { api: TeacherReviewerAdminApi 
                   type="button"
                   aria-label={`Remove ${r.name || r.email || 'this person'}`}
                   onClick={() => void remove(r)}
-                  className="tap-44 rounded-full bg-card px-4 text-[13px] font-semibold text-destructive transition-transform duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  className={cn(actionToneClass('muted'), 'bg-card text-destructive')}
                 >
                   Remove
                 </button>

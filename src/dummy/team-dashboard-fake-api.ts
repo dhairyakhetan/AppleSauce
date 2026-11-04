@@ -11,6 +11,8 @@ const FAKE_STATS: TeamStatsRow[] = [
   { user_id: 'dummy-checker-1', name: 'Ananya Roy', questions_checked: 58, passed: 40, fixed: 14, asked_help: 4, skipped: 6, papers_completed: 3, median_seconds: 42, admin_overturns: 0 },
   { user_id: 'dummy-checker-2', name: 'Rohan Ghosh', questions_checked: 31, passed: 20, fixed: 9, asked_help: 2, skipped: 3, papers_completed: 1, median_seconds: 95, admin_overturns: 2 },
   { user_id: 'dummy-checker-3', name: 'Ipsita Sarkar', questions_checked: 12, passed: 9, fixed: 2, asked_help: 1, skipped: 0, papers_completed: 0, median_seconds: null, admin_overturns: 0 },
+  // Listed but idle in the range: shows the header counts "3 of 4 verifiers checked a question".
+  { user_id: 'dummy-checker-4', name: 'Sanjay Bose', questions_checked: 0, passed: 0, fixed: 0, asked_help: 0, skipped: 0, papers_completed: 0, median_seconds: null, admin_overturns: 0 },
 ];
 
 const FAKE_PROGRESS: PaperProgressRow[] = [

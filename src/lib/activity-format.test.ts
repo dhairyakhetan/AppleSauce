@@ -6,6 +6,7 @@ import {
   canOpenHistory,
   canRevert,
   changedFields,
+  personWords,
   revertConfirmText,
   shortId,
   tableWords,
@@ -22,11 +23,20 @@ describe('activity wording', () => {
     expect(actionWords('')).toBe('Something happened');
   });
 
-  it('shows an actor as an id or a label, never anything else', () => {
+  it('names a person by role, never by their id; the id stays in the data for debug mode', () => {
     const person = actorText({ actor_user_id: 'c0ffee00-0000-4000-8000-000000000001', actor_label: null, actor_kind: 'checker' });
-    expect(person).toEqual({ kind: 'Checker', who: 'c0ffee00', full: 'c0ffee00-0000-4000-8000-000000000001' });
+    expect(person).toEqual({ kind: 'Checker', who: 'Checker', full: 'c0ffee00-0000-4000-8000-000000000001' });
+    expect(person.who).not.toMatch(/[0-9a-f]{8}/);
     const ai = actorText({ actor_user_id: null, actor_label: 'ai:sonnet', actor_kind: 'ai' });
     expect(ai).toMatchObject({ kind: 'Computer', who: 'ai:sonnet' });
+  });
+
+  it('names a version actor by role, and anything unknown as a person', () => {
+    expect(personWords('checker')).toBe('Checker');
+    expect(personWords('admin')).toBe('Admin');
+    expect(personWords('ADMIN')).toBe('Admin');
+    expect(personWords('9f3a2c1e-0000-4000-8000-000000000009')).toBe('Person');
+    expect(personWords(null)).toBe('Person');
   });
 
   it('opens a history only for question rows', () => {

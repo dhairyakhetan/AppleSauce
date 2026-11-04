@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useRememberedOpen } from '@/lib/use-remembered-open';
 import { BentoPanel } from '@/components/layout/PageContainer';
 import { ADMIN_PAGES, TIPS, type AdminPageKey, type TipKey } from '@/lib/admin-hints';
+import { useAdminEmbedded } from '@/pages/admin/embed';
 
 /* The two pieces of help every admin page shares: a small "i" that opens a
    one-line explanation (a popover, so it works on a phone as well as with a
@@ -44,6 +45,9 @@ export function AdminPageIntro({ page, className }: { page: AdminPageKey; classN
   const copy = ADMIN_PAGES[page];
   const [open, setOpen] = useRememberedOpen(`admin-help:${page}`);
   const panelId = useId();
+  // Inside a section of the Admin page the page draws this once, above the section.
+  const embedded = useAdminEmbedded();
+  if (embedded) return null;
   return (
     <section aria-label="About this page" className={cn('rounded-[18px] bg-brand-blue-subtle px-4 py-1.5 lg:px-5', className)}>
       <div className="flex items-center gap-2">
@@ -91,6 +95,8 @@ export function AdminPageIntro({ page, className }: { page: AdminPageKey; classN
 /** The intro as its own panel under the nav, for pages that do not already
  *  hold it inside their first panel. */
 export function AdminPageIntroPanel({ page }: { page: AdminPageKey }) {
+  const embedded = useAdminEmbedded();
+  if (embedded) return null;
   return (
     <BentoPanel fill="card" className="px-4 py-4 lg:px-[18px] lg:py-4">
       <AdminPageIntro page={page} />

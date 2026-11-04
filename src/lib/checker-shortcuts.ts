@@ -22,7 +22,6 @@ export const CHECKER_SHORTCUTS: CheckerShortcutDef[] = [
   { action: 'split', keys: 'S', key: 's' },
   { action: 'help', keys: 'H', key: 'h' },
   { action: 'skip', keys: 'K', key: 'k' },
-  { action: 'undo', keys: 'U', key: 'u' },
 ];
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -31,9 +30,12 @@ function isTypingTarget(el: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
 }
 
-/** A focused button or link already acts on Enter by itself. */
+/** A focused button or link already acts on Enter by itself, except the view-only buttons (a picture tile,
+ *  See the whole page) that mark themselves `data-enter-passes`: after tapping one, Enter still means
+ *  Looks right, as the checker expects. */
 function isActivatableTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
+  if (el.closest('[data-enter-passes]')) return false;
   const tag = el.tagName;
   return tag === 'BUTTON' || tag === 'A' || tag === 'SUMMARY' || el.getAttribute('role') === 'button';
 }
@@ -87,6 +89,26 @@ export function shortcutHint(opts: { canSplit: boolean; canPass: boolean; canUnd
   parts.push('F fix it');
   if (opts.canSplit) parts.push('S split');
   parts.push('H ask the HOD', 'K skip');
-  if (opts.canUndo) parts.push('U undo');
   return parts.join(', ');
+}
+
+export interface ShortcutRow {
+  keys: string;
+  does: string;
+}
+
+/**
+ * The same shortcuts as {@link shortcutHint}, as rows for the "?" popover (the
+ * long hint line under the buttons was too much on the screen). Only what works
+ * on this question is listed; while a fix or a split is open the one key that
+ * works is Escape.
+ */
+export function shortcutRows(opts: { canSplit: boolean; canPass: boolean; canUndo?: boolean; editing?: boolean }): ShortcutRow[] {
+  if (opts.editing) return [{ keys: 'Esc', does: 'Cancel and go back' }];
+  const rows: ShortcutRow[] = [];
+  if (opts.canPass) rows.push({ keys: 'Enter or P', does: 'Looks right' });
+  rows.push({ keys: 'F', does: 'Fix it' });
+  if (opts.canSplit) rows.push({ keys: 'S', does: 'Split into two questions' });
+  rows.push({ keys: 'H', does: 'Ask the HOD' }, { keys: 'K', does: 'Skip' });
+  return rows;
 }

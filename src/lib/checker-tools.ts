@@ -15,6 +15,10 @@ export interface CheckerTool {
   id: CheckerToolId;
   /** The button label, in words. */
   label: string;
+  /** The short label on the toolbar button; `label` is its full name (tooltip and aria-label). */
+  short: string;
+  /** The keyboard key, when the tool has one. */
+  key: string | null;
   /** One line, shown on hover or focus. */
   hint: string;
   /** Said when the tool is pressed but does not apply to this question. */
@@ -27,6 +31,8 @@ export const CHECKER_TOOLS: CheckerTool[] = [
   {
     id: 'fix',
     label: 'Fix the words',
+    short: 'Fix words',
+    key: 'F',
     hint: 'Change a letter, number or word so the typed text matches the printed paper.',
     unavailable: 'You can always fix the words.',
     help: 'Opens the text so you can change it. Fix only what is different from the printed paper: a wrong letter, a wrong number, a missing word. Leave everything else as it is.',
@@ -34,6 +40,8 @@ export const CHECKER_TOOLS: CheckerTool[] = [
   {
     id: 'split',
     label: 'Split into two questions',
+    short: 'Split',
+    key: 'S',
     hint: 'Use this when the computer joined two questions into one. You tap where the second one starts.',
     unavailable: 'There are no words here to split.',
     help: 'When the printed paper shows two questions but the computer typed them as one, press this, tap just before where the second question starts, then press Split here. If the two are joined by the word OR, tap next to the OR and it is left out.',
@@ -41,6 +49,8 @@ export const CHECKER_TOOLS: CheckerTool[] = [
   {
     id: 'formula',
     label: 'Edit a formula',
+    short: 'Formula',
+    key: null,
     hint: 'Change a fraction, power or root with a keypad, and watch how it will look.',
     unavailable: 'You can always edit a formula.',
     help: 'Opens the formula keypad. If you selected some words first, those words become the formula. If the question already has formulas, it opens the one you pick. A box under the keypad shows how readers will see it. No code needed.',
@@ -48,6 +58,8 @@ export const CHECKER_TOOLS: CheckerTool[] = [
   {
     id: 'or',
     label: 'This is just the OR',
+    short: 'Just the OR',
+    key: null,
     hint: 'Use this when the whole row is only the word OR between two questions.',
     unavailable: 'This button is only for a row that is nothing but the word OR.',
     help: 'Some rows hold only the word OR, the choice between the question above and the one below. It is not a question. Press this and the row is set aside, and the two questions around it are kept together as an either/or pair.',

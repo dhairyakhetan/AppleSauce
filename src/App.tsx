@@ -19,6 +19,7 @@ import { DelayedFallback } from "@/components/DelayedFallback";
 import { CanonicalTag } from "@/components/CanonicalTag";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageLoader } from "@/components/layout/PageLoader";
+import { LegacyAdminRedirect } from "@/pages/admin/legacy-routes";
 /* Chatbot (642 lines), ProductTour (504 lines) and the one-time
    PapersLiveAnnouncement banner are none of them needed for first paint —
    all three are floating/overlay widgets mounted once at the app root
@@ -70,23 +71,13 @@ const LocalityPage = lazy(() => import("./pages/LocalityPage"));
 const WhatsAppRedirect = lazy(() => import("./pages/WhatsAppRedirect"));
 const BoardPage = lazy(() => import("./pages/BoardPage"));
 const RecommendTeacher = lazy(() => import("./pages/RecommendTeacher"));
-const AdminOverview = lazy(() => import("./pages/admin/index"));
-const AdminApprovals = lazy(() => import("./pages/admin/approvals"));
-const AdminTeachersPage = lazy(() => import("./pages/admin/teachers"));
-const AdminPapersPage = lazy(() => import("./pages/admin/papers"));
-const AdminReviews = lazy(() => import("./pages/admin/reviews"));
-const AdminFeedbackPage = lazy(() => import("./pages/admin/feedback"));
-const AdminCheckersPage = lazy(() => import("./pages/admin/checkers"));
-const AdminAuditLog = lazy(() => import("./pages/admin/audit"));
-const AdminPipelinePage = lazy(() => import("./pages/admin/pipeline"));
-const AdminLibrary = lazy(() => import("./pages/admin/library"));
-const AdminQueue = lazy(() => import("./pages/admin/admin-queue"));
-const AdminTeamPage = lazy(() => import("./pages/admin/team"));
+/* The Admin page: four tabs (People, Teachers, Logs, System), laid out like the
+   HOD desk. Each section inside a tab is one of the old admin pages, loaded
+   lazily by pages/admin/sections.tsx. Every old admin address redirects into it
+   (or to the HOD desk, for the paper pages): see pages/admin/legacy-routes.tsx. */
+const AdminHome = lazy(() => import("./pages/admin/index"));
 const AdminPaperEdit = lazy(() => import("./pages/admin/paper-edit"));
-const AdminActivityPage = lazy(() => import("./pages/admin/activity"));
-const AdminPaperApprovals = lazy(() => import("./pages/admin/paper-approvals"));
 const AdminPaperApproval = lazy(() => import("./pages/admin/paper-approval"));
-const AdminCheckerLog = lazy(() => import("./pages/admin/checker-log"));
 const AdminCheckerLogPerson = lazy(() => import("./pages/admin/checker-log-person"));
 /* Paper checker (Kid Mode) -- W1. A route only paper checkers/admins can
    open (see is_paper_checker(), checked client-side inside the page
@@ -98,6 +89,7 @@ const CheckerPractice = lazy(() => import("./pages/CheckerPractice"));
 const CheckerHelp = lazy(() => import("./pages/CheckerHelp"));
 /* The Head of Department view: escalations, team, assignments, AI trust. */
 const Hod = lazy(() => import("./pages/Hod"));
+const HodPipeline = lazy(() => import("./pages/HodPipeline"));
 /* Teacher review (teachers team): approve, reject and edit teachers without admin. */
 const TeacherReview = lazy(() => import("./pages/TeacherReview"));
 /* The games team: write, approve and try questions for the revision games. */
@@ -338,40 +330,50 @@ const App = () => (
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/terms-of-service" element={<TermsOfService />} />
               <Route path="/recommend-teacher" element={<RecommendTeacher />} />
-              <Route path="/admin" element={<AdminOverview />} />
-              <Route path="/admin/approvals" element={<AdminApprovals />} />
-              <Route path="/admin/teachers" element={<AdminTeachersPage />} />
-              <Route path="/admin/papers" element={<AdminPapersPage />} />
-              <Route path="/admin/reviews" element={<AdminReviews />} />
-              <Route path="/admin/feedback" element={<AdminFeedbackPage />} />
-              <Route path="/admin/checkers" element={<AdminCheckersPage />} />
-              <Route path="/admin/audit" element={<AdminAuditLog />} />
-              <Route path="/admin/pipeline" element={<AdminPipelinePage />} />
-              <Route path="/admin/library" element={<AdminLibrary />} />
+              <Route path="/admin" element={<AdminHome />} />
+              {/* Screens that still sit on their own address: a paper being
+                  edited, a paper being approved, one verifier's days. Their
+                  list pages moved (see below); these stay because a list row
+                  opens them. */}
               <Route path="/admin/library/:paperId" element={<AdminPaperEdit />} />
-              <Route path="/admin/admin-queue" element={<AdminQueue />} />
-              {/* The old Paper review page and its edit page moved to Library. */}
-              <Route path="/admin/paper-review" element={<Navigate to="/admin/library" replace />} />
               <Route path="/admin/paper-review/:paperId" element={<LegacyPaperReviewRedirect />} />
-              <Route path="/admin/team" element={<AdminTeamPage />} />
-              <Route path="/admin/activity" element={<AdminActivityPage />} />
-              <Route path="/admin/paper-approvals" element={<AdminPaperApprovals />} />
               <Route path="/admin/paper-approvals/:auditPaperId" element={<AdminPaperApproval />} />
-              <Route path="/admin/checker-log" element={<AdminCheckerLog />} />
               <Route path="/admin/checker-log/:actorKey" element={<AdminCheckerLogPerson />} />
+              {/* Old admin addresses. The teacher, people, log and system pages
+                  are sections of the Admin page now; the paper pages are tabs of
+                  the HOD desk. One route per line on purpose: a test reads this
+                  file and checks every address in legacy-routes.tsx is here. */}
+              <Route path="/admin/approvals" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/applications" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/reviews" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/recommendations" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/comments" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/upvotes" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/teachers" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/checkers" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/team" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/activity" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/checker-log" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/audit" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/pipeline" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/feedback" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/papers" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/library" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/paper-review" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/admin-queue" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/paper-approvals" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/uploads" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/queue" element={<LegacyAdminRedirect />} />
+              <Route path="/admin/needs-you" element={<LegacyAdminRedirect />} />
               <Route path="/checker" element={<Checker />} />
               <Route path="/checker/practice" element={<CheckerPractice />} />
               <Route path="/checker/help" element={<CheckerHelp />} />
               <Route path="/hod" element={<Hod />} />
+              <Route path="/hod/pipeline" element={<HodPipeline />} />
               <Route path="/teacher-review" element={<TeacherReview />} />
               {/* One route for every games page, so a part's work (the text in Write questions) survives moving
                   between them. Pages/Games.tsx picks the part from the address. */}
               <Route path="/games/*" element={<Games />} />
-              {/* Legacy admin URLs redirect into the console (pages.md §15). */}
-              <Route path="/admin/applications" element={<Navigate to="/admin/approvals" replace />} />
-              <Route path="/admin/recommendations" element={<Navigate to="/admin/reviews" replace />} />
-              <Route path="/admin/comments" element={<Navigate to="/admin/reviews" replace />} />
-              <Route path="/admin/upvotes" element={<Navigate to="/admin/reviews" replace />} />
               <Route path="/select-role" element={<SelectRole />} />
               <Route path="/teacher-terms-agreement" element={<TeacherTermsAgreement />} />
               <Route path="/signup-success" element={<SignUpSuccess />} />

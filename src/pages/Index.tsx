@@ -36,11 +36,13 @@ import { resolveHeroCopy, papersHeroCopy } from '@/lib/hero-copy';
 import { getSubjectPalette } from '@/lib/subject-palette';
 import { useRequireRole } from '@/hooks/use-require-role';
 import { useSentenceBuilder } from '@/hooks/useSentenceBuilder';
+import { useSiteCounts } from '@/hooks/useSiteCounts';
 import { useIntent } from '@/lib/intent-context';
 import { intentCta } from '@/lib/intent/copy';
 import { getShikshaqmineBasicBySlugs } from '@/lib/teachers';
 import { loadPaperIndex, hasYear } from '@/lib/question-bank';
 import { bankSubjectToSite } from '@/lib/subject-vocabulary';
+import { isComingSoon } from '@/lib/readable-papers';
 import { coverPaper, coverMeta, pickVariedRecent, type CoverSourcePaper } from '@/lib/paper-cover-mapping';
 import { generateLocalBusinessSchema, generateServiceSchema } from '@/utils/structuredDataGenerators';
 import type { SearchMode } from '@/utils/searchFacets';
@@ -480,7 +482,7 @@ export default function Index() {
             year: shown.year,
             meta: coverMeta(p),
             tintKey: `${p.school}-${p.id}`,
-            comingSoon: p._needsReview === true,
+            comingSoon: isComingSoon(p),
           };
         });
 
@@ -517,28 +519,29 @@ export default function Index() {
 
      Kept as three keys rather than one, because they fail independently — an
      empty papers table should not cost the page its stats or its quotes. */
+  /* Teachers come from useSiteCounts: the listed total, paused listings
+     excluded, the same figure Browse and About show. */
+  const siteCounts = useSiteCounts();
   const statsQuery = useQuery({
     queryKey: ['home', 'stats'],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      /* 2026-09-26: papers was reading `papers` (18 rows, the submit-a-paper
-         flow), not `bank_papers` (the library, ~1,960 rows incl. needs_review)
-         -- the exact "counted the wrong table" bug class CLAUDE.md calls out.
-         The sentence-builder's "N papers" pill was silently near-zero. Matches
-         useSiteCounts' inclusive count (is_published, needs_review or not). */
-      const [teachersRes, papersRes, reviewsRes] = await Promise.all([
-        supabase.from('teachers_list').select('id', { count: 'exact', head: true }),
-        supabase.from('bank_papers').select('id', { count: 'exact', head: true }).eq('is_published', true).gt('question_count', 0),
-        supabase.from('teacher_comments').select('id', { count: 'exact', head: true }).eq('approved', true),
-      ]);
+      /* Reviews only. The paper total is NOT counted here: it comes from
+         useSiteCounts (readable papers, lib/readable-papers.ts), the same
+         figure the footer, About and the library show. This query used to
+         count bank_papers itself, which is how the home page drifted ahead of
+         the papers a reader could actually open. */
+      const reviewsRes = await supabase.from('teacher_comments').select('id', { count: 'exact', head: true }).eq('approved', true);
       return {
-        teachers: teachersRes.count ?? null,
-        papers: papersRes.count ?? null,
         reviews: reviewsRes.count ?? null,
       };
     },
   });
-  const stats = statsQuery.data ?? { teachers: null, papers: null, reviews: null };
+  const stats = {
+    teachers: siteCounts.data?.teachers ?? null,
+    papers: siteCounts.data?.papers ?? null,
+    reviews: statsQuery.data?.reviews ?? null,
+  };
 
   // New papers (section 04, "the boards set") — the 10 bank papers computed
   // inside the `home` query above (see its 2026-09-26 comment), not a

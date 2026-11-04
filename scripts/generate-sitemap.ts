@@ -32,6 +32,7 @@ import { config } from 'dotenv';
    the sitemap under a slug SchoolPage.tsx cannot resolve — a submitted URL
    that 404s, which is the exact bug already fixed once for /cbse-ncert-. */
 import { schoolSlug } from '../src/lib/school-slug';
+import { countPapers, countReadableSchools } from '../src/lib/readable-papers';
 import { buildBankURLs, dedupeByLoc, type SitemapURL } from './sitemap-bank-urls';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -338,8 +339,8 @@ async function readBankURLs(currentDate: string): Promise<{ schools: SitemapURL[
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  const allRows = await fetchAllRows<{ id: string; school: string; has_school: boolean; created_at: string | null }>(
-    () => supabase.from('bank_papers').select('id, school, has_school, created_at').eq('is_published', true).gt('question_count', 0) as unknown as Query,
+  const allRows = await fetchAllRows<{ id: string; school: string; has_school: boolean; created_at: string | null; needs_review?: boolean | null }>(
+    () => supabase.from('bank_papers').select('id, school, has_school, created_at, needs_review').eq('is_published', true).gt('question_count', 0) as unknown as Query,
     'bank_papers',
   );
 
@@ -348,6 +349,12 @@ async function readBankURLs(currentDate: string): Promise<{ schools: SitemapURL[
      against fixture rows in sitemap-bank-urls.test.ts. This function's own
      job is just the network fetch above. */
   const { schools, papers, skipped } = buildBankURLs(allRows, currentDate);
+  /* Coming soon papers keep their URLs (the pages exist and say so) but are
+     not part of the readable total the site advertises: same rule, same
+     module as the footer and the prerender. */
+  const split = countPapers(allRows.map((r) => ({ needsReview: r.needs_review })));
+  console.log(`   Readable papers:    ${split.ready} (${split.comingSoon} coming soon, listed with their own URLs)`);
+  console.log(`   Readable schools:   ${countReadableSchools(allRows.map((r) => ({ ...r, is_published: true, question_count: 1 })))} (the figure site_counts() reports)`);
   if (skipped > 0) console.log(`   Skipped ${skipped} papers with placeholder question text`);
   return { schools, papers };
 }
@@ -401,9 +408,12 @@ async function main() {
   /* A floor, not just a ceiling. The 50,000 check below guards a limit we are
      nowhere near; the failure that actually happened was the opposite one --
      shipping far too few URLs and reporting success. This is deliberately well
-     under the real count (1,560+) so ordinary content changes never trip it,
-     while a truncation or a silently-empty table still does. */
-  const MIN_EXPECTED_URLS = 1200;
+     under the real count (1,147 after the 2026-10-12 removal of the non-Maths
+     library papers; it was 1,560+ before) so ordinary content changes never
+     trip it, while a truncation or a silently-empty table still does: the
+     Maths papers alone are over 600 URLs, so an unreachable papers table drops
+     the total to roughly 530. */
+  const MIN_EXPECTED_URLS = 900;
   if (allURLs.length < MIN_EXPECTED_URLS) {
     fail(`Only ${allURLs.length} URLs, expected at least ${MIN_EXPECTED_URLS}. `
       + 'Likely a truncated query or an unreachable table.');

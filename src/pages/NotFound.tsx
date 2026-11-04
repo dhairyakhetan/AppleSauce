@@ -4,6 +4,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { BROWSE_PATH, PAST_PAPERS_PATH } from '@/lib/nav-config';
 import { BentoStack, BentoPanel } from '@/components/layout/PageContainer';
 import { useChromeConfig } from '@/components/layout/AppShell';
+import { NOT_FOUND_TITLE, NOT_FOUND_DESCRIPTION } from '@/lib/not-found-copy';
 
 // Handoff NF-001/NF-002 (About Contact Help 404 Redesign.dc.html): one panel
 // filling the viewport, the numeral as a decorative pale-band graphic behind
@@ -12,10 +13,7 @@ import { useChromeConfig } from '@/components/layout/AppShell';
 const NotFound = () => {
   const location = useLocation();
 
-  usePageMeta(
-    "This page isn't on the timetable | Shikshaq",
-    'The link may be old. Try a subject, or start a new search.'
-  );
+  usePageMeta(NOT_FOUND_TITLE, NOT_FOUND_DESCRIPTION);
 
   // Handoff NF-001: no generic pre-footer explainer on an error page — the
   // bottom nav and footer still render globally (NF-002's own accept line).

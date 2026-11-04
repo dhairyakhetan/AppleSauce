@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { normaliseAssignment, paperLabel, paperProgress } from '@/lib/checker-progress';
-import { clampPageIndex, normalisePaperPages, pageLabel, positionLabel, startPageIndex } from '@/lib/paper-pages';
+import {
+  clampPageIndex,
+  missingPages,
+  missingPagesNote,
+  normalisePaperPages,
+  pageLabel,
+  pageOfLabel,
+  positionLabel,
+  startPageIndex,
+} from '@/lib/paper-pages';
 
 describe('paper progress', () => {
   it('says "3 of 12 done" after three done and nine left', () => {
@@ -108,5 +117,35 @@ describe('whole-paper page-flip', () => {
     expect(pageLabel(pages, 1)).toBe('Page 5');
     expect(positionLabel(pages, 1)).toBe('2 of 2');
     expect(positionLabel([], 0)).toBe('');
+  });
+
+  it('labels real page numbers and names the pages with no picture (bug: "2 of 2" beside "Page 3")', () => {
+    const gappy = normalisePaperPages([
+      { page: 1, object_path: 'a' },
+      { page: 3, object_path: 'c' },
+    ]);
+    expect(pageOfLabel(gappy, 1)).toBe('Page 3 of 3');
+    expect(missingPages(gappy)).toEqual([2]);
+    expect(missingPagesNote(gappy)).toMatch(/^Page 2 is not available yet/);
+
+    const wide = normalisePaperPages([
+      { page: 1, object_path: 'a' },
+      { page: 4, object_path: 'd' },
+      { page: 6, object_path: 'f' },
+    ]);
+    expect(missingPages(wide)).toEqual([2, 3, 5]);
+    expect(missingPagesNote(wide)).toMatch(/^Pages 2, 3 and 5 are not available yet/);
+  });
+
+  it('says nothing when the run of pages is complete or empty', () => {
+    const whole = normalisePaperPages([
+      { page: 1, object_path: 'a' },
+      { page: 2, object_path: 'b' },
+    ]);
+    expect(missingPages(whole)).toEqual([]);
+    expect(missingPagesNote(whole)).toBe('');
+    expect(missingPagesNote([])).toBe('');
+    expect(pageOfLabel([], 0)).toBe('');
+    expect(missingPagesNote(normalisePaperPages([{ page: 3, object_path: 'c' }]))).not.toMatch(/[–—]/);
   });
 });

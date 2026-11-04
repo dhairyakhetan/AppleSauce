@@ -157,7 +157,7 @@ export const CHECKER_RULES: CheckerRule[] = [
 export const CHECKER_HELP_EXTRAS: CheckerRule[] = [
   {
     title: 'Undo last',
-    body: 'Pressed the wrong button? Press Undo last (or the U key) to take back your last answer. It works for 30 minutes after you pressed, and only on your own answers. If anyone else has touched that question since, or the HOD has already dealt with it, it cannot be undone and you will be told why. Press it again to go back one more answer.',
+    body: 'Pressed the wrong button? Press Undo last to take back your last answer. It works for 30 minutes after you pressed, and only on your own answers. If anyone else has touched that question since, or the HOD has already dealt with it, it cannot be undone and you will be told why. Press it again to go back one more answer.',
   },
   {
     title: 'Skip for later',

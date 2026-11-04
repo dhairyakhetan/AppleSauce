@@ -29,6 +29,11 @@ const ACTION_META: Record<string, { verb: string; result: string; status: AdminS
   'revoke_checker:checker': { verb: 'Removed a verifier', result: 'Removed', status: 'hidden' },
   'grant_hod:hod': { verb: 'Made someone an HOD', result: 'Added', status: 'live' },
   'revoke_hod:hod': { verb: 'Removed an HOD', result: 'Removed', status: 'hidden' },
+  'grant_admin:admin': { verb: 'Made someone an admin', result: 'Added', status: 'live' },
+  'revoke_admin:admin': { verb: 'Removed an admin', result: 'Removed', status: 'hidden' },
+  'grant_teacher_reviewer:teacher_reviewer': { verb: 'Made someone a teacher reviewer', result: 'Added', status: 'live' },
+  'revoke_teacher_reviewer:teacher_reviewer': { verb: 'Removed a teacher reviewer', result: 'Removed', status: 'hidden' },
+  'hold_batch:paper_batch': { verb: 'Put a batch of papers on hold', result: 'On hold', status: 'paused' },
 };
 
 export function describeAction(row: { action: string; target_type: string }): { verb: string; result: string; status: AdminStatus } {

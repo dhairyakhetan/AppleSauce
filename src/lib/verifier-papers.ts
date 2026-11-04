@@ -21,8 +21,10 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object'
 
 // -------------------------------------------------------------------- papers
 
-/** A verifier holds at most 10 unfinished papers at a time (an HOD can still assign more by hand). */
-export const PAPER_LIMIT_NOTE = 'You get up to 10 papers at a time; more arrive as you finish.';
+/** A verifier holds at most 10 unfinished papers at a time (an HOD can still assign more by hand).
+ *  The 7 days are verifier_idle_days() (20261007140000): say so, or papers seem to change for no reason. */
+export const PAPER_LIMIT_NOTE =
+  'You get up to 10 papers at a time; more arrive as you finish. A paper with nothing done on it for 7 days goes back to the pool.';
 
 export interface MyPaper {
   assignment_id: number;

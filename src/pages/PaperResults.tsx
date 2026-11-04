@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowUp, FileText } from 'lucide-react';
@@ -5,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { PaperSheetCard } from '@/components/papers/paper-sheet-card';
 import { SearchControl } from '@/components/SearchControl';
 import { loadPaperIndex, hasYear } from '@/lib/question-bank';
+import { countPapers, paperCountLabel } from '@/lib/readable-papers';
 import { sanitizeForIlike } from '@/lib/ilike-sanitize';
 import { bankSubjectToSite, bankSubjectMatches } from '@/lib/subject-vocabulary';
 import { bankClassMatches } from '@/utils/romanNumerals';
@@ -372,6 +374,7 @@ export default function PaperResults() {
     } catch {
       // Leave the existing results in place; the button stays put so the
       // student can just try again rather than losing what already loaded.
+      toast.error('Could not load more papers. Your results are still here. Try again.');
     } finally {
       if (searchGen.isCurrent(gen)) setLoadingMore(false);
     }
@@ -486,6 +489,11 @@ export default function PaperResults() {
   const bankVisible = bankMatches.slice(0, bankShown);
   const shownPapers = page === 0 ? [...bankVisible, ...papers] : papers;
   const shownTotal = total + bankMatches.length;
+  /* Coming soon papers match filters and stay in the list, but are not
+     counted as papers a reader can open: the heading says both. The database
+     page (`total`, the submit-a-paper table) is readable by definition. */
+  const soonInMatches = countPapers(bankMatches).comingSoon;
+  const readyTotal = shownTotal - soonInMatches;
   const bankHasMore = page === 0 && bankMatches.length > bankShown;
 
   const hasMore = papers.length < total;
@@ -674,7 +682,9 @@ export default function PaperResults() {
             >
               {listLoading && shownTotal === 0 && shownPapers.length === 0
                 ? 'Counting…'
-                : `${shownTotal.toLocaleString('en-IN')} paper${shownTotal === 1 ? '' : 's'} found`}
+                : soonInMatches > 0
+                  ? paperCountLabel(readyTotal, soonInMatches)
+                  : `${shownTotal.toLocaleString('en-IN')} paper${shownTotal === 1 ? '' : 's'} found`}
             </span>
           </div>
         </BentoPanel>

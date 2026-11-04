@@ -42,15 +42,16 @@ export default function CheckerDummy() {
     <div
       role="region"
       aria-label="Dummy mode controls"
-      className="mb-3 flex w-full flex-wrap items-center gap-2 rounded-2xl bg-fuchsia-950 px-3 py-2 text-[12px] text-fuchsia-100"
+      // One row that scrolls sideways, so the verify screen (one viewport, no page scroll) keeps its height.
+      className="mb-2 flex w-full shrink-0 flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap rounded-[18px] bg-fuchsia-950 px-3 py-1.5 text-[12px] text-fuchsia-100"
     >
-      <span className="font-bold uppercase tracking-[0.08em]">Dummy mode, nothing is saved</span>
-      <label className="flex items-center gap-1">
+      <span className="shrink-0 font-bold uppercase tracking-[0.08em]">Dummy mode, nothing is saved</span>
+      <label className="flex shrink-0 items-center gap-1">
         Simulate
         <select
           value={sim}
           onChange={(e) => choose(e.target.value as DummySimulation)}
-          className="min-h-9 rounded-lg bg-fuchsia-900 px-2 text-fuchsia-50"
+          className="min-h-8 rounded-lg bg-fuchsia-900 px-2 text-fuchsia-50"
         >
           {SIMULATIONS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -84,7 +85,7 @@ export default function CheckerDummy() {
         Start over
       </DummyButton>
       <DummyButton onClick={() => setDebugOn((v) => !v)}>
-        {debugOn ? 'Admin debug chips: on' : 'Admin debug chips: off'}
+        {debugOn ? 'Debug ids: on' : 'Debug ids: off'}
       </DummyButton>
       <DummyButton
         className="ml-auto"
@@ -119,7 +120,7 @@ function DummyButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'min-h-9 rounded-full bg-fuchsia-800 px-3 font-bold text-fuchsia-50 hover:bg-fuchsia-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+        'min-h-8 shrink-0 rounded-full bg-fuchsia-800 px-3 font-bold text-fuchsia-50 hover:bg-fuchsia-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
         className,
       )}
     >

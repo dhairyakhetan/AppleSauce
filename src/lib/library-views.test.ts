@@ -60,16 +60,16 @@ describe('library views', () => {
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc: vi.fn(), from: vi.fn(), auth: { getSession: vi.fn(), onAuthStateChange: vi.fn() } } }));
 
 describe('admin nav', () => {
-  it('has six groups, one active page, and badges only for real counts', async () => {
+  it('has four tabs, one active, and a badge only for a real count', async () => {
     // The shell pulls in browser-only modules; give them a storage to read.
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
     vi.stubGlobal('sessionStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
     const { buildAdminNav } = await import('@/pages/admin/shell');
-    const nav = buildAdminNav('admin-queue', { adminQueue: 657, paperApprovals: 0 });
-    expect(new Set(nav.map((n) => n.group))).toEqual(new Set(['now', 'papers', 'people', 'teachers', 'logs', 'system']));
-    expect(nav.filter((n) => n.active).map((n) => n.key)).toEqual(['admin-queue']);
-    expect(nav.find((n) => n.key === 'admin-queue')?.count).toBe(657);
-    expect(nav.find((n) => n.key === 'ready')?.count).toBe(0);
+    const nav = buildAdminNav('applications', { approvals: 12, reviews: 4 });
+    expect(nav.map((n) => n.key)).toEqual(['people', 'teachers', 'logs', 'system']);
+    expect(nav.filter((n) => n.active).map((n) => n.key)).toEqual(['teachers']);
+    expect(nav.find((n) => n.key === 'teachers')?.count).toBe(16);
+    expect(nav.find((n) => n.key === 'logs')?.count).toBeUndefined();
     expect(nav.every((n) => n.short.length > 10)).toBe(true);
   }, 30_000);
 });

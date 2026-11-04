@@ -11,29 +11,34 @@ import { isMeteredConnection } from '@/lib/net-conditions';
 
 const CHUNKS: Record<string, () => Promise<unknown>> = {
   '/admin': () => import('@/pages/admin/index'),
-  '/admin/paper-approvals': () => import('@/pages/admin/paper-approvals'),
-  '/admin/admin-queue': () => import('@/pages/admin/admin-queue'),
-  '/admin/papers': () => import('@/pages/admin/papers'),
-  '/admin/library': () => import('@/pages/admin/library'),
-  '/admin/checkers': () => import('@/pages/admin/checkers'),
-  '/admin/team': () => import('@/pages/admin/team'),
-  '/admin/approvals': () => import('@/pages/admin/approvals'),
-  '/admin/reviews': () => import('@/pages/admin/reviews'),
-  '/admin/teachers': () => import('@/pages/admin/teachers'),
-  '/admin/activity': () => import('@/pages/admin/activity'),
-  '/admin/checker-log': () => import('@/pages/admin/checker-log'),
-  '/admin/audit': () => import('@/pages/admin/audit'),
-  '/admin/pipeline': () => import('@/pages/admin/pipeline'),
-  '/admin/feedback': () => import('@/pages/admin/feedback'),
   '/hod': () => import('@/pages/Hod'),
   '/checker': () => import('@/pages/Checker'),
+};
+
+/* The sections of the Admin page, by section key. A section link warms its own
+   chunk, so opening it shows the section from memory instead of a spinner. */
+const SECTION_CHUNKS: Record<string, () => Promise<unknown>> = {
+  positions: () => import('@/pages/admin/positions'),
+  verifiers: () => import('@/pages/admin/checkers'),
+  hods: () => import('@/pages/admin/checkers'),
+  reviewers: () => import('@/pages/admin/checkers'),
+  progress: () => import('@/pages/admin/team'),
+  applications: () => import('@/pages/admin/approvals'),
+  reviews: () => import('@/pages/admin/reviews'),
+  listed: () => import('@/pages/admin/teachers'),
+  'question-changes': () => import('@/pages/admin/activity'),
+  'checker-activity': () => import('@/pages/admin/checker-log'),
+  'admin-actions': () => import('@/pages/admin/audit'),
+  pipeline: () => import('@/pages/admin/pipeline'),
+  feedback: () => import('@/pages/admin/feedback'),
 };
 
 const warmed = new Set<string>();
 
 /** Safe to call as often as you like: each path is imported at most once. */
 export function prefetchAdminPath(path: string): void {
-  const load = CHUNKS[path];
+  const section = /[?&]section=([a-z-]+)/.exec(path)?.[1];
+  const load = section ? SECTION_CHUNKS[section] : CHUNKS[path];
   if (!load || warmed.has(path) || isMeteredConnection()) return;
   warmed.add(path);
   void load().catch(() => {

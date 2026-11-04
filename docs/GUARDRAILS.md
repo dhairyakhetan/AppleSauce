@@ -386,6 +386,12 @@ reproducible from this repo alone.
 
 - [x] `anon` cannot read question bodies, WhatsApp, phone, email or paper files
       — verified by curl, not by reading policy
+- [x] `teachers_list.whatsapp_number` closed to `anon` and `authenticated` (12 Oct 2026,
+      migration `20261012700000`, applied live after PR 83 and 84 were deployed): it had been
+      readable by one REST call, 148 numbers, through a table-level SELECT grant. Verified live
+      as a signed-out visitor: naming the column returns 401 / `42501`, the listing and profile
+      selects return 200, and the teacher pages load. Side effect, deliberate: the view
+      `teachers_enriched` (security_invoker, unused by the site) is no longer readable by anon
 - [x] `authenticated` cannot either, as of `20260918100000`
 - [x] Bulk dump closed: was 148 contacts in one request and 46,873 questions in
       ~47; now every read goes through a function that sees `auth.uid()`
@@ -484,6 +490,51 @@ reproducible from this repo alone.
 - `ACCEPTED` **An unknown class goes to any verifier** (owner, 2026-10-08). A
       verifier with no grade still counts as Class 12. A skipped question waits on
       the paper (no day window) and the paper stays open for that verifier.
+
+### Student-checker leak audit, the HOD desk and Admin (2026-10-11 to 2026-10-12)
+
+Measured by a read-only audit on 2026-10-11 (every write probe inside a transaction that ended in `raise exception`; a
+student was simulated by inserting a profile into `paper_checkers` and `verifier_profiles` inside the rolled-back
+transaction). Each fix below was rehearsed the same way, applied only after a clean rehearsal, then checked live. Not
+verified: real HTTP calls with a student JWT (the proofs are SQL-level role simulation).
+
+- [x] **F1 `P0` View write holes.** `public_profiles` and `teacher_comments_public` are updatable views owned by `postgres`
+      and had INSERT/UPDATE/DELETE/TRUNCATE granted to `anon` and `authenticated`: with the public key anyone could edit or
+      delete a profile (212 shown) or an approved review. Closed by `20261011170000_close_view_writes.sql` (also
+      `paper_read_stats`, `teachers_enriched`, `teacher_rating_stats`, `teacher_upvote_stats`). Re-probed live: writes
+      refused, SELECT still works. **Lesson: a view owned by `postgres` needs an explicit revoke of its write privileges by
+      name; `revoke ... from public` and RLS on the table beneath do not cover it.** Open: `alter default privileges ... revoke
+      all on tables from anon, authenticated` so a future view is closed by default (not done, a wider change).
+- [x] **F5 Local path in `source`.** Three verifier RPCs returned `audit_questions.source` with `snippet_path` (a laptop file
+      path). `20261011180000` returns `source - 'snippet_path'`. The 24,851 stored rows still carry the key (a data change,
+      not made).
+- [x] **F4 Legacy checker RPCs.** `checker_next_question()`, `checker_pass_question(uuid)` and
+      `checker_fix_question(uuid,text,text,numeric)` had no production caller; `20261011190000` revokes them from public,
+      anon and authenticated. Follow-up (code): `checkerSaveRoute` still has a `'legacy'` branch that would now fail 42501.
+- [x] **F3 Hand-out.** `distribute_unassigned_papers()` was executable by every checker and takes a global advisory lock.
+      `20261011200000`: HOD, admin or service role only; the throttled wrapper stays closed to API roles. Residual: the
+      internal marker is a custom setting, not a cryptographic guard.
+- [x] **F2 `audit-figures` storage policy.** Any active checker could list all 4,886 private objects (1,705 whole pages).
+      `20261011210000` replaces the policy: admin, HOD, or a checker holding the paper in the object's first path segment
+      (`checker_can_see_audit_object`, authenticated only). Not verified over HTTP with a student JWT.
+- [x] **F18 Profile lengths.** name <= 120, school <= 160, board <= 60 after trimming, error 22023 (`20261011220000`).
+- [x] **The `hod_*` family (HOD desk).** `hod_needs_you_papers/questions`, `hod_ready_papers`, `hod_paper_checks`,
+      `hod_paper_preview`, `hod_update_publish_meta`, `hod_approve_paper`, `hod_live_papers`, `hod_hide_paper`,
+      `hod_restore_paper`, `hod_edit_live_paper`, `hod_edit_question`, `hod_set_question_state`, `hod_student_uploads`,
+      `hod_review_upload`, `hod_paper_trail`, `hod_desk_counts`, plus `explain_assignment` and `ai_trust_overall`
+      (migrations `20261012100000` to `20261012400000`). **Rule: each is SECURITY DEFINER with `search_path = public, pg_temp`,
+      checks `is_hod()` inside (raising 42501), is revoked from public, anon AND authenticated, then granted to
+      `authenticated` only; anon must read `false` from `has_function_privilege` the day the function exists.** Maths live
+      copies are excluded (55000). Publishing from the HOD desk runs four hard checks first and uses the shared publish
+      function that `admin_approve_paper` also uses; set-aside questions publish only on the HOD's confirmation.
+- `ACCEPTED` **The HOD desk publishes** (owner, 2026-10-12): an HOD or admin publishes a paper; the pipeline still never does.
+- [ ] **`P1` Merge to `main` is the launch.** Both deployments share one database, so a migration applied for the test
+      site is already in force for the live site; the screens that use the new functions reach live users only on the
+      merge. Rehearsal and rollback: `docs/LAUNCH.md`. Before merging, re-list which `hod_*` migrations are applied
+      (the 12 October contract log in `Shikshaq Papers\pipeline\swarm\logs\hod_rpc_contract_20261012.md` marks the LIVE
+      ones) and re-run the anon `has_function_privilege` check.
+- [ ] **`P2` Signed-in checks.** F2 and the student screens need one pass with a real student account (the audit used role
+      simulation only).
 
 ## 3. Reliability and observability
 

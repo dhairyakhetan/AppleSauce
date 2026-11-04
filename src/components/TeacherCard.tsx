@@ -161,6 +161,7 @@ function TeacherCardComponent({
   const upvoteCount = getUpvoteCount(id);
   // One-shot "pop" on a successful save — see handleHeartClick/heartButton below.
   const [justLiked, setJustLiked] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
 
   const showFavourite = !hideFavourite && resolvedVariant !== 'grid-compact';
   const showUpvotes = (showUpvotesProp ?? !isFeatured) && !isSm;
@@ -228,8 +229,9 @@ function TeacherCardComponent({
     }
   };
 
-  const photo = imageUrl ? (
+  const photo = imageUrl && !imgFailed ? (
     <img
+      onError={() => setImgFailed(true)}
       /* 400, not the upload resolution. The card paints ~150-170px wide in
          the grid and 80px in the row variant, so 400 is comfortably 2x on a
          retina phone. One of these photos is 1.81 MB at source and 32 kB at

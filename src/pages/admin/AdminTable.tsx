@@ -184,7 +184,7 @@ export function AdminTable({ columns, rows, className, readOnly }: AdminTablePro
       <div className="hidden overflow-x-auto lg:grid" role="table" style={{ gridTemplateColumns: gridTemplate }}>
         <div
           role="row"
-          className="grid gap-3.5 px-[14px] py-[10px] shadow-[inset_0_-1px_0_#E7DFD5]"
+          className="grid gap-3.5 px-[14px] py-3 shadow-[inset_0_-1px_0_#E7DFD5]"
           style={SUBGRID_ROW}
         >
           {columns.map((c) => (

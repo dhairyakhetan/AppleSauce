@@ -5,11 +5,12 @@ import { useAuth } from '@/lib/auth-context';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { useAdminGuard, AdminGuardErrorState } from '@/components/AdminConsole';
 import { AdminHeader, AdminAuditNote, buildAdminNav } from '@/pages/admin/shell';
+import { AdminStack } from '@/pages/admin/embed';
 import { AdminPageIntroPanel } from '@/components/admin/AdminHelp';
 import { AdminTable, AdminPanelHeader, type AdminTableColumn, type AdminTableRow } from '@/pages/admin/AdminTable';
 import { AdminEmpty, AdminError, AdminLoading } from '@/components/admin/AdminState';
 import { AdminFilterChips } from '@/components/admin/AdminFilterChips';
-import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
+import { BentoPanel } from '@/components/layout/PageContainer';
 import { useAdminSectionCounts } from '@/pages/admin/useAdminSectionCounts';
 import { realCheckerLogApi } from '@/lib/checker-log-api';
 import { ROLE_LABELS, sinceWords, type CheckerLogApi, type CheckerRow } from '@/lib/checker-log';
@@ -94,14 +95,14 @@ export function AdminCheckerLogPage({
 
   if (checkingAdmin || loading) {
     return (
-      <BentoStack className="min-h-screen bg-muted">
+      <AdminStack>
         <AdminHeader nav={nav} signedInEmail={signedIn} />
         {banner}
         <BentoPanel fill="card" className="px-[18px] py-[18px]">
           <AdminLoading shape="table" rows={6} label="Loading the checker activity" />
         </BentoPanel>
         <AdminAuditNote />
-      </BentoStack>
+      </AdminStack>
     );
   }
   if (!dummy && guard.error) return <AdminGuardErrorState onRetry={guard.retry} />;
@@ -116,7 +117,7 @@ export function AdminCheckerLogPage({
     { key: 'name', label: 'Name', width: '2fr' },
     { key: 'last', label: 'Last active', width: '1.4fr' },
     { key: 'total', label: 'Actions', width: '0.8fr' },
-    { key: 'since', label: 'Since', width: '1fr' },
+    { key: 'since', label: 'First active', width: '1fr' },
   ];
   const tableRows: AdminTableRow[] = sorted.map((r) => ({
     id: r.actor_key,
@@ -139,7 +140,7 @@ export function AdminCheckerLogPage({
   }));
 
   return (
-    <BentoStack className="min-h-screen bg-muted">
+    <AdminStack>
       <AdminHeader nav={nav} signedInEmail={signedIn} />
       <AdminPageIntroPanel page="checker-log" />
       {banner}
@@ -190,7 +191,7 @@ export function AdminCheckerLogPage({
       </BentoPanel>
 
       <AdminAuditNote />
-    </BentoStack>
+    </AdminStack>
   );
 }
 

@@ -12,14 +12,17 @@ import imageCompression from 'browser-image-compression';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { invalidateTeacherCache, removeCache } from '@/utils/cache';
 import { AdminHeader, AdminAuditNote, buildAdminNav } from '@/pages/admin/shell';
+import { AdminStack } from '@/pages/admin/embed';
 import { AdminPageIntroPanel } from '@/components/admin/AdminHelp';
 import { AdminEmpty, AdminError } from '@/components/admin/AdminState';
 import { AdminFilterChips, type AdminFilterChip } from '@/components/admin/AdminFilterChips';
 import { TeacherEditDialog } from '@/components/admin/TeacherEditDialog';
 import { AdminTable, AdminTableSkeleton, AdminPanelHeader, AdminStatusPill, type AdminTableColumn, type AdminTableRow } from '@/pages/admin/AdminTable';
-import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
+import { BentoPanel } from '@/components/layout/PageContainer';
 import { fetchAdminContacts } from '@/lib/teacher-contact';
 import { formatFeeRange } from '@/lib/fee-range';
+import { formatDistanceToNow } from 'date-fns';
+import { timeWords } from '@/lib/history-labels';
 import { PREVIEW_TOOLS } from '@/lib/preview-tools';
 import { isDummyMode } from '@/lib/dummy-mode';
 import {
@@ -220,7 +223,14 @@ export function TeachersBody({
           <AdminStatusPill status={state} label={state === 'paused' ? 'Paused' : 'Live'} />
           {t.Featured ? <span className="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] font-bold text-brand-deep">Featured</span> : null}
         </span>,
-        t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-',
+        // Every date cell in an admin table is the same: relative, muted, with the full time on hover.
+        t.created_at ? (
+          <span key="joined" className="text-warm-meta" title={timeWords(t.created_at)}>
+            {formatDistanceToNow(new Date(t.created_at), { addSuffix: true })}
+          </span>
+        ) : (
+          '-'
+        ),
       ],
       actions: [
         { label: busy ? '...' : 'Edit', tone: 'primary', onClick: () => onEdit(t), disabled: busy },
@@ -350,7 +360,7 @@ export function AdminTeachersPage({
   }));
 
   return (
-    <BentoStack className="min-h-screen bg-muted">
+    <AdminStack>
       <AdminHeader nav={nav} signedInEmail={signedIn} />
       {banner}
       <AdminPageIntroPanel page="teachers" />
@@ -371,11 +381,11 @@ export function AdminTeachersPage({
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search teachers..."
                 aria-label="Search teachers"
-                className="h-11 w-full max-w-full rounded-full bg-muted pl-9 pr-4 text-sm text-foreground placeholder:text-warm-label outline-none transition-shadow duration-150 focus-visible:ring-2 focus-visible:ring-brand"
+                className="h-10 w-full max-w-full rounded-full bg-muted pl-9 pr-4 text-sm text-foreground placeholder:text-warm-label outline-none transition-shadow duration-150 focus-visible:ring-2 focus-visible:ring-brand"
               />
             </div>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as TeacherSort)}>
-              <SelectTrigger aria-label="Order" className="h-11 w-[150px] shrink-0 rounded-full border-0 bg-muted text-sm font-semibold sm:w-[170px]">
+              <SelectTrigger aria-label="Order" className="h-10 w-[150px] shrink-0 rounded-full border-0 bg-muted text-sm font-semibold sm:w-[170px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -420,7 +430,7 @@ export function AdminTeachersPage({
         onClose={() => setEditing(null)}
         uploadHero={(id, file) => api.uploadHero(id, file)}
       />
-    </BentoStack>
+    </AdminStack>
   );
 }
 

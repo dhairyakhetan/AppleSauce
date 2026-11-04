@@ -314,6 +314,17 @@ export async function getShikshaqmineProfileBySlug(slug: string): Promise<Shiksh
   return mapShikshaqmineProfileRow(data);
 }
 
+/* Explicit column list for the profile page's teachers_list read. Never
+   select('*') here: the teachers_list WhatsApp column is a contact column and is
+   revoked from anon and authenticated (migration
+   20261012700000_revoke_teacher_whatsapp_column.sql). A NAMED revoked column
+   fails the whole request with 401, so this list must not name it either; the
+   number is reached only through teacher_whatsapp_link() on tap. `subjects` the
+   text column is left out on purpose: the `subjects(name, slug)` relation owns
+   that key in the returned row. */
+export const TEACHER_PROFILE_COLUMNS =
+  'id, name, slug, subject_id, image_url, bio, location, is_verified, is_featured, created_at, classes, honorific, subjects(name, slug)';
+
 /** teachers_list row (with subjects relation) joined with the Shikshaqmine profile slice, by slug. */
 export async function getTeacherBySlug<T = any>(slug: string): Promise<{ teacher: T | null; shikshaqmine: ShikshaqmineProfile | null }> {
   const teacherCacheKey = `teacher_profile_row_${slug}`;
@@ -331,7 +342,7 @@ export async function getTeacherBySlug<T = any>(slug: string): Promise<{ teacher
       ? Promise.resolve(null)
       : supabase
           .from('teachers_list')
-          .select('*, subjects(name, slug)')
+          .select(TEACHER_PROFILE_COLUMNS)
           .eq('slug', slug)
           .maybeSingle(),
     getShikshaqmineProfileBySlug(slug),
@@ -364,6 +375,18 @@ export async function getWhatsAppLinkBySlug(slug: string): Promise<string | null
     return null;
   }
   return data ?? null;
+}
+
+/** Like getWhatsAppLinkBySlug, but says whether the lookup FAILED (network or server)
+ *  apart from the teacher having no number on file. A failed lookup must never be
+ *  turned into Shikshaq's own number: the parent would be sent to the wrong chat. */
+export async function lookupWhatsAppLink(slug: string): Promise<{ failed: boolean; link: string | null }> {
+  const { data, error } = await supabase.rpc('teacher_whatsapp_link', { p_slug: slug });
+  if (error) {
+    if (import.meta.env.DEV) console.warn('lookupWhatsAppLink error:', error);
+    return { failed: true, link: null };
+  }
+  return { failed: false, link: data ?? null };
 }
 
 /* ---------------------------------------------------------------------------

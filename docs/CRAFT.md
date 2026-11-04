@@ -113,7 +113,7 @@ well as a laptop. Mistakes must be cheap and say so in plain words:
   to which is the picture"). The typed words sit in a plain neutral card with the
   chip "Typed by the computer"; the printed paper sits in a brand-framed box with
   the chip "Photo of the printed paper". On a phone they are two big tabs, Typed
-  and Printed (Printed first), over the same question. Question number and marks
+  and Printed (Typed first, and back on Typed for every new question, so the words being checked are never hidden), over the same question. Question number and marks
   are chips at the top of the typed card and become boxes in Fix mode.
 - **The tools are in words, always visible**: Fix the words, Split into two
   questions, Edit a formula, This is just the OR, each with a one-line

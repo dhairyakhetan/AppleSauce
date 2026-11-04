@@ -1,0 +1,39 @@
+/* The verify screen as a bento grid (12 Oct 2026): the whole screen fits one
+   viewport, so nothing here may add height to the page. Only a tile scrolls.
+
+   Fade cue: a soft edge at the foot of a tile that has more below. Drawn in the
+   tile's own fill (a raw var cannot take /opacity, so the two colours are named
+   here and the alpha comes from `transparent`). */
+
+.checker-fade {
+  background: linear-gradient(to top, var(--checker-fade-from, var(--warm-card)) 0%, transparent 100%);
+}
+
+.checker-fade-white {
+  --checker-fade-from: #ffffff;
+}
+
+/* The phone's tile pager: one tile per swipe, snapping, no visible scrollbar. */
+.checker-pager {
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.checker-pager::-webkit-scrollbar {
+  display: none;
+}
+
+.checker-pane {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* A scroller inside a tile keeps its own scrolling: it must not hand the end of
+   a scroll on to the page (which never scrolls here) or to the pager. */
+.checker-tile-scroll {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--warm-hairline-strong) transparent;
+}

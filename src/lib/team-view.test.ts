@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moreCount, nextPaperLimit, papersShownText, summaryLine, totalsOf } from '@/lib/team-view';
+import { activeWords, moreCount, nextPaperLimit, papersShownText, progressWords, summaryLine, totalsOf } from '@/lib/team-view';
 import type { TeamStatsRow } from '@/lib/team-dashboard-api';
 
 const row = (over: Partial<TeamStatsRow>): TeamStatsRow => ({
@@ -45,5 +45,18 @@ describe('papers window', () => {
     expect(moreCount(30, 47)).toBe(17);
     expect(moreCount(30, 100)).toBe(30);
     expect(moreCount(47, 47)).toBe(0);
+  });
+
+  it('says how many of the listed verifiers checked a question, and lists the idle ones too', () => {
+    expect(activeWords([row({ questions_checked: 5 }), row({ questions_checked: 0 }), row({ questions_checked: 2 })])).toBe(
+      '2 of 3 verifiers checked a question',
+    );
+    expect(activeWords([row({ questions_checked: 0 })])).toBe('0 of 1 verifier checked a question');
+  });
+
+  it('says nothing assigned for a paper with no questions, and open and done otherwise', () => {
+    expect(progressWords({ total: 0, open_doubts: 0, pct_done: 0 })).toBe('Nothing assigned');
+    expect(progressWords({ total: 20, open_doubts: 2, pct_done: 90 })).toBe('2 open · 90% done');
+    expect(progressWords({ total: 9, open_doubts: 0, pct_done: 100 })).toBe('0 open · 100% done');
   });
 });

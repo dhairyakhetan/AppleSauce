@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
+import { errorWords } from '@/lib/hod-publish';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { EmptyNote, ListSkeleton, LoadError, Tile, ago } from '@/components/hod/HodShared';
-import { VerifierProfileForm } from '@/components/hod/VerifierProfileForm';
+import { VerifierDetailsForm } from '@/components/hod/VerifierDetailsForm';
 import { useConfirm } from '@/components/ui/use-confirm';
 import { actionToneClass } from '@/lib/checker-button-styles';
-import { requestWouldBeDropped } from '@/lib/hod-desk';
+import { UNASSIGNED_SHOWN } from '@/lib/hod-desk';
 import { formatGrade, formatValidUntil, parseSubjectList } from '@/lib/verifier-papers';
 import {
   memberName,
@@ -18,18 +19,31 @@ import {
   type HodTeamMember,
   type HodVerifierProfile,
 } from '@/lib/hod-api';
+import {
+  draftFromProfile,
+  gradeNotSetLine,
+  planProfileSave,
+  subjectChoices,
+  type DetailsDraft,
+} from '@/lib/verifier-profile-edit';
 import { cn } from '@/lib/utils';
 
 /* "Verifiers": how each verifier is doing (a table, plain words, scrolls
    sideways on a phone with the name held in place), and below it each
-   verifier's details and preferred subjects. A verifier can fill in their
-   own details (20261008100000) and the HOD can change them; preferred
-   subjects are the HOD's, a verifier can only ask. Anyone whose details are
-   missing or expired is listed first: expired gets no new papers, missing
-   still gets papers but with no class limit. */
+   verifier's details and preferred subjects. Each row has an "Edit details"
+   control that opens a form in place: name, grade, school, board, valid until
+   (hod_set_verifier_profile) and the preferred subjects as checkboxes
+   (hod_set_preferred_subjects). A verifier can fill in their own details
+   (20261008100000) and the HOD can change them; preferred subjects are the
+   HOD's, a verifier can only ask. Anyone whose details are missing or expired
+   is listed first: expired gets no new papers, missing still gets papers but
+   with no class limit. */
 
 export const TEAM_KEY = (scope: string) => ['hod', scope, 'team'] as const;
 export const PROFILES_KEY = (scope: string) => ['hod', scope, 'profiles'] as const;
+/** The same key and request as AssignmentsTab's unassigned list, so the two tabs share one fetch. */
+const WAITING_KEY = (scope: string) => ['hod', scope, 'unassigned'] as const;
+const SUBJECTS_KEY = (scope: string) => ['hod', scope, 'subjects'] as const;
 
 function cell(m: HodTeamMember, key: string) {
   switch (key) {
@@ -97,56 +111,101 @@ function AnalyticsTable({ team }: { team: HodTeamMember[] }) {
   );
 }
 
-function ProfileRow({ p, api, scope }: { p: HodVerifierProfile; api: HodApi; scope: string }) {
+function errorText(err: unknown): string {
+  return errorWords(err, 'That did not work. Nothing was changed. Try again.');
+}
+
+/** One verifier's row: the disclosure button, the inline form, and the request banner. Exported for tests. */
+export function ProfileRow({ p, api, scope, choices }: { p: HodVerifierProfile; api: HodApi; scope: string; choices: string[] }) {
   const qc = useQueryClient();
   const { confirm, confirmDialog } = useConfirm();
-  const [editing, setEditing] = useState(false);
-  const saved = p.preferred_subjects.join(', ');
-  const [subjects, setSubjects] = useState(saved);
-  // Show what was saved: the server stores the papers' own spelling
-  // ("maths" saves as "Mathematics", 20261007170000).
-  useEffect(() => setSubjects(saved), [saved]);
+  const name = p.full_name ?? p.name ?? p.email ?? 'Unnamed verifier';
+  const formId = `verifier-details-${p.user_id}`;
+  const [open, setOpen] = useState(false);
+  const [justOpened, setJustOpened] = useState(false);
+  const [draft, setDraft] = useState<DetailsDraft>(() => draftFromProfile(p));
+  const [selected, setSelected] = useState<string[]>(p.preferred_subjects);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  /** The server's reason, kept on screen: "No papers in Astrology. Subjects with papers: ..." is too long for a toast. */
-  const [refusal, setRefusal] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [requestBusy, setRequestBusy] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const flag = profileFlag(p);
+  const grade = gradeNotSetLine(p);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['hod', scope] });
 
-  async function run(fn: () => Promise<unknown>, ok: string) {
-    setBusy(true);
-    setRefusal(null);
-    try {
-      await fn();
-      toast.success(ok);
-      refresh();
-      return true;
-    } catch (err) {
-      const raw = err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : '';
-      setRefusal(raw || 'That did not work. Try again.');
-      return false;
-    } finally {
-      setBusy(false);
-    }
+  /** Opening always starts from what is saved, so a half-typed draft from last time is not shown as if it were saved. */
+  function openForm() {
+    setDraft(draftFromProfile(p));
+    setSelected(p.preferred_subjects);
+    setProblem(null);
+    setError(null);
+    setJustOpened(true);
+    setOpen(true);
   }
 
-  const name = p.full_name ?? p.name ?? p.email ?? 'Unnamed verifier';
+  function closeForm() {
+    setOpen(false);
+    setJustOpened(false);
+    setProblem(null);
+    setError(null);
+    toggleRef.current?.focus();
+  }
 
-  /** Saving the box settles a pending request and the server forgets it, so a list that leaves out
-   *  something they asked for is confirmed first (Approve keeps it). */
-  async function saveSubjects() {
-    const typed = parseSubjectList(subjects);
-    const left = requestWouldBeDropped(p.requested_subjects, typed);
-    if (left.length > 0) {
+  async function save() {
+    const plan = planProfileSave(draft, selected, p);
+    setProblem(plan.problem);
+    setError(null);
+    if (plan.problem) return;
+    if (!plan.setDetails && !plan.setSubjects) {
+      closeForm();
+      return;
+    }
+    /** Saving the subject list settles a pending request and the server forgets it, so a list that leaves out
+     *  something they asked for is confirmed first (Approve keeps it). */
+    if (plan.dropped.length > 0) {
       const ok = await confirm({
-        title: `Save without ${left.join(', ')}?`,
-        description: `${name} asked for ${p.requested_subjects.join(', ')}. Saving this list closes their request and leaves out ${left.join(', ')}. They are not told.`,
+        title: `Save without ${plan.dropped.join(', ')}?`,
+        description: `${name} asked for ${p.requested_subjects.join(', ')}. Saving this list closes their request and leaves out ${plan.dropped.join(', ')}. They are not told.`,
         confirmLabel: 'Save without it',
       });
       if (!ok) return;
     }
-    await run(() => api.setPreferred(p.user_id, typed), 'Preferred subjects saved.');
+    setBusy(true);
+    let detailsSaved = false;
+    try {
+      if (plan.setDetails && plan.detailsInput) {
+        await api.setProfile(p.user_id, plan.detailsInput);
+        detailsSaved = true;
+      }
+      if (plan.setSubjects) await api.setPreferred(p.user_id, plan.subjects);
+      toast.success(plan.setDetails && plan.setSubjects ? 'Details and subjects saved.' : plan.setDetails ? 'Details saved.' : 'Preferred subjects saved.');
+      setOpen(false);
+      setJustOpened(false);
+      toggleRef.current?.focus();
+    } catch (err) {
+      setError(detailsSaved ? `The details are saved, but the subjects were not. ${errorText(err)}` : errorText(err));
+    } finally {
+      setBusy(false);
+      refresh();
+    }
   }
+
   const approved = parseSubjectList([...p.preferred_subjects, ...p.requested_subjects].join(', '));
+  async function approveRequest() {
+    setRequestBusy(true);
+    setRequestError(null);
+    try {
+      await api.setPreferred(p.user_id, approved);
+      toast.success('Approved. Those subjects are now preferred.');
+      refresh();
+    } catch (err) {
+      setRequestError(errorText(err));
+    } finally {
+      setRequestBusy(false);
+    }
+  }
 
   return (
     <li className="rounded-2xl bg-muted p-4" data-testid="profile-row">
@@ -157,6 +216,14 @@ function ProfileRow({ p, api, scope }: { p: HodVerifierProfile; api: HodApi; sco
             {p.missing
               ? 'No details yet'
               : `${formatGrade(p.grade)} · ${p.school ?? 'No school'} · ${p.board ?? 'No board'} · valid until ${formatValidUntil(p.valid_until)}`}
+          </p>
+          {grade ? (
+            <p className="text-[12px] text-warm-meta" data-testid="grade-not-set">
+              {grade}
+            </p>
+          ) : null}
+          <p className="mt-1 text-[13px] text-warm-secondary" data-testid="preferred-summary">
+            Preferred subjects: {p.preferred_subjects.length > 0 ? p.preferred_subjects.join(', ') : 'none yet'}
           </p>
         </div>
         {flag ? (
@@ -172,71 +239,58 @@ function ProfileRow({ p, api, scope }: { p: HodVerifierProfile; api: HodApi; sco
         ) : null}
       </div>
 
-      {editing ? (
-        <div className="mt-3">
-          <VerifierProfileForm
-            initial={p}
-            busy={busy}
-            onCancel={() => setEditing(false)}
-            onSave={(input) => void run(() => api.setProfile(p.user_id, input), 'Details saved.').then((ok) => ok && setEditing(false))}
-          />
-        </div>
-      ) : (
-        <div className="mt-2">
-          <button type="button" className={actionToneClass('muted')} disabled={busy} onClick={() => setEditing(true)}>
-            {p.missing ? 'Fill in details' : p.expired ? 'Refresh details' : 'Edit details'}
-          </button>
-        </div>
-      )}
-
-      <div className="mt-3 text-[13px]">
-        <label htmlFor={`pref-${p.user_id}`} className="font-semibold text-foreground">
-          Preferred subjects
-        </label>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <input
-            id={`pref-${p.user_id}`}
-            value={subjects}
-            onChange={(e) => setSubjects(e.target.value)}
-            placeholder="Mathematics, Physics"
-            className="min-h-[40px] min-w-[14rem] flex-1 rounded-xl bg-card px-3 text-[14px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-brand"
-          />
-          <button
-            type="button"
-            disabled={busy}
-            className={actionToneClass('dark')}
-            onClick={() => void saveSubjects()}
-          >
-            Save subjects
-          </button>
-        </div>
-        {refusal ? (
-          <p role="alert" className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-[13px] text-destructive" data-testid="profile-refusal">
-            {refusal}
-          </p>
-        ) : null}
-        {p.requested_subjects.length > 0 ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-brand-subtle px-3 py-2" data-testid="subject-request">
-            <span className="text-foreground">
-              <span className="font-semibold">Asked for: </span>
-              {p.requested_subjects.join(', ')}
-              {p.requested_at ? ` (${ago(p.requested_at)})` : ''}
-            </span>
-            <button
-              type="button"
-              disabled={busy}
-              className={actionToneClass('mint')}
-              onClick={() =>
-                void run(() => api.setPreferred(p.user_id, approved), 'Approved. Those subjects are now preferred.').then((ok) => {
-                  if (ok) setSubjects(approved.join(', '));
-                })
-              }
-            >
-              Approve
-            </button>
-          </div>
-        ) : null}
+      <div className="mt-3">
+        <button
+          ref={toggleRef}
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? formId : undefined}
+          disabled={busy}
+          className={actionToneClass('muted')}
+          onClick={() => (open ? closeForm() : openForm())}
+        >
+          Edit details
+        </button>
       </div>
+
+      {open ? (
+        <div className="mt-3" id={formId}>
+          <VerifierDetailsForm
+            idBase={formId}
+            name={name}
+            draft={draft}
+            onDraft={setDraft}
+            subjects={selected}
+            choices={choices}
+            onSubjects={setSelected}
+            problem={problem}
+            error={error}
+            busy={busy}
+            autoFocus={justOpened}
+            onSave={() => void save()}
+            onCancel={closeForm}
+            formId={`${formId}-form`}
+          />
+        </div>
+      ) : null}
+
+      {p.requested_subjects.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-brand-subtle px-3 py-2 text-[13px]" data-testid="subject-request">
+          <span className="text-foreground">
+            <span className="font-semibold">Asked for: </span>
+            {p.requested_subjects.join(', ')}
+            {p.requested_at ? ` (${ago(p.requested_at)})` : ''}
+          </span>
+          <button type="button" disabled={requestBusy} className={cn(actionToneClass('brand'), 'h-[46.5px]')} onClick={() => void approveRequest()}>
+            Approve
+          </button>
+          {requestError ? (
+            <p role="alert" className="w-full text-destructive" data-testid="request-error">
+              {requestError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {confirmDialog}
     </li>
   );
@@ -245,6 +299,10 @@ function ProfileRow({ p, api, scope }: { p: HodVerifierProfile; api: HodApi; sco
 export function VerifiersTab({ api, scope }: { api: HodApi; scope: string }) {
   const teamQ = useQuery({ queryKey: TEAM_KEY(scope), queryFn: () => api.team(), staleTime: 15_000, refetchOnMount: true });
   const profilesQ = useQuery({ queryKey: PROFILES_KEY(scope), queryFn: () => api.profiles(), staleTime: 15_000, refetchOnMount: true });
+  /** Only feeds the subject boxes; if it fails the boxes simply offer fewer subjects. */
+  const waitingQ = useQuery({ queryKey: WAITING_KEY(scope), queryFn: () => api.unassignedPapers(UNASSIGNED_SHOWN + 1), staleTime: 10_000, refetchOnMount: true });
+  /** The full subject list for the boxes (hod_list_subjects); if it fails the boxes fall back to what the desk holds. */
+  const subjectsQ = useQuery({ queryKey: SUBJECTS_KEY(scope), queryFn: () => api.subjects(), staleTime: 5 * 60_000 });
 
   if (teamQ.isLoading || profilesQ.isLoading) return <ListSkeleton label="Loading verifiers" />;
   if (teamQ.isError) return <LoadError what="The verifiers" onRetry={() => void teamQ.refetch()} />;
@@ -252,6 +310,12 @@ export function VerifiersTab({ api, scope }: { api: HodApi; scope: string }) {
   if (team.length === 0) return <EmptyNote>There are no verifiers yet. An admin adds them on the Verifiers page.</EmptyNote>;
   const profiles = sortProfiles(profilesQ.data ?? []);
   const needing = profiles.filter((p) => profileFlag(p) !== null).length;
+  const choices = subjectChoices({
+    held: [...team.flatMap((m) => m.subjects), ...(subjectsQ.data ?? []).map((s) => s.name)],
+    waiting: (waitingQ.data ?? []).map((u) => u.subject ?? '').filter(Boolean),
+    profiles,
+    selected: [],
+  });
 
   return (
     <div className="space-y-8">
@@ -274,7 +338,7 @@ export function VerifiersTab({ api, scope }: { api: HodApi; scope: string }) {
         ) : (
           <ul className="space-y-3">
             {profiles.map((p) => (
-              <ProfileRow key={p.user_id} p={p} api={api} scope={scope} />
+              <ProfileRow key={p.user_id} p={p} api={api} scope={scope} choices={choices} />
             ))}
           </ul>
         )}

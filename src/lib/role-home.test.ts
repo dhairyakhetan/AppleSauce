@@ -7,7 +7,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 
 import { ADMIN_HOME, CHECKER_HOME, HOD_HOME, TEACHER_REVIEW_HOME, TEAMS, homeFor, roleGroups, roleLinks, type Roles } from '@/lib/role-home';
 import { LINK_ICON, TEAM_STYLE } from '@/components/layout/team-style';
-import { ADMIN_GROUPS } from '@/lib/admin-hints';
+import { ADMIN_TABS } from '@/lib/admin-hints';
 import { buildAdminNav } from '@/pages/admin/shell';
 
 /* Each role lands on one home, and every link the roles are given resolves to
@@ -113,24 +113,23 @@ describe('the games team in the account menu', () => {
   });
 });
 
-describe('admin menu after the clean-up', () => {
-  const nav = buildAdminNav('library');
+describe('admin menu after the rework', () => {
+  const nav = buildAdminNav('teachers');
 
-  it('has six tabs by job, each page in the group where an admin would look for it', () => {
-    expect(ADMIN_GROUPS.map((g) => g.label)).toEqual(['Needs you', 'Papers', 'People', 'Teachers', 'Logs', 'System']);
-    const pagesOf = (key: string) => ADMIN_GROUPS.find((g) => g.key === key)!.pages;
-    expect(pagesOf('people')).toContain('hod');
-    expect(pagesOf('papers')).toContain('admin-queue');
-    expect(pagesOf('teachers')).toContain('reviews');
+  it('has four tabs by job, each page in the tab where an admin would look for it', () => {
+    expect(ADMIN_TABS.map((t) => t.label)).toEqual(['People', 'Teachers', 'Logs', 'System']);
+    const pagesOf = (key: string) => ADMIN_TABS.find((t) => t.key === key)!.sections.map((s) => s.page);
+    expect(pagesOf('people')).toEqual(expect.arrayContaining(['checkers', 'hods', 'reviewers', 'team']));
+    expect(pagesOf('teachers')).toEqual(['applications', 'reviews', 'teachers']);
     expect(pagesOf('system')).toContain('feedback');
-    expect(pagesOf('logs')).toEqual(expect.arrayContaining(['audit', 'checker-log']));
+    expect(pagesOf('logs')).toEqual(expect.arrayContaining(['audit', 'checker-log', 'activity']));
   });
 
-  it('puts the HOD desk in the menu and it resolves', () => {
-    const hod = nav.find((n) => n.key === 'hod');
-    expect(hod?.path).toBe('/hod');
-    expect(hod?.label).toBe('HOD desk');
+  it('leaves the paper queues to the HOD desk, which an admin can open', () => {
+    const labels = nav.map((n) => n.label);
+    for (const gone of ['Needs you', 'Papers', 'Library', 'Admin queue', 'Student uploads']) expect(labels).not.toContain(gone);
     expect(matches('/hod')).toBe(true);
+    expect(roleLinks(admin).map((l) => l.to)).toContain('/hod');
   });
 
   it('every menu link resolves', () => {

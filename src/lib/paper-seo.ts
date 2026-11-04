@@ -51,10 +51,11 @@ function clean(value: string | null | undefined): string {
   return (value ?? '').trim();
 }
 
-/** Years arrive as the string 'null' from older imports. */
+/** Years arrive as the string 'null' from older imports, and an undated paper
+ *  can read as '0'. Neither is a year. */
 function realYear(year: string | null | undefined): string {
   const y = clean(year);
-  return y && y.toLowerCase() !== 'null' ? y : '';
+  return y && y.toLowerCase() !== 'null' && y !== '0' ? y : '';
 }
 
 function realExam(exam: string | null | undefined): string {

@@ -28,6 +28,7 @@ const ACTION_LABEL: Record<string, string> = {
   checker_ask_help: 'Asked for help',
   checker_skip: 'Skipped',
   verifier_undo: 'Undid the last answer',
+  verifier_reopen: 'Reopened a Done question to edit it',
   verifier_or_separator: 'Marked as just the OR between two questions',
   published: 'Published to the live site',
   live_apply: 'Copied onto the live site',

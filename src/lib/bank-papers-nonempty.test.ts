@@ -5,12 +5,12 @@ import { describe, expect, it } from 'vitest';
 /* Owner, 2026-09-28: papers with no questions are never shown. Every public
    read of bank_papers that filters is_published must also filter
    question_count > 0, or an empty paper reappears in the library, the
-   counts, the sitemap or the prerendered pages. */
+   counts, the sitemap or the prerendered pages. (The counts no longer
+   query bank_papers on their own: useSiteCounts, Index and About read the one
+   readable-paper total, whose query lives in lib/readable-papers.ts and is
+   pinned by readable-papers.test.ts.) */
 const FILES = [
   'src/lib/question-bank.ts',
-  'src/hooks/useSiteCounts.ts',
-  'src/pages/Index.tsx',
-  'src/pages/About.tsx',
   'src/pages/BankPaper.tsx',
   'scripts/prerender.ts',
   'scripts/generate-sitemap.ts',

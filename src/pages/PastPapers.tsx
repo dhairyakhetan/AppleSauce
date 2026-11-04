@@ -4,6 +4,7 @@ import { Navigate, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, BookOpen, ChevronDown, FlaskConical, Languages, Calculator, Brain, Landmark as LandmarkIcon, Dna, Monitor, Wallet, FileText, Search, ShieldCheck, Sparkles } from 'lucide-react';
 import { SearchControl } from '@/components/SearchControl';
 import { loadPaperIndex, hasYear } from '@/lib/question-bank';
+import { countPapers, isComingSoon, type ComingSoonShape } from '@/lib/readable-papers';
 import { coverPaper, coverMeta } from '@/lib/paper-cover-mapping';
 import { EmptyResults } from '@/components/EmptyResults';
 import { usePageMeta } from '@/hooks/usePageMeta';
@@ -400,14 +401,11 @@ export default function PastPapers() {
     bankPapers.forEach((p) => { out[p.board] = (out[p.board] ?? 0) + 1; });
     return out;
   }, [landing.data, bankPapers]);
-  const totalPapers = (landing.data?.totalPapers ?? 0) + bankPapers.length || null;
-  /* 2026-09-26: by product-owner decision this now equals totalPapers --
-     every LISTED paper counts, needs_review or not (see
-     20260926030000_site_counts_include_needs_review.sql, the same reversal
-     applied to site_counts()). Kept as its own variable rather than replacing
-     every totalFreePapers reference, so this is the one place to revisit if
-     "free to read" copy ever needs the smaller, needs_review-excluded figure
-     again. */
+  /* Readable bank papers only (lib/readable-papers.ts): the Coming soon cards
+     below stay on the shelf and in the library but are not a total, so this
+     matches the footer, home and About. */
+  const totalPapers = (landing.data?.totalPapers ?? 0) + countPapers(bankPapers as ComingSoonShape[]).ready || null;
+  /* Same number under the name the "free to read" copy has always used. */
   const totalFreePapers = totalPapers;
   /* Same idea as home's adaptive hero (resolveHeroCopy) and the footer's
      sign-off pool: the signed-in "N new papers waiting" branch below
@@ -687,7 +685,7 @@ export default function PastPapers() {
                     /* Not auth-locked for now: reading is the point, and a
                        gate on a free library only stops people seeing it. */
                     locked={false}
-                    comingSoon={(p as { _needsReview?: boolean })._needsReview === true}
+                    comingSoon={isComingSoon(p as ComingSoonShape)}
                     size="desktop"
                     className="animate-card-reveal motion-reduce:animate-none !h-[228px] !w-[150px]"
                   />

@@ -5,19 +5,6 @@
 > `src/dummy/games-*` and `GamesDummy.tsx`, and `supabase/games/`. Everything else about Shikshaq (the checks, the
 > design rules, the security model) is in the root `CLAUDE.md`, which applies here too.
 
-## Read first: this copy is the games branch
-
-(About the `games` branch of `dhairyakhetan/AppleSauce` only: leave this section out of the Shikshaq pull request.)
-
-This is branch `games` of `dhairyakhetan/AppleSauce`, not the Shikshaq repo. Its first commit is Shikshaq's `main`
-exactly as downloaded on 11 October 2026; the games work goes on top, so the difference from that first commit is what
-gets handed to the Shikshaq repo (`CHANGES.md` says how). The games site it comes from is `main` of this same repo
-(shikshaq-games.vercel.app).
-
-- **Push only to `games`**: `git push -u origin games`, nothing else. Never run `npm run push:all` here, and never add
-  or push to the Shikshaq or `kanitest` remotes. "Two remotes, ONE branch" in the root `CLAUDE.md` is about the
-  Shikshaq repo itself.
-
 ## The live database
 
 The `games` schema goes into Shikshaq's live database, which cannot be restored: there is no backup history to go back

@@ -120,6 +120,7 @@ export function useToggleRelation(opts: UseToggleRelationOptions): UseToggleRela
   const [ids, setIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const idsRef = useRef(ids);
+  const failedToastRef = useRef(false);
   idsRef.current = ids;
 
   const cacheKey = useCallback((uid: string) => `${cacheKeyPrefix}_${uid}`, [cacheKeyPrefix]);
@@ -171,7 +172,14 @@ export function useToggleRelation(opts: UseToggleRelationOptions): UseToggleRela
         setCachedIds(key, newIds);
       } catch (error) {
         if (import.meta.env.DEV) console.error(`Error fetching ${table}:`, error);
-        if (!cached) setIds(new Set());
+        if (!cached) {
+          setIds(new Set());
+          // An empty set reads as "you have saved nothing". Say it is a failed load instead, once.
+          if (!failedToastRef.current) {
+            failedToastRef.current = true;
+            toast.error('Could not load your saved teachers, so the hearts may look empty. Reload to try again.');
+          }
+        }
       } finally {
         setLoading(false);
       }

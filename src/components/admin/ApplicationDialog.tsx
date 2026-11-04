@@ -7,7 +7,7 @@ import { AdminPillButton } from '@/components/admin/AdminPillButton';
 import { AdminStatusPill } from '@/pages/admin/AdminTable';
 import { validateImageSrc } from '@/utils/imageSanitizer';
 import { formatFeeRange } from '@/lib/fee-range';
-import { APPLICATION_STATUS_LABEL, docsLabel } from '@/lib/teacher-review-api';
+import { APPLICATION_STATUS_LABEL, docsLabel, placeWords } from '@/lib/teacher-review-api';
 import { STATUS_TONE, TEXTED_OPTIONS, type TeacherApplication, type TextedStatus } from '@/lib/admin-applications';
 import { cn } from '@/lib/utils';
 
@@ -218,7 +218,7 @@ export function ApplicationDialog({ app, position, prevId, nextId, reviewerName,
 
           <Section title="Where they teach" wide>
             <dl className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <Field label="Location option">{app.location_v2 || NOT_SAID}</Field>
+              <Field label="Where they teach">{placeWords(app.location_v2)}</Field>
               <Field label="Areas, student's home">{app.students_home_areas || NOT_SAID}</Field>
               <Field label="Areas, teacher's home">{app.tutors_home_areas || NOT_SAID}</Field>
             </dl>

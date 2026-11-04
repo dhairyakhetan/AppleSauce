@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Menu as MenuIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { BentoStack, BentoPanel } from '@/components/layout/PageContainer';
@@ -19,6 +20,7 @@ import { BOARDS } from '@/lib/hod-api';
 import { CHIP, actionToneClass } from '@/lib/checker-button-styles';
 import { CHECKER_HELP_PATH, CHECKER_PRACTICE_PATH } from '@/lib/checker-onboarding';
 import { GIVEN_BY_HOD, paperLabel } from '@/lib/checker-progress';
+import { requestSubjectsErrorMessage } from '@/lib/checker-errors';
 import {
   formatGrade,
   gradeSelectValue,
@@ -45,6 +47,7 @@ import {
      /checker                       the verifier's papers, with progress
      /checker?paper=<id>            one paper: all of its questions, then Start verifying
      /checker?paper=<id>&verify=1   one question at a time, question left, picture right
+     /checker?paper=<id>&verify=1&reopen=<question>   the same, opened on a Done question being edited
 
    Reachable only by an account an admin or HOD has set up as a verifier. Papers
    are handed out automatically (a whole paper to one verifier, never above their
@@ -95,12 +98,20 @@ export function CheckerPage({
   const [accessFailed, setAccessFailed] = useState(false);
   const [accessAttempt, setAccessAttempt] = useState(0);
   const here = location.pathname + location.search;
+  // Read only when sending a signed-out visitor to sign in. It is not a dependency: opening a paper or
+  // going back to the list changes the URL, and must not ask the server "is this a verifier?" again
+  // (a dropped connection there replaced the whole page with "We could not check your access").
+  const hereRef = useRef(here);
+  hereRef.current = here;
+  // The same for the user: a token refresh or a tab coming back to the front hands over a new `user`
+  // object for the same person, which must not repeat the check either.
+  const signedIn = Boolean(user);
   useEffect(() => {
     if (!dummy) {
       if (authLoading) return;
-      if (!user) {
+      if (!signedIn) {
         // Come back to the paper or question that was opened, not just the list.
-        navigate('/auth?redirect=' + encodeURIComponent(checkerSignInPath(here)));
+        navigate('/auth?redirect=' + encodeURIComponent(checkerSignInPath(hereRef.current)));
         return;
       }
     }
@@ -116,7 +127,7 @@ export function CheckerPage({
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading, navigate, api, dummy, here, accessAttempt]);
+  }, [signedIn, authLoading, navigate, api, dummy, accessAttempt]);
 
   function retryAccess() {
     setAccessFailed(false);
@@ -129,6 +140,10 @@ export function CheckerPage({
     queryFn: api.myStats,
     enabled: allowed === true,
     staleTime: 30 * 1000,
+    // The app default is refetchOnMount: false: coming back to /checker (from Practice round or the
+    // help page) showed the counts from before the answers given since, for up to ten minutes. The
+    // answers' own refresh only reaches a query that is mounted at the time.
+    refetchOnMount: 'always',
   });
 
   if (accessFailed) {
@@ -167,6 +182,9 @@ export function CheckerPage({
         <BentoPanel fill="card" edge="top" className="mx-auto max-w-lg py-24 text-center">
           <h1 className="text-balance text-xl font-bold text-foreground">You are not a verifier yet</h1>
           <p className="mt-2 text-[14px] text-warm-secondary">Ask an admin or an HOD to add your account as a verifier.</p>
+          <Link to="/past-papers" className="tap-44 mt-4 inline-flex items-center rounded-full bg-muted px-5 text-[15px] font-bold text-foreground">
+            Browse past papers
+          </Link>
         </BentoPanel>
       </BentoStack>
     );
@@ -174,58 +192,97 @@ export function CheckerPage({
 
   const open = (id: string) => setParams({ paper: id });
   const verify = (id: string) => setParams({ paper: id, verify: '1' });
+  // "Edit" on a Done question: the verify screen opens on that question, reopened.
+  const editDone = (id: string, questionId: string) => setParams({ paper: id, verify: '1', reopen: questionId });
   const toList = () => setParams({});
 
-  return (
-    <BentoStack className="min-h-screen bg-muted">
-      <BentoPanel fill="card" edge="top" className="mx-auto w-full max-w-5xl">
-        {banner}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-lg font-bold text-foreground">My papers</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            {isAdmin ? (
-              <Link to="/admin" className={cn(CHIP, 'bg-muted text-warm-secondary')}>
-                Back to admin
-              </Link>
-            ) : null}
-            {isHod ? (
-              <Link to="/hod" className={cn(CHIP, 'bg-muted text-warm-secondary')}>
-                HOD desk
-              </Link>
-            ) : null}
-            {statsQuery.data ? (
-              <span className="rounded-full bg-muted px-3 py-1 text-[13px] font-semibold tabular-nums text-warm-secondary" data-testid="my-counts">
-                Today {statsQuery.data.today_count} · Total {statsQuery.data.total_count}
-              </span>
-            ) : statsQuery.isError ? null : (
-              <span className="rounded-full bg-muted px-3 py-1 text-[13px] font-semibold text-warm-meta" data-testid="my-counts">
-                Counting...
-              </span>
-            )}
-            <Chip onClick={() => setMenuOpen(true)} tone="brand">
-              Menu
-            </Chip>
-          </div>
-        </div>
+  // The verify screen is one bento grid that fits the viewport (owner, 12 Oct
+  // 2026): the page itself never scrolls there, so it gets its own shell, with
+  // the page's small controls moved into the screen's top tile.
+  const verifyView = Boolean(paperId && verifying);
 
-        {paperId && verifying ? (
+  const countsText = statsQuery.data ? `Today ${statsQuery.data.today_count} · Total ${statsQuery.data.total_count}` : 'Counting...';
+  const counts = statsQuery.isError && !statsQuery.data ? null : (
+    <span
+      className={cn('rounded-full bg-muted px-3 py-1 text-[13px] font-semibold', statsQuery.data ? 'tabular-nums text-warm-secondary' : 'text-warm-meta')}
+      data-testid="my-counts"
+    >
+      {countsText}
+    </span>
+  );
+
+  // The verify screen's top tile holds one Menu button and nothing else (owner, 12 Oct 2026:
+  // "too crammed"): the way back to my papers, the desks and the day's counts are inside it.
+  const menuButton = verifyView ? (
+    <button
+      type="button"
+      onClick={() => setMenuOpen(true)}
+      aria-label="Menu"
+      data-testid="verify-menu-button"
+      className={cn(CHIP, 'gap-2 bg-brand-subtle text-foreground [@media(max-width:639px)]:h-11 [@media(max-width:639px)]:w-11 [@media(max-width:639px)]:justify-center [@media(max-width:639px)]:px-0')}
+    >
+      <MenuIcon className="h-[18px] w-[18px]" aria-hidden="true" />
+      <span className="[@media(max-width:639px)]:sr-only">Menu</span>
+    </button>
+  ) : null;
+
+  const header = (
+    <div className="flex flex-wrap items-center gap-2">
+      {isAdmin ? (
+        <Link to="/admin" className={cn(CHIP, 'bg-muted text-warm-secondary')}>
+          Back to admin
+        </Link>
+      ) : null}
+      {isHod ? (
+        <Link to="/hod" className={cn(CHIP, 'bg-muted text-warm-secondary')}>
+          HOD desk
+        </Link>
+      ) : null}
+      {counts}
+      <Chip onClick={() => setMenuOpen(true)} tone="brand">
+        Menu
+      </Chip>
+    </div>
+  );
+
+  return (
+    <BentoStack className={cn('min-h-screen bg-muted', verifyView && 'h-[100dvh] min-h-0 overflow-hidden')}>
+      {verifyView ? (
+        <BentoPanel
+          fill="muted"
+          className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col p-2.5 lg:p-3"
+        >
+          {banner}
+          <h1 className="sr-only">My papers</h1>
           <VerifyScreen
             key={paperId}
             api={api}
             scope={scope}
             dummy={dummy}
-            paperId={paperId}
+            paperId={paperId!}
+            reopenQuestionId={params.get('reopen') ?? undefined}
             userId={user?.id}
             userName={profile?.full_name}
-            onExit={() => open(paperId)}
+            onExit={() => open(paperId!)}
             onList={toList}
+            toolbar={menuButton}
           />
-        ) : paperId ? (
-          <PaperOverview api={api} scope={scope} paperId={paperId} onBack={toList} onStart={() => verify(paperId)} />
-        ) : (
-          <PaperList api={api} scope={scope} onOpen={open} onStart={verify} />
-        )}
-      </BentoPanel>
+        </BentoPanel>
+      ) : (
+        <BentoPanel fill="card" edge="top" className="mx-auto w-full max-w-5xl">
+          {banner}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-lg font-bold text-foreground">My papers</h1>
+            {header}
+          </div>
+
+          {paperId ? (
+            <PaperOverview api={api} scope={scope} paperId={paperId} onBack={toList} onStart={() => verify(paperId)} onEdit={(qid) => editDone(paperId, qid)} />
+          ) : (
+            <PaperList api={api} scope={scope} onOpen={open} onStart={verify} />
+          )}
+        </BentoPanel>
+      )}
 
       {menuOpen ? (
         <Modal onClose={() => setMenuOpen(false)} labelledBy="checker-menu-title">
@@ -234,6 +291,32 @@ export function CheckerPage({
           </h2>
           <p className="mb-3 text-[13px] text-warm-secondary">Nothing here changes any question.</p>
           <div className="flex flex-col gap-2">
+            {verifyView ? (
+              <>
+                {counts}
+                <button
+                  type="button"
+                  data-testid="back-to-my-papers"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    toList();
+                  }}
+                  className={actionToneClass('muted')}
+                >
+                  Back to my papers
+                </button>
+              </>
+            ) : null}
+            {isAdmin ? (
+              <Link to="/admin" className={actionToneClass('muted') + ' text-center'}>
+                Back to admin
+              </Link>
+            ) : null}
+            {isHod ? (
+              <Link to="/hod" className={actionToneClass('muted') + ' text-center'}>
+                HOD desk
+              </Link>
+            ) : null}
             <Link to={CHECKER_PRACTICE_PATH} className={actionToneClass('brand') + ' text-center'}>
               Practice round
             </Link>
@@ -372,7 +455,7 @@ function ProfileCard({ api, scope }: { api: CheckerApi; scope: string }) {
   const [formError, setFormError] = useState<string | null>(null);
 
   const cardState = loadGate(profileQuery);
-  if (cardState === 'loading') return null;
+  if (cardState === 'loading') return <div role="status" aria-label="Loading your details" className="h-16 animate-pulse rounded-2xl bg-muted" />;
   // Saving is a full overwrite, so a form opened from a failed read would blank
   // the verifier's real details. Show no form until the read has worked.
   if (cardState === 'error') return <ProfileLoadError onRetry={() => void profileQuery.refetch()} />;
@@ -406,8 +489,12 @@ function ProfileCard({ api, scope }: { api: CheckerApi; scope: string }) {
       setMessage('Details saved.');
       void profileQuery.refetch();
     } catch (err) {
-      const raw = err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : '';
-      setFormError(raw || 'Could not save that. Try again in a moment.');
+      // Only the server's own plain sentences (errcode 22023, like "Name is
+      // too long") are shown as they are; a network failure says "Failed to
+      // fetch", which is not for a student.
+      const e = err as { code?: unknown; message?: unknown } | null;
+      const plain = e && e.code === '22023' && typeof e.message === 'string' ? e.message.trim() : '';
+      setFormError(plain || 'Could not save that. Check your internet and try again in a moment.');
     } finally {
       setBusy(false);
     }
@@ -427,8 +514,8 @@ function ProfileCard({ api, scope }: { api: CheckerApi; scope: string }) {
       setAsking(false);
       setText('');
       void profileQuery.refetch();
-    } catch {
-      setMessage('Could not send that. Try again in a moment.');
+    } catch (err) {
+      setMessage(requestSubjectsErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -619,12 +706,15 @@ function PaperOverview({
   paperId,
   onBack,
   onStart,
+  onEdit,
 }: {
   api: CheckerApi;
   scope: string;
   paperId: string;
   onBack: () => void;
   onStart: () => void;
+  /** Reopen a question that is marked Done so it can be edited again. */
+  onEdit: (questionId: string) => void;
 }) {
   // The app default is refetchOnMount: false, which showed the counts and the
   // states from before the verifier's last session. Always ask again.
@@ -664,7 +754,10 @@ function PaperOverview({
         <CheckerSkeleton />
       ) : questionsQuery.isError ? (
         <div role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-destructive">
-          Could not load this paper. It may not be yours any more.
+          <p>Could not load this paper. Check your connection, or it may not be yours any more.</p>
+          <button type="button" className="tap-44 mt-2 rounded-full bg-card px-4 py-1.5 text-[13px] font-semibold text-foreground" onClick={() => void questionsQuery.refetch()}>
+            Try again
+          </button>
         </div>
       ) : list.length === 0 ? (
         <p className="rounded-2xl bg-muted px-4 py-6 text-center text-[14px] text-warm-secondary">This paper has no questions to show.</p>
@@ -681,6 +774,17 @@ function PaperOverview({
                 ) : null}
                 {q.page ? <span className="text-warm-secondary">Page {q.page}</span> : null}
                 <span className={cn('rounded-full px-2 py-0.5', STATE_STYLE[q.state])}>{QUESTION_STATE_LABEL[q.state]}</span>
+                {q.state === 'done' ? (
+                  <button
+                    type="button"
+                    onClick={() => onEdit(q.id)}
+                    data-testid="edit-done-question"
+                    aria-label={`Edit question ${questionLabel(q, i)}`}
+                    className="tap-44 ml-auto rounded-full bg-card px-3 py-1 text-[12px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  >
+                    Edit
+                  </button>
+                ) : null}
               </div>
               {/* The words exactly as stored, never cleaned; maths drawn the
                   same way as on the verifying screen. */}

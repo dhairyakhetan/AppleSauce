@@ -13,6 +13,15 @@
 import type { CheckerQuestion } from '@/lib/checker-api';
 import type { ContextRow } from '@/lib/checker-context';
 
+export const ENGLISH_PART_ID = 'd0000013-0000-4000-8000-000000000013';
+
+const ENGLISH_PASSAGE = [
+  'The road to the old house ran between two rows of eucalyptus trees, and Anil walked it slowly, as if the length of it might change his mind. He had last come here as a boy of nine, holding his grandfather\'s hand, and the gate had seemed as tall as a temple door. Now it came up only to his chest, its green paint peeling in long curls, one hinge rusted to the colour of tea.',
+  'He stopped a few steps short and set his bag down. Somewhere behind the wall a radio was playing an old film song, thin and crackling, and a woman\'s voice was calling out the names of her hens. None of it was the silence he had rehearsed on the train. He had imagined an empty courtyard, dust, a lock. He had not imagined that anyone would still be living here.',
+  'For a long time he did nothing at all. He read the faded name on the gatepost twice. He counted the crows on the wire. He thought of the letter in his pocket, soft now from being folded and unfolded, in which his aunt had written only: Come if you can, the mango tree has fruited again. It was not much of an invitation, and yet it had pulled him four hundred miles.',
+  'At last a small girl appeared at the top of the steps, a plate of rice in her hands, and stared at him with perfect honesty. "Are you the one from the city?" she asked. Anil nodded, because his voice had gone somewhere he could not follow. "Then why are you standing outside?" she said. "Nobody stands outside here. Come in, the food is getting cold."',
+].join('\n\n');
+
 export const DUMMY_PAPER = '00000000-0000-4000-8000-00000000d0d0';
 
 /** Made-up "printed page" crops, drawn as SVG so no image file ships. */
@@ -24,6 +33,18 @@ export const DUMMY_PICTURES: Record<string, string[]> = {
     '   (b) Find the total number of trees planted.     [2]',
     '   (c) Which two districts planted the same number? [1]',
   ],
+  // Question 5, part by part: one made-up crop per row of the whole question. Part (c) has none on purpose.
+  'dummy/q-trees_stem.png': ['5. Read the table and answer the questions that follow.', '   District     Trees planted', '   North            120', '   South            120', '   East              85'],
+  'dummy/q-trees_a.png': ['   (a) Name the district with the most trees.      [1]'],
+  'dummy/q-trees_b.png': ['   (b) Find the total number of trees planted.     [2]'],
+  // English question 2: stem, then the parts. Parts (d) and (g) have no crop of their own on purpose.
+  'dummy/q-eng2_stem.png': ['2. Read the extract below carefully and answer the', '   questions that follow.'],
+  'dummy/q-eng2_a.png': ['   (a) What was Anil carrying with him?             [1]'],
+  'dummy/q-eng2_b.png': ['   (b) Why did the gate seem smaller now than when', '       he was nine?                                  [2]'],
+  'dummy/q-eng2_c.png': ['   (c) Name two sounds Anil heard from behind the', '       wall.                                         [2]'],
+  'dummy/q-eng2_e.png': ['   (e) What did the letter from his aunt say? Answer', '       in your own words.                            [2]'],
+  'dummy/q-eng2_f.png': ['   (f) Why did the narrator wait at the gate for so', '       long before knocking?                         [2]'],
+  'dummy/q-eng2_h.png': ['   (h) Pick out the phrase that shows how tired', '       Anil was after the long journey.              [1]'],
   'dummy/q-bank-lost.png': [
     '6. (a) State one difference between a Commercial Bank and',
     '       the Central Bank.                                [2]',
@@ -188,7 +209,8 @@ export function dummyQuestions(): CheckerQuestion[] {
       marks: 2,
       body: '(b) Find the total number of trees planted.',
       flag_reasons: ['merged_subparts'],
-      source: { snippet_object: 'dummy/q-trees_b.png', align_score: 0.5 },
+      // Part (b) of question 5: its own crop is good, so the right pane shows one picture tile per part.
+      source: { snippet_object: 'dummy/q-trees_b.png', align_score: 0.95 },
     }),
     q({
       id: 'd0000004-0000-4000-8000-000000000004',
@@ -304,11 +326,28 @@ export function dummyQuestions(): CheckerQuestion[] {
         'Find the inverse of the matrix $$A = \\begin{bmatrix} 1 & 2 \\\\ 3 & 4 \\end{bmatrix}$$ and verify that $AA^{-1} = I$.',
       flag_reasons: [],
     }),
+    // A long English passage with parts (a) to (h): this is part (f) of question 2 (see dummyContext).
+    q({
+      id: ENGLISH_PART_ID,
+      ord: 19,
+      subject: 'English',
+      display_number: '2(f)',
+      marks: 2,
+      body: '(f) Why did the narrator wait at the gate for so long before knocking?',
+      flag_reasons: [],
+      source: {
+        pipeline: 'english_w14',
+        role: 'shown',
+        set_text: 'A made-up extract from a novel',
+        stimulus: { id: 'dummy-passage-2', kind: 'prose_extract', title: null, text: ENGLISH_PASSAGE },
+      },
+    }),
   ];
 }
 
-/** The whole question 5 that fixture 3 is part (b) of. */
+/** The whole question 5 that fixture 3 is part (b) of, and the English question 2 that fixture 13 is part (f) of. */
 export function dummyContext(questionId: string): ContextRow[] {
+  if (questionId === ENGLISH_PART_ID) return englishContext();
   if (questionId !== 'd0000003-0000-4000-8000-000000000003') return [];
   const row = (r: Partial<ContextRow> & Pick<ContextRow, 'id' | 'ord' | 'body'>): ContextRow => ({
     display_number: null,
@@ -329,12 +368,13 @@ export function dummyContext(questionId: string): ContextRow[] {
       is_parent: true,
       depth: 0,
       source: {
+        snippet_object: 'dummy/q-trees_stem.png',
         whole_snippet_object: 'dummy/q-trees_whole.png',
         whole_snippet_members: { located: 3, members: 3, min_align: 0.95 },
       },
     }),
-    row({ id: 'd0000003-0000-4000-8000-0000000000aa', ord: 3, display_number: '(a)', body: '(a) Name the district with the most trees.' }),
-    row({ id: 'd0000003-0000-4000-8000-000000000003', ord: 4, display_number: '(b)', body: '(b) Find the total number of trees planted.', is_current: true }),
+    row({ id: 'd0000003-0000-4000-8000-0000000000aa', ord: 3, display_number: '(a)', body: '(a) Name the district with the most trees.', source: { snippet_object: 'dummy/q-trees_a.png', align_score: 0.97 } }),
+    row({ id: 'd0000003-0000-4000-8000-000000000003', ord: 4, display_number: '(b)', body: '(b) Find the total number of trees planted.', is_current: true, source: { snippet_object: 'dummy/q-trees_b.png', align_score: 0.95 } }),
     row({ id: 'd0000003-0000-4000-8000-0000000000cc', ord: 5, display_number: '(c)', body: '(c) Which two districts planted the same number?' }),
   ];
 }
@@ -396,4 +436,46 @@ function dummyGenericPage(n: number): string {
     .join('');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="595" height="842" viewBox="0 0 595 842"><rect width="100%" height="100%" fill="#fbfaf6"/><rect x="24" y="24" width="547" height="794" fill="none" stroke="#bbb"/>${text}<text x="48" y="800" font-family="serif" font-size="13" fill="#666">Page ${n}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** The whole English question 2: its stem and parts (a) to (h), part (f) being checked. */
+function englishContext(): ContextRow[] {
+  const row = (r: Partial<ContextRow> & Pick<ContextRow, 'id' | 'ord' | 'body'>): ContextRow => ({
+    display_number: null,
+    number_path: null,
+    options: null,
+    source: null,
+    is_current: false,
+    is_parent: false,
+    depth: 1,
+    ...r,
+  });
+  // `crop`: this part has a crop of its own (d and g do not).
+  const part = (letter: string, ord: number, body: string, crop = true): ContextRow =>
+    row({
+      id: `d0000013-0000-4000-8000-0000000000${letter.charCodeAt(0).toString(16)}`,
+      ord,
+      display_number: `(${letter})`,
+      body: `(${letter}) ${body}`,
+      source: crop ? { snippet_object: `dummy/q-eng2_${letter}.png` } : null,
+    });
+  return [
+    row({
+      id: 'd0000013-0000-4000-8000-0000000000ff',
+      ord: 10,
+      display_number: '2',
+      body: '2. Read the extract below carefully and answer the questions that follow.',
+      is_parent: true,
+      depth: 0,
+      source: { snippet_object: 'dummy/q-eng2_stem.png' },
+    }),
+    part('a', 11, 'What was Anil carrying with him? [1]'),
+    part('b', 12, 'Why did the gate seem smaller now than when he was nine? [2]'),
+    part('c', 13, 'Name two sounds Anil heard from behind the wall. [2]'),
+    part('d', 14, 'What had Anil rehearsed on the train, and how was the real scene different? [2]', false),
+    part('e', 15, 'What did the letter from his aunt say? Answer in your own words. [2]'),
+    row({ id: ENGLISH_PART_ID, ord: 16, display_number: '(f)', body: '(f) Why did the narrator wait at the gate for so long before knocking?', is_current: true, source: { snippet_object: 'dummy/q-eng2_f.png' } }),
+    part('g', 17, 'How does the little girl behave towards Anil? Give one example. [2]', false),
+    part('h', 18, 'Pick out the phrase that shows how tired Anil was after the long journey. [1]'),
+  ];
 }

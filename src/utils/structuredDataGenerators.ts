@@ -272,12 +272,15 @@ export function generateLocalBusinessSchema(params?: {
 
 /**
  * Generate Person schema for a teacher profile page.
+ *
+ * Deliberately takes no phone number and emits no `telephone` or
+ * `contactPoint`: a teacher's number is reachable only through the gated
+ * teacher_whatsapp_link() RPC, and JSON-LD is plain text in the page source.
  */
 export function generateTeacherPersonSchema(params: {
   url: string;
   name: string;
   description?: string | null;
-  phoneNumber?: string | null;
   area?: string | null;
   qualifications?: string | null;
   subjects?: string[];
@@ -291,7 +294,6 @@ export function generateTeacherPersonSchema(params: {
     ...(params.description && { description: params.description }),
     url: params.url,
     jobTitle: 'Tutor',
-    ...(params.phoneNumber && { telephone: params.phoneNumber }),
     ...(params.area && {
       address: {
         '@type': 'PostalAddress',
@@ -319,14 +321,6 @@ export function generateTeacherPersonSchema(params: {
     memberOf: {
       '@id': ORG_ID,
     },
-    ...(params.phoneNumber && {
-      contactPoint: {
-        '@type': 'ContactPoint',
-        contactType: 'Direct Contact',
-        telephone: params.phoneNumber,
-        contactOption: 'TollFree',
-      },
-    }),
   };
 }
 

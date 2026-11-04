@@ -381,7 +381,7 @@ export function ProductTour({ open, onOpenChange }: ProductTourProps) {
             has and the height it does not. */}
         <div className="my-auto flex w-full max-w-[560px] flex-col items-center short-landscape:max-w-[880px] short-landscape:flex-row short-landscape:items-center short-landscape:gap-7 short-landscape:text-left">
           <Mascot
-            key={step.key}
+            key={`mascot-${step.key}`}
             mood={step.mood}
             faceFill={step.faceFill}
             eyeWhite={step.eyeWhite}

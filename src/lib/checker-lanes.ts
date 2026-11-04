@@ -168,6 +168,63 @@ export const LANES: Record<string, Lane> = Object.fromEntries(
   Object.entries(LANE_TABLE).map(([id, l]) => [id, { id, ...l }]),
 );
 
+/* ---------------------------------------------------------------------------
+   What a STUDENT reads. The tables above are a copy of the pipeline's
+   lanes.json and are pinned to it by a test, so they keep the pipeline's own
+   words. The student screen reads these instead (owner, release QA 2026-10-11):
+   plain words, nothing about the AI, and an instruction that is true for the
+   student's screen (for example: options cannot be edited, so say who can).
+
+   A student-facing lane is "asked" when its text tells the student what to do.
+   The English lane is asked since English questions reach students (owner
+   decision, 2026-10-11): it says so in the kid sentences of its own codes. */
+
+/** Lanes that ride in the pipeline as another owner's but are asked of a student. */
+const ASKED_OF_STUDENT_TOO = new Set(['english_release']);
+
+const STUDENT_TITLE: Record<string, string> = {
+  english_release: 'English question',
+};
+
+const STUDENT_TEXT: Record<string, string> = {
+  options:
+    'Check that every option is there, in order, and matches the page. You cannot change an option here: if one is wrong or missing, press Ask the HOD.',
+};
+
+/** A code that needs its own instruction inside a lane that is otherwise generic. */
+const STUDENT_CODE_TEXT: Record<string, string> = {
+  incomplete_text:
+    'The end of this question may be missing. Look at the page and type any missing words. Press Looks right only when the whole question is there.',
+};
+
+/** Lanes whose instruction is the plain sentence of each of their codes. */
+const TEXT_FROM_CODES = new Set(['english_release']);
+
+function studentTitle(lane: Lane): string {
+  return STUDENT_TITLE[lane.id] ?? lane.name;
+}
+
+function studentText(lane: Lane, codes: readonly string[]): string {
+  if (TEXT_FROM_CODES.has(lane.id)) {
+    const seen = new Set<string>();
+    const sentences: string[] = [];
+    for (const code of codes) {
+      const sentence = kidSentence(code);
+      if (!seen.has(sentence)) {
+        seen.add(sentence);
+        sentences.push(sentence);
+      }
+    }
+    if (sentences.length) return sentences.join(' ');
+  }
+  const own = codes.map((c) => STUDENT_CODE_TEXT[c]).filter(Boolean);
+  if (own.length) return own[0];
+  return STUDENT_TEXT[lane.id] ?? lane.what_to_do;
+}
+
+/** The one plain line for everything a student is not asked to settle. */
+export const NOT_FOR_STUDENT_LINE = 'Other things the computer noticed are for your HOD, so you can ignore them.';
+
 /** The lane for one flag code, or null when the code has none. */
 export function laneForCode(code: string): Lane | null {
   const c = (code ?? '').trim();
@@ -183,11 +240,15 @@ export function unmappedCodes(codes: readonly string[] | null | undefined): stri
 
 /** A student is asked to do something about this lane (it has a picture to check against). */
 export function askedOfStudent(lane: Lane): boolean {
-  return lane.owner === 'student_with_picture';
+  return lane.owner === 'student_with_picture' || ASKED_OF_STUDENT_TOO.has(lane.id);
 }
 
 export interface LaneBlock {
   lane: Lane;
+  /** What the student reads as the heading (the lane name, in plain words). */
+  title: string;
+  /** What the student reads as the instruction. */
+  text: string;
   /** The flag codes on the question that fall in this lane. */
   codes: string[];
   /** The pipeline's own evidence, only when a student can read it. */
@@ -226,11 +287,13 @@ export function describeLanes(
       unmapped.push({ code, sentence: kidSentence(code) });
       continue;
     }
-    const block = blocks.get(lane.id) ?? { lane, codes: [], detail: null, asked: askedOfStudent(lane) };
+    const block =
+      blocks.get(lane.id) ?? { lane, title: studentTitle(lane), text: '', codes: [], detail: null, asked: askedOfStudent(lane) };
     block.codes.push(code);
     block.detail = block.detail ?? kidDetail(studentEvidence(byCode[code]));
     blocks.set(lane.id, block);
   }
+  for (const block of blocks.values()) block.text = studentText(block.lane, block.codes);
   const ordered = [...blocks.values()].sort((a, b) => Number(!a.asked) - Number(!b.asked));
   return { blocks: ordered, unmapped, note: kidDetail(studentEvidence(general)) };
 }

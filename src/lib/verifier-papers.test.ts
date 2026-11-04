@@ -136,6 +136,8 @@ describe('parseSubjectList', () => {
 describe('paper limit note', () => {
   it('says the limit in plain words', async () => {
     const { PAPER_LIMIT_NOTE } = await import('@/lib/verifier-papers');
-    expect(PAPER_LIMIT_NOTE).toBe('You get up to 10 papers at a time; more arrive as you finish.');
+    expect(PAPER_LIMIT_NOTE).toBe(
+      'You get up to 10 papers at a time; more arrive as you finish. A paper with nothing done on it for 7 days goes back to the pool.',
+    );
   });
 });

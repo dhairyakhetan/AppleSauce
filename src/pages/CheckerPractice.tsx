@@ -64,7 +64,7 @@ export default function CheckerPractice() {
 export function PracticeRound({ api, onRestart }: { api: PracticeApi; onRestart: () => void }) {
   const questions = useMemo(() => api.questions(), [api]);
   const [mode, setMode] = useState<Mode>('check');
-  const [panel, setPanel] = useState<PanelId>('printed');
+  const [panel, setPanel] = useState<PanelId>('typed');
   const [fixTool, setFixTool] = useState<'fix' | 'formula'>('fix');
   const [formulaReq, setFormulaReq] = useState<{ n: number; pending: boolean }>({ n: 0, pending: false });
   const [editorKey, setEditorKey] = useState(0);
@@ -247,7 +247,7 @@ export function PracticeRound({ api, onRestart }: { api: PracticeApi; onRestart:
       onClick={undoLast}
       disabled={!last}
       data-testid="practice-undo"
-      title={last ? 'Take back your last answer (U)' : 'Nothing to undo yet'}
+      title={last ? 'Take back your last answer' : 'Nothing to undo yet'}
       className={cn(actionToneClass('muted'), 'disabled:cursor-not-allowed disabled:opacity-50')}
     >
       Undo last

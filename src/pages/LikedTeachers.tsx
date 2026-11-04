@@ -15,6 +15,7 @@
  * If you delete it, delete the whole file; there is nothing here anything else
  * depends on.
  */
+import { setAuthIntent } from '@/lib/auth-intent';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Heart } from 'lucide-react';
@@ -72,6 +73,7 @@ export default function LikedTeachers() {
 
   useEffect(() => {
     if (!user) {
+      setAuthIntent({ kind: 'dashboard' });
       navigate('/auth');
       return;
     }

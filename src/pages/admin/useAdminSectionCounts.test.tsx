@@ -46,67 +46,94 @@ beforeEach(() => {
   resetAdminCountsMemory();
 });
 
+/* The nav RPC (applications, reviews) and the HOD desk RPC (the three HOD
+   numbers) answer separately, so each test sets both. */
+const NAV_OK = { applications: 4, reviews: 2, ready: 99, admin_queue: 99 };
+const DESK_OK = { ready: 6, needs_you_questions: 41, student_uploads_pending: 3 };
+function setRpc(nav: { data: unknown; error: unknown } | 'throw', desk: { data: unknown; error: unknown } | 'throw') {
+  rpc.mockImplementation((fn: string) => {
+    const answer = fn === 'hod_desk_counts' ? desk : nav;
+    if (answer === 'throw') return Promise.reject(new Error('network down'));
+    return Promise.resolve(answer);
+  });
+}
+
 describe('fetchAdminCounts', () => {
-  it('reads the four server counts plus the pending student uploads', async () => {
-    rpc.mockResolvedValue({ data: { applications: 4, reviews: 2, ready: 6, admin_queue: 41 }, error: null });
-    tables.paper_submissions = ok(3);
+  it('reads applications and reviews from the nav call, and the HOD three from hod_desk_counts', async () => {
+    setRpc({ data: NAV_OK, error: null }, { data: DESK_OK, error: null });
     const r = await fetchAdminCounts();
     expect(r.counts).toEqual({ approvals: 4, reviews: 2, paperApprovals: 6, adminQueue: 41, submissions: 3 });
     expect(r.failed).toEqual([]);
   });
 
-  it('counts student uploads from the inbox table, pending only', async () => {
-    rpc.mockResolvedValue({ data: { applications: 0, reviews: 0, ready: 0, admin_queue: 0 }, error: null });
-    tables.paper_submissions = ok(7);
-    await fetchAdminCounts();
-    expect(fromCalls).toContainEqual({ table: 'paper_submissions', status: 'pending' });
+  it('takes the HOD numbers from the HOD desk call, never from the nav call, so the chip matches the tabs', async () => {
+    setRpc({ data: { applications: 0, reviews: 0, ready: 1000, admin_queue: 1000 }, error: null }, { data: DESK_OK, error: null });
+    const r = await fetchAdminCounts();
+    expect(r.counts.paperApprovals).toBe(6);
+    expect(r.counts.adminQueue).toBe(41);
+    expect(rpc).toHaveBeenCalledWith('hod_desk_counts', {});
   });
 
-  it('leaves a rejected head-count undefined and failed, never 0', async () => {
-    rpc.mockResolvedValue({ data: { applications: 1, reviews: 1, ready: 1, admin_queue: 1 }, error: null });
-    tables.paper_submissions = bad;
+  it('leaves the HOD numbers undefined and failed when the desk call fails, never 0', async () => {
+    setRpc({ data: NAV_OK, error: null }, { data: null, error: { code: '42501', message: 'not an HOD' } });
     const r = await fetchAdminCounts();
+    expect(r.counts.paperApprovals).toBeUndefined();
+    expect(r.counts.adminQueue).toBeUndefined();
     expect(r.counts.submissions).toBeUndefined();
-    expect(r.failed).toEqual(['submissions']);
-    expect(r.counts.approvals).toBe(1);
+    expect(r.failed.sort()).toEqual(['adminQueue', 'paperApprovals', 'submissions']);
+    expect(r.counts.approvals).toBe(4);
   });
 
   it('keeps a real zero as a zero, not as failed', async () => {
-    rpc.mockResolvedValue({ data: { applications: 0, reviews: 0, ready: 0, admin_queue: 0 }, error: null });
-    tables.paper_submissions = ok(0);
+    setRpc({ data: NAV_OK, error: null }, { data: { ready: 0, needs_you_questions: 0, student_uploads_pending: 0 }, error: null });
     const r = await fetchAdminCounts();
-    expect(r.counts.submissions).toBe(0);
+    expect(r.counts).toMatchObject({ paperApprovals: 0, adminQueue: 0, submissions: 0 });
     expect(r.failed).toEqual([]);
   });
 
-  it('falls back to the plain head-counts when the one call errors, and reports the two it cannot cover', async () => {
-    rpc.mockResolvedValue({ data: null, error: { code: '500', message: 'network' } });
+  it('falls back to the plain head-counts when the nav call errors, and reports the two it cannot cover', async () => {
+    setRpc({ data: null, error: { code: '500', message: 'network' } }, { data: DESK_OK, error: null });
     tables.teacher_applications = ok(5);
     tables.teacher_comments = ok(2);
     tables.teacher_recommendations = ok(1);
-    tables.paper_submissions = ok(3);
     const r = await fetchAdminCounts();
-    expect(r.counts).toEqual({ approvals: 5, reviews: 3, submissions: 3 });
-    expect(r.failed.sort()).toEqual(['adminQueue', 'paperApprovals']);
+    expect(r.counts).toEqual({ approvals: 5, reviews: 3, paperApprovals: 6, adminQueue: 41, submissions: 3 });
+    expect(r.failed).toEqual([]);
+  });
+
+  it('reports the nav fields as failed when both the nav call and its fallback fail', async () => {
+    setRpc({ data: null, error: { code: '500', message: 'network' } }, { data: DESK_OK, error: null });
+    tables.teacher_applications = bad;
+    tables.teacher_comments = bad;
+    tables.teacher_recommendations = bad;
+    const r = await fetchAdminCounts();
+    expect(r.failed.sort()).toEqual(['approvals', 'reviews']);
     expect(deriveCountsState(r, false, () => {}).status).toBe('partial');
   });
 
   it('does not report half of the reviews as the whole', async () => {
-    rpc.mockResolvedValue({ data: null, error: { code: '500', message: 'network' } });
+    setRpc({ data: null, error: { code: '500', message: 'network' } }, { data: DESK_OK, error: null });
     tables.teacher_applications = ok(5);
     tables.teacher_comments = bad;
     tables.teacher_recommendations = ok(1);
-    tables.paper_submissions = ok(0);
     const r = await fetchAdminCounts();
     expect(r.counts.reviews).toBeUndefined();
     expect(r.failed).toContain('reviews');
   });
 
+  it('a thrown desk call leaves its three numbers failed and does not stop the rest', async () => {
+    setRpc({ data: NAV_OK, error: null }, 'throw');
+    const r = await fetchAdminCounts();
+    expect(r.counts).toMatchObject({ approvals: 4, reviews: 2 });
+    expect(r.failed.sort()).toEqual(['adminQueue', 'paperApprovals', 'submissions']);
+  });
+
   it('remembers a missing function so it is not retried on every page', async () => {
-    rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    setRpc({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } }, { data: DESK_OK, error: null });
     await fetchAdminCounts();
     await fetchAdminCounts();
-    expect(rpc).toHaveBeenCalledTimes(1);
+    const navCalls = rpc.mock.calls.filter((c) => c[0] === 'admin_nav_counts');
+    expect(navCalls).toHaveLength(1);
   });
 });
 

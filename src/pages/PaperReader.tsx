@@ -111,6 +111,7 @@ export default function PaperReader() {
   const [openedAt] = useState(() => new Date());
   const viewerRef = useRef<HTMLDivElement>(null);
   const [gateOpen, setGateOpen] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -136,7 +137,7 @@ export default function PaperReader() {
     }
     fetchPaper();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, retryTick]);
 
   /* Record that this reader opened this paper.
    *
@@ -339,7 +340,7 @@ export default function PaperReader() {
       await navigator.clipboard.writeText(shareUrl);
       toast.success('Link copied');
     } catch {
-      // clipboard unavailable — no-op, share button stays non-fatal
+      toast.error(`Could not copy the link. Copy it from here: ${shareUrl}`);
     }
   }
 
@@ -377,8 +378,8 @@ export default function PaperReader() {
           </Link>
           <EmptyResults
             heading={loadError ? 'Unable to load this paper right now' : "This paper isn't available"}
-            message={loadError ? 'Please refresh the page and try again.' : "It may have been removed, or the link is incorrect. It's still free to browse the rest of the collection."}
-            action={{ label: 'Browse past papers', onClick: () => navigate('/past-papers') }}
+            message={loadError ? 'Check your connection and try again.' : "It may have been removed, or the link is incorrect. It's still free to browse the rest of the collection."}
+            action={loadError ? { label: 'Try again', onClick: () => setRetryTick((n) => n + 1) } : { label: 'Browse past papers', onClick: () => navigate('/past-papers') }}
           />
         </main>
       </div>

@@ -1,0 +1,46 @@
+/* The verify screen's question card entrance (src/lib/checker-card-motion.ts).
+   Transform and opacity only. The card that leaves is not animated.
+   180 ms, cubic-bezier(0.2, 0, 0, 1): fast enough to feel like a swipe, not a wait.
+
+   Under prefers-reduced-motion the card only fades for 120 ms. The global
+   kill switch in index.css sets every animation to 0.01 ms with !important;
+   a class selector outranks its universal selector, so this block wins and
+   the fade is still there. */
+
+@keyframes checkerCardSwipe {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes checkerCardFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.checker-card-swipe {
+  animation: checkerCardSwipe 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
+}
+
+.checker-card-fade {
+  animation: checkerCardFade 120ms linear backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .checker-card-swipe,
+  .checker-card-fade {
+    animation-name: checkerCardFade !important;
+    animation-duration: 120ms !important;
+    animation-timing-function: linear !important;
+    animation-iteration-count: 1 !important;
+  }
+}

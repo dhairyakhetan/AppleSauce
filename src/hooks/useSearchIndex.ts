@@ -228,6 +228,7 @@ export function useSearchIndex() {
      constructor is a dynamic import), so it can never be true before that
      import resolves even once the data itself is cached. */
   const [ready, setReady] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   /* Facet OPTIONS, not raw values -- deduped through displaySchool() so a
      merged label (school-display.ts) appears once here rather than once per
      raw spelling/abbreviation it covers. buildParams() in SearchControl.tsx
@@ -288,8 +289,16 @@ export function useSearchIndex() {
       setReady(true);
       return;
     }
+    setLoadFailed(false);
     if (!loadPromise) loadPromise = loadIndex();
-    await loadPromise;
+    try {
+      await loadPromise;
+    } catch {
+      // Forget the failed attempt so the next call (the Try again button) really retries.
+      loadPromise = null;
+      setLoadFailed(true);
+      return;
+    }
     await buildFuseIndexes();
     setSchools(Array.from(new Set((papersCache ?? []).map((p) => displaySchool(p.school)))).filter(isRealSchoolLabel).sort());
     setReady(true);
@@ -372,5 +381,5 @@ export function useSearchIndex() {
     [ready]
   );
 
-  return { ensureLoaded, search, ready, schools, featuredTeachers, recentPapers };
+  return { ensureLoaded, search, ready, loadFailed, schools, featuredTeachers, recentPapers };
 }

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useSiteCounts } from "@/hooks/useSiteCounts";
 import { hasSeenOnboarding, markOnboardingSeen } from "@/lib/onboarding";
 import { getSubjectPalette } from "@/lib/subject-palette";
 import { WhatsAppIcon } from "@/components/BrandIcons";
@@ -15,18 +16,20 @@ import { Logo } from "@/components/Logo";
    full replacement of this component's content and behaviour. */
 
 function useOnboardingCounts(enabled: boolean) {
-  return useQuery({
+  /* The teacher total is the listed figure from useSiteCounts (paused listings
+     excluded), the same one the home page, About and Browse show. */
+  const teachers = useSiteCounts().data?.teachers ?? null;
+  const query = useQuery({
     queryKey: ["onboarding", "counts"],
     enabled,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const [mathsRes, icseRes, ballygungeRes, class10Res, papersRes, teachersRes] = await Promise.all([
+      const [mathsRes, icseRes, ballygungeRes, class10Res, papersRes] = await Promise.all([
         supabase.from("teachers_list").select("id", { count: "exact", head: true }).ilike("subjects", "%Maths%"),
         supabase.from("Shikshaqmine").select("id", { count: "exact", head: true }).ilike('"School Boards Catered"', "%ICSE%"),
         supabase.from("Shikshaqmine").select("id", { count: "exact", head: true }).ilike("Area", "%Ballygunge%"),
         supabase.from("teachers_list").select("id", { count: "exact", head: true }).ilike("classes", "%10%"),
         supabase.from("papers").select("id", { count: "exact", head: true }).eq("is_published", true),
-        supabase.from("teachers_list").select("id", { count: "exact", head: true }),
       ]);
       return {
         maths: mathsRes.count ?? null,
@@ -34,10 +37,13 @@ function useOnboardingCounts(enabled: boolean) {
         ballygunge: ballygungeRes.count ?? null,
         class10: class10Res.count ?? null,
         papers: papersRes.count ?? null,
-        teachers: teachersRes.count ?? null,
       };
     },
   });
+  return {
+    ...query,
+    data: query.data && { ...query.data, teachers },
+  };
 }
 
 export function OnboardingModal() {

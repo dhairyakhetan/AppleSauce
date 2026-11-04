@@ -9,6 +9,7 @@ import { suggestedFilterChips, type SuggestedFilterChip } from '@/lib/intent/cop
 import { TeacherCard } from '@/components/TeacherCard';
 import { useChromeConfig } from '@/components/layout/AppShell';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
+import { useSiteCounts } from '@/hooks/useSiteCounts';
 import { FilterChips, type FilterChipItem } from '@/components/FilterChips';
 import { type FilterState } from '@/components/FilterPanel';
 import { FilterSheet, FilterRail, activeFilterCount } from '@/components/browse/FilterGroups';
@@ -203,11 +204,14 @@ let relaxPoolCache: Promise<any[]> | null = null;
 function loadRelaxPool(): Promise<any[]> {
   if (!relaxPoolCache) {
     relaxPoolCache = Promise.resolve(
-      supabase.from('Shikshaqmine').select(SHIKSHAQ_COLUMNS) as any,
+      supabase.from('Shikshaqmine').select(SHIKSHAQ_COLUMNS + ', is_paused') as any,
     )
       .then(({ data, error }: any) => {
         if (error) throw new Error(error.message);
-        return (data as any[]) ?? [];
+        // Paused listings are never rendered on Browse, so they are not counted
+        // here either. Without this the filter sheet said 148 while the list said
+        // 147 (see lib/listed-teachers.ts).
+        return ((data as any[]) ?? []).filter((r) => !r.is_paused);
       })
       .catch((err: unknown) => {
         relaxPoolCache = null; // let the next empty state try again
@@ -463,6 +467,12 @@ export default function Browse({ manageSeo = true, pageContext, seo, locality }:
       else if (filters.classes.length === 1) query = query.eq('class', filters.classes[0]);
       if (filters.boards.length > 1) query = query.in('board', filters.boards);
       else if (filters.boards.length === 1) query = query.eq('board', filters.boards[0]);
+      // The same school and exam type filters as page 1 (fetchPapers above), or page 2 onward shows excluded papers.
+      const rawSchoolFilters = filters.schools.flatMap((label) => rawSchoolsFor(label));
+      if (rawSchoolFilters.length > 1) query = query.in('school', rawSchoolFilters);
+      else if (rawSchoolFilters.length === 1) query = query.eq('school', rawSchoolFilters[0]);
+      if (filters.examTypes.length > 1) query = query.in('exam_type', filters.examTypes);
+      else if (filters.examTypes.length === 1) query = query.eq('exam_type', filters.examTypes[0]);
       const { data, error } = await query
         .order('year', { ascending: false })
         .order('school', { ascending: true })
@@ -477,7 +487,7 @@ export default function Browse({ manageSeo = true, pageContext, seo, locality }:
       setPapersLoadingMore(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [papersPage, filters.subjects.join(','), filters.classes.join(','), filters.boards.join(',')]);
+  }, [papersPage, filters.subjects.join(','), filters.classes.join(','), filters.boards.join(','), filters.schools.join(','), filters.examTypes.join(',')]);
 
   const papersInfiniteScrollRef = useInfiniteScroll({
     hasMore: papers.length < papersTotal,
@@ -622,7 +632,10 @@ export default function Browse({ manageSeo = true, pageContext, seo, locality }:
   // AppShell renders the B2 pre-footer for this route already (preFooterFor
   // matches BROWSE_PATH); this only hands it the live counts, which AppShell
   // has no way to know on its own.
-  useChromeConfig({ preFooter: 'B2', preFooterCounts: { teachers: teachers.length, reviews: reviewsCount } });
+  // The trust strip is a site-wide claim, so it reads the same listed total as the
+  // home page and About (useSiteCounts), not the length of whatever list is loaded.
+  const { data: siteCounts } = useSiteCounts();
+  useChromeConfig({ preFooter: 'B2', preFooterCounts: { teachers: siteCounts?.teachers ?? undefined, reviews: reviewsCount } });
 
   useEffect(() => {
     let cancelled = false;

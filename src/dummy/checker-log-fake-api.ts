@@ -23,8 +23,8 @@ const ACTORS: { key: string; name: string; role: ActorKind; perDay: number; busy
   { key: 'u:zoya', name: 'Zoya Khan', role: 'student', perDay: 12, busyDays: 0.3 },
   { key: 'u:priya', name: 'Priya Sharma', role: 'admin', perDay: 9, busyDays: 0.6 },
   { key: 'u:arjun', name: 'Arjun Mehta', role: 'admin', perDay: 6, busyDays: 0.45 },
-  { key: 'ai:haiku', name: 'AI check (Haiku)', role: 'ai', perDay: 120, busyDays: 0.8 },
-  { key: 'ai:sonnet', name: 'AI check (Sonnet)', role: 'ai', perDay: 40, busyDays: 0.6 },
+  { key: 'ai:haiku', name: 'AI check', role: 'ai', perDay: 120, busyDays: 0.8 },
+  { key: 'ai:sonnet', name: 'AI check', role: 'ai', perDay: 40, busyDays: 0.6 },
   { key: 'pipeline', name: 'Pipeline (automatic)', role: 'pipeline', perDay: 8, busyDays: 0.5 },
 ];
 

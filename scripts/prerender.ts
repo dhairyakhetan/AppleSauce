@@ -42,6 +42,7 @@ import { schoolSlug } from '../src/lib/school-slug';
 import { displaySchool, isRealSchoolLabel } from '../src/lib/school-display';
 import { buildPaperSeo, paperEducationalLevel } from '../src/lib/paper-seo';
 import { bankSubjectToSite } from '../src/lib/subject-vocabulary';
+import { isComingSoon, countPapers, countReadableSchools, paperCountLabel } from '../src/lib/readable-papers';
 import { isExcludedPaper } from './excluded-papers';
 import { extractLeakNeedles, findLeak } from './prerender-leak-check';
 import { SUBJECT_CONTENT, BOARD_CONTENT, type SubjectContent } from '../src/content/subject-seo';
@@ -243,6 +244,7 @@ interface BankPaper {
   board: string;
   question_count: number;
   marks: number;
+  needs_review?: boolean | null;
 }
 
 function hasYear(year: string | null): boolean {
@@ -358,7 +360,8 @@ function paperRoutes(papers: BankPaper[], template: string): number {
   return papers.length;
 }
 
-interface SchoolSummary { label: string; canonicalSlug: string; count: number }
+/** `count` is READABLE papers; Coming soon papers are kept apart, never summed in. */
+interface SchoolSummary { label: string; canonicalSlug: string; count: number; comingSoon: number }
 
 function schoolRoutes(papers: BankPaper[], template: string): { count: number; schools: SchoolSummary[] } {
   /* Two layers, same shape as src/lib/question-bank.ts's schoolGroupsOfPapers
@@ -420,6 +423,9 @@ function schoolRoutes(papers: BankPaper[], template: string): { count: number; s
     const canonicalUrl = `${SITE_URL}${canonicalPath}`;
     const years = [...new Set(list.map((p) => p.year).filter(hasYear))].sort().reverse();
     const subjects = [...new Set(list.map((p) => p.subject))];
+    /* Every paper below stays listed and linked, but only readable ones are
+       counted (lib/readable-papers.ts). */
+    const split = countPapers(list.map((p) => ({ needsReview: p.needs_review })));
 
     /* Every paper, not a sample. This listing is what makes the 1,282 paper
        URLs crawlable without relying on the sitemap alone. */
@@ -430,7 +436,7 @@ function schoolRoutes(papers: BankPaper[], template: string): { count: number; s
 
     const body = [
       `<h1>${esc(name)} question papers</h1>`,
-      `<p>${esc(list.length)} past papers`,
+      `<p>${esc(split.comingSoon > 0 ? paperCountLabel(split.ready, split.comingSoon) : `${split.ready} past papers`)}`,
       subjects.length ? ` across ${esc(subjects.join(', '))}` : '',
       years.length ? `, from ${esc(years[years.length - 1])} to ${esc(years[0])}` : '',
       `.</p>`,
@@ -444,7 +450,7 @@ function schoolRoutes(papers: BankPaper[], template: string): { count: number; s
         name: `${name} question papers`,
         description: `Past question papers from ${name}, Kolkata.`,
         about: name,
-        numberOfItems: list.length,
+        numberOfItems: split.ready,
       }),
       generateBreadcrumbSchema(
         [
@@ -457,7 +463,7 @@ function schoolRoutes(papers: BankPaper[], template: string): { count: number; s
     ];
 
     const description =
-      `${list.length} past question papers from ${name}`
+      (split.ready > 0 ? `${split.ready} past question papers from ${name}` : `Past question papers from ${name}, coming soon`)
       + `${subjects.length ? `, covering ${subjects.join(', ')}` : ''}`
       + `${years.length ? `, ${years[years.length - 1]} to ${years[0]}` : ''}. Free to read with an account.`;
 
@@ -485,7 +491,10 @@ function schoolRoutes(papers: BankPaper[], template: string): { count: number; s
   return {
     count: byLabel.size,
     schools: [...byLabel.values()]
-      .map((g) => ({ label: g.label, canonicalSlug: g.canonicalSlug, count: g.papers.length }))
+      .map((g) => {
+        const split = countPapers(g.papers.map((p) => ({ needsReview: p.needs_review })));
+        return { label: g.label, canonicalSlug: g.canonicalSlug, count: split.ready, comingSoon: split.comingSoon };
+      })
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
   };
 }
@@ -547,10 +556,10 @@ function teacherRoutes(teachers: TeacherRow[], mine: Map<string, ShikshaqmineRow
       `</dl>`,
     ].join('');
 
-    /* No telephone passed, deliberately. generateTeacherPersonSchema accepts
-       phoneNumber, and this script could not supply it even if a template
-       asked -- anon has no SELECT on Shikshaqmine."Phone Number". Contact
-       stays behind the sign-in gate on the profile itself. */
+    /* No telephone, deliberately. generateTeacherPersonSchema no longer takes
+       one, and anon has no SELECT on Shikshaqmine."Phone Number" or
+       the teachers_list WhatsApp column anyway. Contact stays behind the sign-in
+       gate on the profile itself. */
     /* The bio and qualifications are withheld from the JSON-LD for the same
        reason they are withheld from the body block above -- a <script
        type="application/ld+json"> is plain text in the served HTML, so putting
@@ -812,7 +821,9 @@ function tally<T>(items: T[], key: (item: T) => string): Array<[string, number]>
 function schoolLinks(list: SchoolSummary[]): Array<{ href: string; label: string }> {
   return list.map((s) => ({
     href: `/school/${s.canonicalSlug}`,
-    label: `${s.label}: ${s.count} paper${s.count === 1 ? '' : 's'}`,
+    label: s.count > 0
+      ? `${s.label}: ${s.count} paper${s.count === 1 ? '' : 's'}${s.comingSoon > 0 ? `, ${s.comingSoon} coming soon` : ''}`
+      : `${s.label}: ${s.comingSoon} coming soon`,
   }));
 }
 
@@ -830,6 +841,8 @@ function siteRoutes(
   papers: BankPaper[],
   schools: SchoolSummary[],
   teachers: TeacherRow[],
+  paperTotal: number,
+  schoolTotal: number,
 ): number {
   const subjectLinks = Object.keys(SUBJECT_META)
     .filter((p) => p !== '/commercial-studies-tuition-teachers-in-kolkata')
@@ -839,8 +852,16 @@ function siteRoutes(
     .slice(0, 12)
     .map((p) => ({ href: p.path, label: `${SUBJECT_META[p.subjectPath].label} tuition in ${p.area}` }));
 
-  const boards = tally(papers, (p) => (p.board && p.board !== 'Board' ? p.board : ''));
-  const paperSubjects = tally(papers, (p) => bankSubjectToSite(p.subject));
+  /* Every paper total below counts READABLE papers only (owner, 12 October
+     2026), through the same module the app's footer, home and About use. A
+     Coming soon paper still has its page and its link; it is just not a
+     figure the site claims. paperTotal is counted by the caller over every
+     listed paper BEFORE the placeholder-text exclusions, because that is what
+     site_counts() and the footer count; the by-board and by-subject lists
+     below skip the excluded papers, as the crawlable pages always have. */
+  const readable = papers.filter((p) => !isComingSoon({ needsReview: p.needs_review }));
+  const boards = tally(readable, (p) => (p.board && p.board !== 'Board' ? p.board : ''));
+  const paperSubjects = tally(readable, (p) => bankSubjectToSite(p.subject));
   const boardText = boards.map(([b]) => b).join(', ');
 
   let count = 0;
@@ -861,7 +882,7 @@ function siteRoutes(
       `<h2>Tuition teachers by subject</h2>${links(subjectLinks)}`,
       `<h2>Tuition teachers by board</h2>${links(BOARD_LINKS)}`,
       popularAreas.length ? `<h2>Popular areas</h2>${links(popularAreas)}` : '',
-      `<h2>Free past papers</h2><p>${esc(papers.length)} question papers from ${esc(schools.length)} schools`
+      `<h2>Free past papers</h2><p>${esc(paperTotal)} question papers from ${esc(schoolTotal)} schools`
         + `${boardText ? `, ${esc(boardText)}` : ''}.</p>`,
       links([
         { href: '/past-papers', label: 'All past papers' },
@@ -887,7 +908,7 @@ function siteRoutes(
     ],
     body: [
       '<h1>Free past year question papers</h1>',
-      `<p>${esc(papers.length)} question papers from ${esc(schools.length)} schools, read question by question.</p>`,
+      `<p>${esc(paperTotal)} question papers from ${esc(schoolTotal)} schools, read question by question.</p>`,
       boards.length
         ? `<h2>By board</h2><ul>${boards.map(([b, n]) => `<li>${esc(b)}: ${esc(n)} papers</li>`).join('')}</ul>`
         : '',
@@ -909,7 +930,7 @@ function siteRoutes(
     ],
     body: [
       '<h1>Past papers by school</h1>',
-      `<p>${esc(schools.length)} schools, ${esc(papers.length)} papers.</p>`,
+      `<p>${esc(schoolTotal)} schools, ${esc(paperTotal)} papers.</p>`,
       links(schoolLinks(schools)),
     ].join(''),
   });
@@ -1088,7 +1109,7 @@ async function main(): Promise<void> {
   const allPapers = await fetchAll<BankPaper>(
     () => supabase
       .from('bank_papers')
-      .select('id, school, has_school, year, exam, cls, subject, board, question_count, marks')
+      .select('id, school, has_school, year, exam, cls, subject, board, question_count, marks, needs_review')
       .eq('is_published', true).gt('question_count', 0) as unknown as Query,
     'bank_papers',
   );
@@ -1129,7 +1150,14 @@ async function main(): Promise<void> {
     teachers: teacherRoutes(teachers, mine, template),
     subjects: subjectRoutes(template, localityTeachers),
     localities: localityRoutes(template, localityTeachers),
-    site: siteRoutes(template, papers, schoolResult.schools, teachers),
+    site: siteRoutes(
+      template, papers, schoolResult.schools, teachers,
+      countPapers(allPapers.map((p) => ({ needsReview: p.needs_review }))).ready,
+      /* allPapers was fetched already filtered to published, non-empty rows;
+         applyVisibleCounts may since have lowered question_count, which must
+         not take a paper out of the school total, so listedness is restated. */
+      countReadableSchools(allPapers.map((p) => ({ ...p, is_published: true, question_count: 1 }))),
+    ),
   };
 
   const total = counts.papers + counts.schools + counts.teachers + counts.subjects

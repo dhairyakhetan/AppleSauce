@@ -8,6 +8,7 @@ import { schoolSlug } from '@/lib/school-slug';
 import { displaySchool, isRealSchoolLabel } from '@/lib/school-display';
 import { ROUTE_META } from '@/content/route-meta';
 import { loadPaperIndex, schoolsOfPapers, type BankPaper } from '@/lib/question-bank';
+import { isComingSoon } from '@/lib/readable-papers';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { BentoStack, BentoPanel } from '@/components/layout/PageContainer';
 import { NumberedHeading } from '@/components/ui/numbered-heading';
@@ -36,6 +37,8 @@ interface SchoolStat {
   board: string | null;
   count: number;
   otherBoardCount: number;
+  /** Listed for this school but not openable yet. Shown beside the count, never in it. */
+  comingSoon: number;
 }
 
 export default function SchoolsPage() {
@@ -74,15 +77,18 @@ export default function SchoolsPage() {
          separate half-populated rows instead of one row with the true count.
          "candidates" tracks paper count PER RAW NAME (not per label), which
          is what picking a canonical slug below needs. */
-      const bySchool = new Map<string, { boards: Map<string, number>; candidates: Map<string, number> }>();
-      const add = (rawName: string, board: string | null) => {
+      const bySchool = new Map<string, { boards: Map<string, number>; candidates: Map<string, number>; soon: number }>();
+      /* `boards` counts READABLE papers only; a Coming soon paper adds to
+         `soon` (and to `candidates`, which only picks the canonical slug). */
+      const add = (rawName: string, board: string | null, soon = false) => {
         const label = displaySchool(rawName);
         // "School not recorded" and board-paper source lines are real facts
         // on a paper's own card, but neither is a school -- they don't
         // belong in this directory.
         if (!isRealSchoolLabel(label)) return;
-        const entry = bySchool.get(label) ?? { boards: new Map<string, number>(), candidates: new Map<string, number>() };
-        if (board) entry.boards.set(board, (entry.boards.get(board) || 0) + 1);
+        const entry = bySchool.get(label) ?? { boards: new Map<string, number>(), candidates: new Map<string, number>(), soon: 0 };
+        if (soon) entry.soon += 1;
+        else if (board) entry.boards.set(board, (entry.boards.get(board) || 0) + 1);
         else entry.boards.set('', (entry.boards.get('') || 0) + 1);
         entry.candidates.set(rawName, (entry.candidates.get(rawName) || 0) + 1);
         bySchool.set(label, entry);
@@ -90,11 +96,11 @@ export default function SchoolsPage() {
 
       (dbResult.data || []).forEach((p) => add(p.school, p.board));
       schoolsOfPapers(bank).forEach((school) => {
-        school.papers.forEach((paper) => add(school.name, paper.board));
+        school.papers.forEach((paper) => add(school.name, paper.board, isComingSoon(paper)));
       });
 
       const schoolStats: SchoolStat[] = Array.from(bySchool.entries())
-        .map(([label, { boards, candidates }]) => {
+        .map(([label, { boards, candidates, soon }]) => {
           const total = Array.from(boards.values()).reduce((sum, c) => sum + c, 0);
           // Papers with no board recorded are counted but never named as one.
           const named = Array.from(boards.entries())
@@ -117,6 +123,7 @@ export default function SchoolsPage() {
             board: dominantBoard,
             count: dominantBoard ? dominantCount : total,
             otherBoardCount: dominantBoard ? total - dominantCount : 0,
+            comingSoon: soon,
           };
         })
         .sort((a, b) => a.school.localeCompare(b.school));
@@ -165,7 +172,7 @@ export default function SchoolsPage() {
               <ListError onRetry={() => query.refetch()} />
             ) : schoolStats.length > 0 ? (
               <div className="stagger-children grid grid-cols-1 gap-2 lg:grid-cols-2 lg:gap-[10px]">
-                {schoolStats.map(({ slug, school, board, count, otherBoardCount }) => {
+                {schoolStats.map(({ slug, school, board, count, otherBoardCount, comingSoon }) => {
                   // `school` is already the merged display label -- schoolStats
                   // is built (above) keyed by displaySchool(), not by raw name.
                   const label = school;
@@ -186,8 +193,15 @@ export default function SchoolsPage() {
                     <span className="min-w-0 flex-1">
                       <span className="block line-clamp-2 break-words text-[15px] font-bold text-foreground">{label}</span>
                       <span className="mt-px block text-[12px] tabular-nums text-muted-foreground">
-                        {board ? `${board} · ` : ''}{count} paper{count === 1 ? '' : 's'}
-                        {otherBoardCount > 0 ? ` + ${otherBoardCount} more` : ''}
+                        {count > 0 ? (
+                          <>
+                            {board ? `${board} · ` : ''}{count} paper{count === 1 ? '' : 's'}
+                            {otherBoardCount > 0 ? ` + ${otherBoardCount} more` : ''}
+                            {comingSoon > 0 ? `, ${comingSoon} coming soon` : ''}
+                          </>
+                        ) : (
+                          `${comingSoon} coming soon`
+                        )}
                       </span>
                     </span>
                     <ArrowRight className="h-4 w-4 flex-none text-warm-quaternary" aria-hidden="true" />

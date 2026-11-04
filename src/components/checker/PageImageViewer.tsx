@@ -20,6 +20,8 @@ export function PageImageViewer({
   note,
   onError,
   source,
+  fill = false,
+  onEnlarge,
 }: {
   src: string;
   alt: string;
@@ -27,6 +29,10 @@ export function PageImageViewer({
   onError: () => void;
   /** The question's `source` (page, bbox, dpi ...), for the highlight box. */
   source?: Record<string, unknown> | null;
+  /** The bento tile: the page fills the tile it is in and pans inside it, instead of growing to a height of its own. */
+  fill?: boolean;
+  /** Shows an Enlarge button that opens the page full screen. */
+  onEnlarge?: () => void;
 }) {
   const [zoom, setZoom] = useState<number>(PAGE_ZOOM_STEPS[0]);
   const [size, setSize] = useState<ImageSize | null>(null);
@@ -62,31 +68,47 @@ export function PageImageViewer({
   }, [box, zoom]);
 
   return (
-    <div className="flex w-full flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 rounded-[12px] bg-brand-subtle px-3 py-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-semibold leading-snug text-foreground">{note}</p>
+    <div className={cn('flex w-full flex-col gap-2', fill && 'h-full min-h-0 flex-1')}>
+      <div className={cn('flex items-center gap-2 bg-brand-subtle', fill ? 'shrink-0 rounded-[8px] px-2.5 py-1.5' : 'flex-wrap rounded-[12px] px-3 py-2')}>
+        {/* Under 480px the note takes its own line and the zoom buttons wrap under it, so it never squeezes into a four-line column. */}
+        <div className="min-w-0 flex-1 [@media(max-width:479px)]:basis-full">
+          <p className={cn('font-semibold leading-snug text-foreground', fill ? 'line-clamp-2 text-[13px]' : 'text-[14px]')} title={fill ? note : undefined}>
+            {note}
+          </p>
           {box ? (
-            <p className="mt-0.5 text-[12px] leading-snug text-warm-secondary" data-testid="highlight-note">
+            <p className={cn('mt-0.5 text-[12px] leading-snug text-warm-secondary', fill && 'truncate')} data-testid="highlight-note">
               {HIGHLIGHT_NOTE}
             </p>
           ) : null}
         </div>
-        <div className="flex items-center gap-1" role="group" aria-label="Zoom the page">
-          <ZoomButton label="Zoom out" disabled={atMin} onClick={() => setZoom((z) => stepZoom(z, 'out'))}>
+        <div className="flex items-center gap-1 [@media(max-width:479px)]:ml-auto" role="group" aria-label="Zoom the page">
+          <ZoomButton small={fill} label="Zoom out" disabled={atMin} onClick={() => setZoom((z) => stepZoom(z, 'out'))}>
             -
           </ZoomButton>
           <span className="w-10 text-center text-[12px] tabular-nums text-warm-secondary" aria-live="polite">
             {Math.round(zoom * 100)}%
           </span>
-          <ZoomButton label="Zoom in" disabled={atMax} onClick={() => setZoom((z) => stepZoom(z, 'in'))}>
+          <ZoomButton small={fill} label="Zoom in" disabled={atMax} onClick={() => setZoom((z) => stepZoom(z, 'in'))}>
             +
           </ZoomButton>
+          {onEnlarge ? (
+            <button
+              type="button"
+              onClick={onEnlarge}
+              data-testid="enlarge-page"
+              className="tap-44 ml-1 rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-foreground transition-transform duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              Enlarge
+            </button>
+          ) : null}
         </div>
       </div>
       <div
         ref={scroller}
-        className="max-h-[56vh] w-full overflow-auto rounded-[10px] border border-warm-hairline bg-white lg:max-h-[68vh]"
+        className={cn(
+          'w-full overflow-auto border border-warm-hairline bg-white',
+          fill ? 'min-h-0 flex-1 rounded-[8px]' : 'max-h-[56vh] rounded-[10px] lg:max-h-[68vh]',
+        )}
         tabIndex={0}
         role="region"
         aria-label="The scanned page. Scroll to move around."
@@ -126,7 +148,9 @@ function ZoomButton({
   disabled,
   onClick,
   children,
+  small,
 }: {
+  small?: boolean;
   label: string;
   disabled: boolean;
   onClick: () => void;
@@ -139,7 +163,8 @@ function ZoomButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'tap-44 flex h-11 w-11 items-center justify-center rounded-full bg-white text-[20px] font-semibold leading-none text-foreground',
+        'tap-44 flex items-center justify-center rounded-full bg-white text-[20px] font-semibold leading-none text-foreground',
+        small ? 'h-8 w-8' : 'h-11 w-11',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-40',
       )}
     >

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTweenedNumber } from '@/hooks/useTweenedNumber';
-import { fmt, laneMotion, updatedWords, type RouteStop, type StopLook } from '@/lib/pipeline-route';
+import { fmt, laneMotion, unitWord, updatedWords, type RouteStop, type StopLook, type TrustView } from '@/lib/pipeline-route';
 import type { ProcessedState } from '@/lib/paper-registry';
 
 /* The small pieces of the papers route (PipelineRoute.tsx lays them out).
@@ -32,7 +32,7 @@ export function AnimatedNumber({ value, animate, className }: { value: number; a
   );
 }
 
-/** "Updated 12 seconds ago", ticking once a second on its own so the rest of the route does not re-render. `now` is for tests. */
+/** "This screen read the numbers 12 seconds ago": when this browser last read the numbers. It says nothing about how fresh the data is (that is "The desk last sent numbers").Ticks once a second on its own so the rest of the route does not re-render. `now` is for tests. */
 export function UpdatedAgo({ updatedAt, now }: { updatedAt: number | null; now?: number }) {
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
@@ -41,7 +41,7 @@ export function UpdatedAgo({ updatedAt, now }: { updatedAt: number | null; now?:
     return () => window.clearInterval(id);
   }, [now]);
   if (updatedAt === null) return <span>Reading the numbers</span>;
-  return <span>Updated {updatedWords((now ?? tick) - updatedAt)}</span>;
+  return <span>This screen read the numbers {updatedWords((now ?? tick) - updatedAt)}</span>;
 }
 
 /** The small live dot. Green and pinging while reads succeed, amber and still when the last one failed. */
@@ -106,7 +106,7 @@ export function Lane({
   );
 }
 
-/** The dashed elbow that carries the route from the end of the top row back to the start of the bottom row. Wide screens only; on a phone the route is one column. */
+/** The dashed elbow that carries the route from the end of the top row (the fourth column) back to the start of the bottom row. Wide screens only; on a phone the route is one column. */
 export function Elbow({ animate, seconds }: { animate: boolean; seconds: number }) {
   return (
     <>
@@ -116,7 +116,7 @@ export function Elbow({ animate, seconds }: { animate: boolean; seconds: number 
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
         className="pointer-events-none absolute bottom-full left-1/2 hidden h-12 lg:block"
-        style={{ width: 'calc(400% + 9rem)', '--route-dur': `${seconds || 5}s` } as CSSProperties}
+        style={{ width: 'calc(300% + 6.75rem)', '--route-dur': `${seconds || 5}s` } as CSSProperties}
       >
         <path
           d="M100 0 V50 H0 V100"
@@ -164,15 +164,93 @@ export function BandBars({ bands, tone }: { bands: NonNullable<RouteStop['bands'
 const STRETCH =
   'after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none';
 
-/** One stop: a numbered badge, a title, the live count, one line of meaning. If the stop leads somewhere, its title is the link and the whole card is the target (40px or more). */
+/** Labelled figures under a stop's headline: the other numbers the owner asked for at that stop. */
+export function Figures({ figures }: { figures: NonNullable<RouteStop['figures']> }) {
+  if (figures.length === 0) return null;
+  return (
+    <ul className="mt-3 space-y-1.5" aria-label="More numbers for this stop">
+      {figures.map((f) => (
+        <li key={f.label} className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0 text-[13px] text-warm-secondary">
+            {f.label}
+            {f.note ? <span className="block text-[12px] text-warm-meta">{f.note}</span> : null}
+          </span>
+          <span className="shrink-0 text-right text-[14px] font-bold tabular-nums text-foreground">{f.value}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A few labelled values side by side (papers, pictures, size). Each column is a small tile; a long value wraps inside its own tile, never into the next. */
+export function SideBySide({ items }: { items: NonNullable<RouteStop['sideBySide']> }) {
+  if (items.length === 0) return null;
+  return (
+    <dl
+      aria-label="The queue in three numbers"
+      data-side-by-side
+      className="mt-3 grid gap-2"
+      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+    >
+      {items.map((f) => (
+        <div key={f.label} className="min-w-0 rounded-xl bg-card px-2 py-2">
+          <dt className="text-[12px] text-warm-secondary">{f.label}</dt>
+          <dd className="whitespace-nowrap text-[15px] font-bold tabular-nums text-foreground">{f.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** AI trust: one counter, X of 100 checks, and where each confidence level stands. Its link sits above the card's stretched link. */
+export function TrustBox({ trust }: { trust: TrustView }) {
+  return (
+    <section aria-label="AI trust" className="mt-3 rounded-xl bg-card p-3" data-trust>
+      <p className="text-[13px] font-bold text-foreground">{trust.headline}</p>
+      <div
+        role="progressbar"
+        aria-label="AI trust checks done"
+        aria-valuemin={0}
+        aria-valuemax={trust.threshold}
+        aria-valuenow={trust.done}
+        className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className="h-full origin-left rounded-full bg-orange-400 transition-transform duration-500 motion-reduce:transition-none"
+          style={{ transform: `scaleX(${trust.percent / 100})` }}
+        />
+      </div>
+      <p className="mt-1.5 text-pretty text-[13px] leading-[1.5] text-warm-secondary">{trust.meaning}</p>
+      {trust.levels.length > 0 ? (
+        <ul className="mt-2 space-y-1.5" aria-label="Where each confidence level stands">
+          {trust.levels.map((l) => (
+            <li key={l.key} className="text-[12px] leading-snug">
+              <span className="block text-warm-secondary">{l.label}</span>
+              <span className={cn('block font-semibold', l.trusted ? 'text-[#24603D]' : 'text-warm-prose')}>{l.state}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <Link
+        to={trust.href}
+        className="relative z-10 mt-2 inline-flex min-h-10 items-center gap-1 text-[13px] font-semibold text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {trust.hrefLabel}
+        <ArrowRight className="h-4 w-4" aria-hidden />
+      </Link>
+    </section>
+  );
+}
+
+/** One stop: a numbered badge, a title, the live count, one line of meaning. If the stop leads somewhere, its title is the link and the whole card is the target (40px or more). A count that did not arrive reads "?", never 0. */
 export function StopCard({
   stop,
   animate,
-  compact = false,
   onShowRegistry,
 }: {
   stop: RouteStop;
   animate: boolean;
+  /** Kept for callers. Every stop number is the same size now (24px/800, the stat-number style). */
   compact?: boolean;
   onShowRegistry: (states: ProcessedState[]) => void;
 }) {
@@ -180,17 +258,18 @@ export function StopCard({
   const titleClass = cn('text-left', action && STRETCH);
   const headingClass = 'min-w-0 text-pretty text-[14px] font-bold leading-snug text-foreground';
   const title = stop.title;
+  // The name a screen reader hears: the title, then what the link does. Kept in
+  // aria-label so the visible text is only the title.
+  const readAs = action ? `${title}: ${action.label.charAt(0).toLowerCase()}${action.label.slice(1)}` : title;
   const titleNode = !action ? (
     title
   ) : action.kind === 'link' ? (
-    <Link to={action.href} className={titleClass}>
+    <Link to={action.href} className={titleClass} aria-label={readAs}>
       {title}
-      <span className="sr-only">. {action.label}</span>
     </Link>
   ) : (
-    <button type="button" onClick={() => onShowRegistry(action.states)} className={titleClass}>
+    <button type="button" onClick={() => onShowRegistry(action.states)} className={titleClass} aria-label={readAs}>
       {title}
-      <span className="sr-only">. {action.label}</span>
     </button>
   );
 
@@ -221,8 +300,19 @@ export function StopCard({
           )}
         </div>
         <p className="shrink-0 whitespace-nowrap text-right lg:text-left">
-          <AnimatedNumber value={stop.count} animate={animate} className={cn('font-extrabold leading-none text-foreground', compact ? 'text-2xl' : 'text-3xl')} />
-          <span className="ml-1.5 text-[13px] text-warm-secondary">{stop.count === 1 ? 'paper' : 'papers'}</span>
+          {stop.count === null ? (
+            <>
+              <span className="text-2xl font-extrabold leading-none text-foreground" data-unknown>
+                ?
+              </span>
+              <span className="ml-1.5 text-[13px] text-warm-secondary">not sent yet</span>
+            </>
+          ) : (
+            <>
+              <AnimatedNumber value={stop.count} animate={animate} className="text-2xl font-extrabold leading-none text-foreground" />
+              <span className="ml-1.5 text-[13px] text-warm-secondary">{unitWord(stop.unit, stop.count)}</span>
+            </>
+          )}
         </p>
       </div>
       <p className="mt-2 text-pretty text-[13px] leading-[1.5] text-warm-secondary">{stop.meaning}</p>
@@ -235,6 +325,9 @@ export function StopCard({
           ))}
         </ul>
       ) : null}
+      {stop.sideBySide ? <SideBySide items={stop.sideBySide} /> : null}
+      {stop.figures ? <Figures figures={stop.figures} /> : null}
+      {stop.trust ? <TrustBox trust={stop.trust} /> : null}
       {stop.bands ? <BandBars bands={stop.bands} tone={stop.look.bar} /> : null}
       {action ? (
         <span aria-hidden className="mt-auto flex items-center gap-1 pt-3 text-[13px] font-semibold text-warm-secondary">

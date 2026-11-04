@@ -2,7 +2,6 @@ import { RefreshCw } from 'lucide-react';
 import { BentoPanel } from '@/components/layout/PageContainer';
 import { AdminPanelHeader } from '@/pages/admin/AdminTable';
 import { AdminEmpty, AdminError, AdminLoading } from '@/components/admin/AdminState';
-import { AdminPillButton } from '@/components/admin/AdminPillButton';
 import { AnimatedNumber, Elbow, Lane, LiveDot, StopCard, UpdatedAgo } from '@/components/admin/PipelineRouteParts';
 import { usePipelineRoute, type PipelineRouteState } from '@/hooks/usePipelineRoute';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
@@ -11,10 +10,13 @@ import {
   buildMainStops,
   buildSideStops,
   buildSiding,
+  COMPUTER_LABEL,
+  dataAsOf,
   fmt,
   laneMotion,
   maxFlow,
   questionsProgress,
+  type Audience,
   type PipelineRoute as Route,
   type PipelineRouteApi,
   type RouteStop,
@@ -22,36 +24,49 @@ import {
 } from '@/lib/pipeline-route';
 import { cn } from '@/lib/utils';
 
-/* The papers route: the hero of /admin/pipeline.
+/* The papers route: the hero of the pipeline overview, for admins (the System
+   tab of /admin) and HODs (/hod/pipeline).
 
    Owner, 11 October 2026: "a fresh pipeline picture ... like a route, like a
    logistics route with flowcharts and animations ... completely continuously
-   updated."
+   updated." Owner, 12 October: "one pipeline overview page ... how many PDFs are
+   there in total right now on my computer, and label my computer as Kanishk's
+   computer."
 
-   Ten stops joined by lanes, top to bottom on a phone, two rows of five from
-   lg. A siding for the Maths hold hangs off the first stop and never joins the
-   counts. Three smaller piles hang off the admin stop. The whole thing is also
-   a real ordered list with the numbers as text; the lanes, parcels and the
-   number count are aria-hidden decoration.
+   Seven stops joined by lanes, top to bottom on a phone, rows of four and three
+   from lg. A siding for the kept-back earlier-library papers hangs above the first
+   stop and never joins the counts. Three smaller piles sit under the route.
+   The whole thing is also a real ordered list with the numbers as text; the
+   lanes, parcels and the number count are aria-hidden decoration.
+
+   Two times are shown and never mixed up: "This screen read the numbers 12 seconds
+   ago" is when this browser read the page, "The desk last sent numbers ..." is when
+   the desk last sent numbers.
 
    PipelineRouteView is pure (props in, markup out) so it is tested by
    rendering it; PipelineRoute connects it to the 20-second refresh. */
 
-const PANEL = 'px-1.5 py-[18px] lg:px-1.5 lg:py-[18px]';
+/* The same outer padding as every other BentoPanel (20px, 32px from lg), so the
+   route's content edge lines up with the desk panels and the page header. The
+   2px and 14px here are what the 18px inset of AdminPanelHeader and the route
+   rows add back: 2 + 18 = 20, and 14 + 18 = 32 from lg. */
+const PANEL = 'px-0.5 py-5 lg:px-3.5 lg:py-8';
 
-/** Where each stop sits from lg: row 1 the siding, rows 2 and 3 the route, row 4 the piles beside the admin. */
+/* The in-screen text action (Refresh). The same words as the "Show in the list"
+   and "Open page" links on the stop cards: 40px tall, 13px semibold, warm grey. */
+const TEXT_ACTION =
+  'inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-warm-secondary transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60';
+
+/** Where each stop sits from lg: row 1 the siding, rows 2 and 3 the route. */
 const PLACE: Partial<Record<StopId, string>> = {
   leftOut: 'lg:col-start-1 lg:row-start-1',
-  folder: 'lg:col-start-1 lg:row-start-2',
-  waiting: 'lg:col-start-2 lg:row-start-2',
-  read: 'lg:col-start-3 lg:row-start-2',
-  swarm: 'lg:col-start-4 lg:row-start-2',
-  desk: 'lg:col-start-5 lg:row-start-2',
-  ai: 'lg:col-start-1 lg:row-start-3',
-  students: 'lg:col-start-2 lg:row-start-3',
-  admin: 'lg:col-start-3 lg:row-start-3',
-  approval: 'lg:col-start-4 lg:row-start-3',
-  live: 'lg:col-start-5 lg:row-start-3',
+  computer: 'lg:col-start-1 lg:row-start-2',
+  read: 'lg:col-start-2 lg:row-start-2',
+  pictures: 'lg:col-start-3 lg:row-start-2',
+  students: 'lg:col-start-4 lg:row-start-2',
+  needsYou: 'lg:col-start-1 lg:row-start-3',
+  ready: 'lg:col-start-2 lg:row-start-3',
+  live: 'lg:col-start-3 lg:row-start-3',
 };
 
 export interface PipelineRouteViewProps {
@@ -59,10 +74,13 @@ export interface PipelineRouteViewProps {
   status: PipelineRouteState['status'];
   refreshFailed: boolean;
   refreshing?: boolean;
+  /** When this browser last read the numbers (ms since 1970). */
   updatedAt: number | null;
   /** Fixed "now" for tests; the live page ticks on its own. */
   now?: number;
   reducedMotion: boolean;
+  /** Admins see every link; HODs only the ones they can open. Defaults to admin. */
+  audience?: Audience;
   onRetry: () => void;
   onRefresh: () => void;
   onShowRegistry: (states: ProcessedState[]) => void;
@@ -98,48 +116,40 @@ function ProgressStrip({ route, animate }: { route: Route; animate: boolean }) {
 
 function RouteList({
   route,
+  audience,
   animate,
   onShowRegistry,
 }: {
   route: Route;
+  audience: Audience;
   animate: boolean;
   onShowRegistry: (states: ProcessedState[]) => void;
 }) {
-  const main = buildMainStops(route);
+  const main = buildMainStops(route, audience);
   const siding = buildSiding(route);
-  const side = buildSideStops(route);
   const max = maxFlow(main);
-  const aiIndex = main.findIndex((s) => s.id === 'ai');
+  // The route wraps here from lg: the end of row 1 joins the start of row 2.
+  const wrapIndex = main.findIndex((s) => s.id === 'needsYou');
 
   const item = (s: RouteStop, i: number) => (
-    <li
-      key={s.id}
-      data-stop={s.id}
-      data-count={s.count}
-      className={cn('relative min-w-0', PLACE[s.id])}
-    >
+    <li key={s.id} data-stop={s.id} data-count={s.count ?? ''} className={cn('relative min-w-0', PLACE[s.id])}>
       {i > 0 ? (
-        <Lane count={s.count} max={max} look={s.look} animate={animate} className={i === aiIndex ? 'lg:hidden' : undefined} />
+        <Lane count={s.count ?? 0} max={max} look={s.look} animate={animate} className={i === wrapIndex ? 'lg:hidden' : undefined} />
       ) : null}
-      {i === aiIndex ? <Elbow animate={animate} seconds={laneMotion(s.count, max).seconds} /> : null}
+      {i === wrapIndex ? <Elbow animate={animate} seconds={laneMotion(s.count ?? 0, max).seconds} /> : null}
       <StopCard stop={s} animate={animate} onShowRegistry={onShowRegistry} />
     </li>
   );
 
   return (
     <ol
-      aria-label="The papers route, from the folder to live"
-      className="flex list-none flex-col px-[18px] lg:grid lg:grid-cols-5 lg:gap-x-9 lg:gap-y-12"
+      aria-label={`The papers route, from the PDFs saved on ${COMPUTER_LABEL} to live`}
+      className="flex list-none flex-col px-[18px] lg:grid lg:grid-cols-4 lg:gap-x-9 lg:gap-y-12"
     >
       {item(main[0], 0)}
-      <li
-        key="leftOut"
-        data-stop="leftOut"
-        data-count={siding.count}
-        className={cn('relative min-w-0', PLACE.leftOut)}
-      >
+      <li key="leftOut" data-stop="leftOut" data-count={siding.count ?? ''} className={cn('relative min-w-0', PLACE.leftOut)}>
         <div className="ml-6 mt-3 border-l-2 border-dashed border-warm-hairline-strong pl-4 lg:ml-0 lg:mt-0 lg:border-l-0 lg:pl-0">
-          <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-warm-label">Side track</p>
+          <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-warm-label">Set aside</p>
           <StopCard stop={siding} animate={animate} compact onShowRegistry={onShowRegistry} />
         </div>
         <span
@@ -147,66 +157,46 @@ function RouteList({
           className="pointer-events-none absolute left-1/2 top-full hidden h-12 -translate-x-1/2 border-l-2 border-dashed border-warm-hairline-strong lg:block"
         />
       </li>
-      {main.slice(1).map((s, i) => (
-        <MainWithSide key={s.id} index={i + 1} stop={s} side={side} animate={animate} item={item} />
-      ))}
+      {main.slice(1).map((s, i) => item(s, i + 1))}
     </ol>
   );
 }
 
-/** A main stop, followed by the three side piles when it is the admin stop. */
-function MainWithSide({
-  index,
-  stop,
-  side,
-  animate,
-  item,
-}: {
-  index: number;
-  stop: RouteStop;
-  side: RouteStop[];
-  animate: boolean;
-  item: (s: RouteStop, i: number) => JSX.Element;
-}) {
+/** Questions that cannot go to students or a person yet. Beneath the route, not on it. */
+function SidePiles({ route, animate }: { route: Route; animate: boolean }) {
+  const side = buildSideStops(route);
   return (
-    <>
-      {item(stop, index)}
-      {stop.id === 'admin' ? (
-        <li
-          key="side"
-          data-stop="side-piles"
-          className="relative min-w-0 lg:col-span-3 lg:col-start-2 lg:row-start-4"
-        >
-          <svg
-            aria-hidden
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            className="pointer-events-none absolute bottom-full left-0 hidden h-12 w-full lg:block"
-          >
-            <path
-              d="M50 0 V50 M16.67 50 H83.33 M16.67 50 V100 M50 50 V100 M83.33 50 V100"
-              fill="none"
-              strokeWidth="2"
-              strokeDasharray="6 6"
-              vectorEffect="non-scaling-stroke"
-              className="stroke-warm-hairline-strong"
-            />
-          </svg>
-          <div className="ml-6 mt-3 border-l-2 border-dashed border-warm-hairline-strong pl-4 lg:ml-0 lg:mt-0 lg:border-l-0 lg:pl-0">
-            <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-warm-label lg:sr-only">
-              Also open, not with students or the admin yet
-            </p>
-            <ul className="grid list-none gap-3 lg:grid-cols-3 lg:gap-9">
-              {side.map((s) => (
-                <li key={s.id} data-stop={s.id} data-count={s.count} className="min-w-0">
-                  <StopCard stop={s} animate={animate} compact onShowRegistry={() => {}} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        </li>
-      ) : null}
-    </>
+    <section data-stop="side-piles" aria-label="Also open, not with students or a person yet" className="mx-[18px] mt-6">
+      <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-warm-label">Also open, not with students or a person yet</p>
+      <ul className="grid list-none gap-3 sm:grid-cols-3">
+        {side.map((s) => (
+          <li key={s.id} data-stop={s.id} data-count={s.count ?? ''} className="min-w-0">
+            <StopCard stop={s} animate={animate} compact onShowRegistry={() => {}} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** "Data as of 8 Oct, 11:24 pm (4 days ago)": when the desk last sent numbers. Turns amber when that was too long ago. */
+function DataAsOfLine({ route, nowMs }: { route: Route; nowMs: number }) {
+  const d = dataAsOf(route, nowMs);
+  if (!d.at) {
+    return (
+      <p className="mx-[18px] mb-3 rounded-xl bg-amber-100 px-3 py-2 text-[13px] text-amber-950" data-data-as-of="never">
+        The desk has not sent any numbers yet, so none of these are real.
+      </p>
+    );
+  }
+  return (
+    <p
+      className={cn('mx-[18px] mb-3 rounded-xl px-3 py-2 text-[13px]', d.stale ? 'bg-amber-100 text-amber-950' : 'bg-muted text-warm-secondary')}
+      data-data-as-of={d.stale ? 'stale' : 'fresh'}
+    >
+      <span className="font-bold">The desk last sent numbers {d.ago}</span> ({d.when}).
+      {d.stale ? ' The desk has not sent new numbers for a while, so some of these may be out of date.' : ''}
+    </p>
   );
 }
 
@@ -218,17 +208,18 @@ export function PipelineRouteView({
   updatedAt,
   now,
   reducedMotion,
+  audience = 'admin',
   onRetry,
   onRefresh,
   onShowRegistry,
 }: PipelineRouteViewProps) {
   const animate = !reducedMotion;
-  const empty = !!route && route.registry.total === 0 && route.desk.papers === 0;
+  const empty = !!route && route.registry.total === 0 && route.desk.papers === 0 && !route.drive;
   return (
     <BentoPanel fill="card" className={PANEL} id="pipeline-route" data-reduced-motion={reducedMotion ? 'true' : 'false'}>
       <AdminPanelHeader
         title="The papers route"
-        subtitle="Where every paper is right now, from the folder to the live site. These numbers update by themselves."
+        subtitle={`Where every paper is right now, from the PDFs saved on ${COMPUTER_LABEL} to the live site. This page checks again by itself, but the numbers are only as new as the desk's last sync.`}
         meta={
           <span className="inline-flex items-center gap-2">
             <LiveDot failed={refreshFailed} animate={animate} />
@@ -237,10 +228,17 @@ export function PipelineRouteView({
         }
         action={
           route ? (
-            <AdminPillButton variant="quiet" size="sm" onClick={onRefresh} busy={refreshing} aria-label="Refresh the numbers now">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={refreshing}
+              aria-busy={refreshing || undefined}
+              aria-label="Refresh the numbers now"
+              className={TEXT_ACTION}
+            >
               <RefreshCw className={cn('h-4 w-4', refreshing && animate && 'animate-spin')} aria-hidden />
               Refresh
-            </AdminPillButton>
+            </button>
           ) : undefined
         }
       />
@@ -266,10 +264,12 @@ export function PipelineRouteView({
         />
       ) : (
         <>
-          <RouteList route={route} animate={animate} onShowRegistry={onShowRegistry} />
+          <DataAsOfLine route={route} nowMs={now ?? Date.now()} />
+          <RouteList route={route} audience={audience} animate={animate} onShowRegistry={onShowRegistry} />
+          <SidePiles route={route} animate={animate} />
           <ProgressStrip route={route} animate={animate} />
           <p className="mt-4 px-[18px] text-[13px] leading-[1.5] text-warm-meta">
-            The stops are counted from different lists, so do not add them up. The desk, the swarm and the checkers all count papers already on the desk. Left out papers are never in these counts.
+            The stages are counted from different lists, so do not add them up. Papers from the earlier library are kept back and are only in the PDF count, never in the stages after it. A number shown as ? has not been sent by the desk yet.
           </p>
         </>
       )}
@@ -280,9 +280,11 @@ export function PipelineRouteView({
 /** The route, connected to the refresh loop: reads now, then every 20 seconds while the tab is visible. */
 export function PipelineRoute({
   api,
+  audience = 'admin',
   onShowRegistry,
 }: {
   api: PipelineRouteApi;
+  audience?: Audience;
   onShowRegistry: (states: ProcessedState[]) => void;
 }) {
   const state = usePipelineRoute(api);
@@ -295,6 +297,7 @@ export function PipelineRoute({
       refreshing={state.refreshing}
       updatedAt={state.updatedAt}
       reducedMotion={reducedMotion}
+      audience={audience}
       onRetry={state.refresh}
       onRefresh={state.refresh}
       onShowRegistry={onShowRegistry}

@@ -25,6 +25,7 @@ import { getShikshaqmineBasicBySlugs } from '@/lib/teachers';
 import { BROWSE_PATH, PAST_PAPERS_PATH } from '@/lib/nav-config';
 import { generateBreadcrumbSchema, generateCollectionPageSchema } from '@/utils/structuredDataGenerators';
 import { injectSchemas } from '@/utils/injectSchemas';
+import { countPapers, isComingSoon, paperCountLabel } from '@/lib/readable-papers';
 
 /* S16 — the school page.
  *
@@ -68,6 +69,8 @@ interface SchoolPaper {
   /** Null where the source never recorded one — sorted last, never shown as 0. */
   year: number | null;
   meta: string;
+  /** Listed but not openable yet: kept on the page, left out of every total. */
+  comingSoon?: boolean;
 }
 
 export default function SchoolPage() {
@@ -160,8 +163,9 @@ export default function SchoolPage() {
         meta: [
           b.board,
           hasYear(b.year) ? b.year : 'Year not recorded',
-          `${b.questionCount} question${b.questionCount === 1 ? '' : 's'}`,
+          isComingSoon(b) ? 'Coming soon' : `${b.questionCount} question${b.questionCount === 1 ? '' : 's'}`,
         ].join(' · '),
+        comingSoon: isComingSoon(b),
       };
     });
 
@@ -199,12 +203,23 @@ export default function SchoolPage() {
     [papers],
   );
 
+  /* Coming soon papers stay in the list below but are not counted in any
+     figure on this page (lib/readable-papers.ts). */
+  const paperCounts = useMemo(
+    () => countPapers(papers.map((p) => ({ needsReview: p.comingSoon }))),
+    [papers],
+  );
+
   const summary = useMemo(() => {
     if (papers.length === 0) return null;
 
     /* Each clause drops rather than guesses when its data is missing
        (design.md §0.10). A school with one year shows that year, not a range. */
-    const parts = [`${papers.length} paper${papers.length === 1 ? '' : 's'}`];
+    const parts = [
+      paperCounts.comingSoon > 0
+        ? paperCountLabel(paperCounts.ready, paperCounts.comingSoon)
+        : `${paperCounts.ready} paper${paperCounts.ready === 1 ? '' : 's'}`,
+    ];
     /* "ISC & ICSE & Board" — a school with three boards read as a chain of
        ampersands. A list separates with commas and joins the last with one. */
     if (boards.length) {
@@ -226,7 +241,7 @@ export default function SchoolPage() {
       parts.push(ascYears.length === 1 ? String(ascYears[0]) : `${ascYears[0]}-${ascYears[ascYears.length - 1]}`);
     }
     return parts.join(' · ');
-  }, [papers, boards, classes, years]);
+  }, [papers, paperCounts, boards, classes, years]);
 
   const subjects = useMemo(
     () => [...new Set(papers.map((p) => p.subject).filter(Boolean))].sort(),
@@ -406,9 +421,12 @@ export default function SchoolPage() {
       clauses.push(asc.length === 1 ? String(asc[0]) : `${asc[0]} to ${asc[asc.length - 1]}`);
     }
     const detail = clauses.length ? `: ${clauses.join(', ')}` : '';
-    return `${papers.length} past paper${papers.length === 1 ? '' : 's'} from ${name}${detail}. `
+    if (paperCounts.ready === 0) {
+      return `Past papers from ${name}${detail}, coming soon to Shikshaq.`;
+    }
+    return `${paperCounts.ready} past paper${paperCounts.ready === 1 ? '' : 's'} from ${name}${detail}. `
       + 'Read every question online for free, with marks and chapters.';
-  }, [papers.length, name, boards, classes, years]);
+  }, [papers.length, paperCounts.ready, name, boards, classes, years]);
 
   /* "Free to Read" earns its place in a result snippet, but not at the cost of
      the school's own name being cut off: a long name plus the full suffix ran
@@ -439,9 +457,11 @@ export default function SchoolPage() {
       generateCollectionPageSchema({
         url: `https://www.shikshaq.in/school/${canonicalSlug}`,
         name: `${name} past papers`,
-        description: `${papers.length} past papers from ${name}, free to read on Shikshaq.`,
+        description: paperCounts.ready > 0
+          ? `${paperCounts.ready} past papers from ${name}, free to read on Shikshaq.`
+          : `Past papers from ${name}, coming soon to Shikshaq.`,
         about: name,
-        numberOfItems: papers.length,
+        numberOfItems: paperCounts.ready,
       }),
       generateBreadcrumbSchema([
         { name: 'Home', url: '/' },
@@ -453,7 +473,7 @@ export default function SchoolPage() {
       const existing = document.getElementById('page-schemas');
       if (existing) existing.remove();
     };
-  }, [papers.length, name, canonicalSlug]);
+  }, [papers.length, paperCounts.ready, name, canonicalSlug]);
 
   const hasResults = !loading && papers.length > 0;
 

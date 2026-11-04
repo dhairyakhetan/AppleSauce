@@ -1,6 +1,7 @@
-import { sharedFakeApprovalApi } from '@/dummy/approval-fake-api';
-import { createFakeAdminQueueApi } from '@/dummy/admin-queue-fake-api';
-import type { AdminCountField, AdminCountsResult } from '@/pages/admin/useAdminSectionCounts';
+import { createFakeApprovalsApi } from '@/dummy/admin-approvals-fake-api';
+import { createFakeHodApi } from '@/dummy/hod-fake-api';
+import { createFakeReviewsAdminApi } from '@/dummy/reviews-fake-api';
+import type { AdminCountField, AdminCountsResult, AdminSectionCounts } from '@/pages/admin/useAdminSectionCounts';
 
 /* Made-up nav counts for dummy mode (D75). Test builds only: reached solely
    through a dynamic import behind PREVIEW_TOOLS in useAdminSectionCounts.ts.
@@ -8,23 +9,29 @@ import type { AdminCountField, AdminCountsResult } from '@/pages/admin/useAdminS
    `?counts=error` on the URL makes the FIRST read fail on every field, and
    `?counts=partial` makes it fail on two, so the "?" badge and the Retry
    button can be seen. Every later read (the Retry button) succeeds. The state
-   is per page load, so it never leaks into a real session. */
+   is per page load, so it never leaks into a real session.
 
-/* paperApprovals and adminQueue are read from the same fakes the Ready to go
-   live and Admin queue pages list from, so the nav badge, the landing card and
-   the page's own number agree. The other three are fixed numbers that match
-   their fake lists. */
-const FIXTURE = {
-  submissions: 3,
-  approvals: 4,
-  reviews: 2,
-} as const;
+   Nothing here is a typed-in number. Each badge is read from the same made-up
+   fake the page it leads to uses, so the nav, the page's own header and its
+   list cannot disagree:
+     approvals   pending applications       (admin-approvals-fake-api, the Waiting view)
+     reviews     pending reviews + recs     (reviews-fake-api counts)
+     the HOD three, from hod_desk_counts    (hod-fake-api, the HOD desk's tab badges) */
 
-async function listCounts(): Promise<Pick<Record<AdminCountField, number>, 'paperApprovals' | 'adminQueue'>> {
-  const [ready, queue] = await Promise.all([sharedFakeApprovalApi().queue(), createFakeAdminQueueApi().papers()]);
+const FIELDS: AdminCountField[] = ['paperApprovals', 'adminQueue', 'submissions', 'approvals', 'reviews'];
+
+async function fixtureCounts(): Promise<AdminSectionCounts> {
+  const [applications, reviews, desk] = await Promise.all([
+    createFakeApprovalsApi().list(),
+    createFakeReviewsAdminApi().counts(),
+    createFakeHodApi().deskCounts(),
+  ]);
   return {
-    paperApprovals: ready.length,
-    adminQueue: (queue ?? []).reduce((total, p) => total + p.waiting, 0),
+    approvals: applications.filter((a) => a.status === 'pending').length,
+    reviews: reviews.pendingReviews + reviews.pendingRecommendations,
+    paperApprovals: desk.ready,
+    adminQueue: desk.needs_you_questions,
+    submissions: desk.student_uploads_pending,
   };
 }
 
@@ -41,12 +48,13 @@ let firstRead = true;
 export async function fakeCounts(): Promise<AdminCountsResult> {
   const failFirst = firstRead ? mode() : null;
   firstRead = false;
-  if (failFirst === 'error') return { counts: {}, failed: ['paperApprovals', 'adminQueue', 'submissions', 'approvals', 'reviews'] };
+  if (failFirst === 'error') return { counts: {}, failed: [...FIELDS] };
+  const all = await fixtureCounts();
   if (failFirst === 'partial') {
     const failed: AdminCountField[] = ['adminQueue', 'reviews'];
-    const counts = { ...FIXTURE, ...(await listCounts()) } as Partial<Record<AdminCountField, number>>;
+    const counts: AdminSectionCounts = { ...all };
     for (const f of failed) delete counts[f];
     return { counts, failed };
   }
-  return { counts: { ...FIXTURE, ...(await listCounts()) }, failed: [] };
+  return { counts: all, failed: [] };
 }

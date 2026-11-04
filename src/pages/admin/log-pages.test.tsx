@@ -13,7 +13,7 @@ vi.mock('@/lib/admin-debug', () => ({
 
 import { AuditPanel } from '@/pages/admin/audit';
 import { ActivityItem } from '@/pages/admin/activity';
-import { AttentionStrip, DayBars, StatsPanel } from '@/pages/admin/pipeline';
+import { DayBars, StatsPanel } from '@/pages/admin/pipeline';
 import { describeAction } from '@/lib/audit-describe';
 import { AUDIT_LIMIT, type AuditRow } from '@/lib/audit-api';
 import { createFakeAuditApi } from '@/dummy/audit-fake-api';
@@ -83,8 +83,9 @@ describe('audit page states', () => {
     expect(describeAction({ action: 'revoke_hod', target_type: 'hod' }).verb).toBe('Removed an HOD');
     expect(describeAction({ action: 'grant_checker', target_type: 'checker' }).verb).toBe('Added a verifier');
     const unknown = describeAction({ action: 'hold_batch', target_type: 'paper_batch' });
-    expect(unknown.verb).toBe('Hold batch paper batch');
+    expect(unknown.verb).toBe('Put a batch of papers on hold');
     expect(unknown.verb).not.toContain('_');
+    expect(describeAction({ action: 'hold_batch', target_type: 'something_new' }).verb).toBe('Hold batch something new');
   });
 
   it('the fixture api reaches the full, empty and error states', async () => {
@@ -151,47 +152,12 @@ describe('activity rows', () => {
     const ai: ActivityRow = { ...base, actor_user_id: null, actor_label: 'ai:sonnet', actor_kind: 'ai', action: 'check_fix' };
     const html = wrap(<ActivityItem group={{ head: ai, also: [] }} onOpen={open} />);
     expect(html).not.toContain('/admin/checker-log/');
-    expect(text(html)).toContain('AI check (Sonnet) suggested a fix to question 3(b)');
+    expect(text(html)).toContain('AI check suggested a fix to question 3(b)');
   });
 });
 
 describe('pipeline panels', () => {
   const noop = () => {};
-
-  it('a stats number that did not load is "?", never 0, and offers Try again', async () => {
-    const html = wrap(
-      <AttentionStrip stats={null} status="error" notStarted={46} registryStatus="ok" onShowNotStarted={noop} onRetry={noop} />,
-    );
-    const t = text(html);
-    expect(t).toContain('Needs attention');
-    expect(t).toContain('46');
-    expect((t.match(/\?/g) ?? []).length).toBeGreaterThanOrEqual(3);
-    expect(t).toContain('The queue numbers did not load.');
-    expect(t).toContain('Try again');
-  });
-
-  it('the strip is a set of links to the lists behind the numbers', async () => {
-    const stats = await createFakePipelineApi('full', 0).stats();
-    const html = wrap(
-      <AttentionStrip stats={stats} status="ok" notStarted={46} registryStatus="ok" onShowNotStarted={noop} onRetry={noop} />,
-    );
-    expect(html).toContain('href="/admin/admin-queue"');
-    expect(html).toContain('href="/admin/team"');
-    const t = text(html);
-    expect(t).toContain('Not started');
-    expect(t).toContain('46');
-    expect(t).toContain('35'); // the admin queue in the fixture
-    expect(t).toContain('640'); // the student queue
-    expect(t).not.toContain('Did not load');
-  });
-
-  it('while the numbers load, tiles show a placeholder, not a number', () => {
-    const html = wrap(
-      <AttentionStrip stats={null} status="loading" notStarted={null} registryStatus="loading" onShowNotStarted={noop} onRetry={noop} />,
-    );
-    expect(html).toContain('role="status"');
-    expect(text(html)).not.toContain(' 0 ');
-  });
 
   it('a stats panel has its own skeleton, its own error and its own success', () => {
     const body = <p>the numbers</p>;
@@ -205,38 +171,29 @@ describe('pipeline panels', () => {
     expect(ok).toContain('the numbers');
   });
 
-  it('the page is gated only by the admin check: the strip and the registry are always in the tree', () => {
+  it('the page is gated only by the admin check: the route and the registry are always in the tree', () => {
     const src = readFileSync('src/pages/admin/pipeline.tsx', 'utf8');
     const page = src.slice(src.indexOf('export function AdminPipelinePage'));
     expect(page).toMatch(/if \(checkingAdmin\) \{/);
     expect(page).not.toMatch(/if \((?:checkingAdmin \|\| )?(?:loading|status === 'loading')\)/);
-    expect(page.indexOf('<AttentionStrip')).toBeGreaterThan(-1);
-    expect(page.indexOf('<AttentionStrip')).toBeLessThan(page.indexOf('<PaperRegistryPanel'));
-    expect(page.indexOf('<PaperRegistryPanel')).toBeLessThan(page.indexOf('title="Papers library"'));
+    expect(page.indexOf('<PipelineRoute')).toBeGreaterThan(-1);
+    expect(page.indexOf('<PipelineRoute')).toBeLessThan(page.indexOf('<PipelineDetailFold'));
+    // The folded detail lives in components/admin/PipelineDetail.tsx, shared with /hod/pipeline.
+    const detail = readFileSync('src/components/admin/PipelineDetail.tsx', 'utf8');
+    expect(detail.indexOf('<PaperRegistryPanel')).toBeGreaterThan(-1);
+    expect(detail.indexOf('<PaperRegistryPanel')).toBeLessThan(detail.indexOf('title="Papers library"'));
   });
 
-  it('New scans has no list behind it, so it is a plain tile and the strip does not claim otherwise', async () => {
-    const stats = await createFakePipelineApi('full', 0).stats();
-    const html = wrap(<AttentionStrip stats={stats} status="ok" notStarted={46} registryStatus="ok" onShowNotStarted={() => {}} onRetry={() => {}} />);
-    const scans = html.slice(html.indexOf('New scans') - 200);
-    expect(scans).toContain('papers read from fresh scans');
-    // the three tiles with a list behind them: Not started (button) and the two links
-    expect((html.match(/<button/g) ?? []).length).toBe(1);
-    expect((html.match(/<a /g) ?? []).length).toBe(2);
-    expect(text(html)).not.toContain('Each number opens');
+  it('the old Needs attention strip and Checking panel are gone: they counted the frozen earlier-library copies and disagreed with the route', () => {
+    const src = readFileSync('src/pages/admin/pipeline.tsx', 'utf8');
+    expect(src).not.toContain('AttentionStrip');
+    expect(src).not.toContain('title="Checking"');
+    expect(src).not.toContain('Student queue');
   });
 
-  it('a tile that is a button holds only phrasing content: no div or p inside the button', async () => {
-    const stats = await createFakePipelineApi('full', 0).stats();
-    for (const props of [{ status: 'ok' as const }, { status: 'loading' as const }]) {
-      const html = wrap(
-        <AttentionStrip stats={props.status === 'ok' ? stats : null} status={props.status} notStarted={46} registryStatus={props.status}
-          onShowNotStarted={() => {}} onRetry={() => {}} />,
-      );
-      for (const button of html.match(/<button[\s\S]*?<\/button>/g) ?? []) {
-        expect(button).not.toMatch(/<(div|p|h\d|ul)[ >]/);
-      }
-    }
+  it('the admin page hands the route the admin audience, and the HOD page the HOD one', () => {
+    expect(readFileSync('src/pages/admin/pipeline.tsx', 'utf8')).toContain('audience="admin"');
+    expect(readFileSync('src/pages/HodPipeline.tsx', 'utf8')).toContain('audience="hod"');
   });
 
   it('the last bar of a chart is labelled with its date, not "today"', () => {
@@ -251,7 +208,7 @@ describe('pipeline panels', () => {
   });
 
   it('a failed activity log shows the error with Try again, not "No activity recorded yet"', () => {
-    const src = readFileSync('src/pages/admin/pipeline.tsx', 'utf8');
+    const src = readFileSync('src/components/admin/PipelineDetail.tsx', 'utf8');
     expect(src).toMatch(/status=\{status === 'ok' && feedFailed \? 'error' : status\}\s+what="the activity"/);
     const html = wrap(<StatsPanel title="Activity" status="error" what="the activity" onRetry={() => {}}><p>No activity recorded yet</p></StatsPanel>);
     expect(text(html)).toContain('The activity did not load.');

@@ -148,7 +148,7 @@ export function SearchControl({ className = '', align = 'center', stackedToggle 
   const location = useLocation();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { ensureLoaded, search, schools, ready, featuredTeachers, recentPapers } = useSearchIndex();
+  const { ensureLoaded, search, schools, ready, loadFailed, featuredTeachers, recentPapers } = useSearchIndex();
 
   const [mode, setMode] = useState<SearchMode>(initialMode || (location.pathname === '/past-papers' ? 'papers' : 'teachers'));
   /* mode_changed was a typed, weighted SignalKind (types.ts) with no producer
@@ -1374,7 +1374,19 @@ export function SearchControl({ className = '', align = 'center', stackedToggle 
               {displayOverlayTyping && (
                 <div key={mode} className="animate-blur-swap motion-reduce:animate-none">
                   {/* Loading -- skeleton matching the result rows' shape (§9). */}
-                  {searchActive && indexLoading && (
+                  {searchActive && indexLoading && loadFailed && (
+                    <div role="alert" className="grid gap-2 p-4 text-[14px] text-foreground sm:p-6">
+                      <p>Search could not load. Check your connection and try again.</p>
+                      <button
+                        type="button"
+                        onClick={() => void ensureLoaded()}
+                        className="tap-44 w-fit rounded-full bg-muted px-4 py-1.5 text-[13px] font-semibold"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
+                  {searchActive && indexLoading && !loadFailed && (
                     <div className="grid gap-2 p-4 sm:p-6" aria-busy="true" aria-live="polite">
                       <span className="sr-only">Searching…</span>
                       {[0, 1, 2].map((i) => (

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Clock, Flag, Search } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Footer } from '@/components/Footer';
 import { DisclaimerStrip } from '@/components/papers/disclaimer-strip';
 import { PaperDisclaimerDialog } from '@/components/papers/paper-disclaimer-dialog';
@@ -17,9 +16,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/utils/logger';
 import { SUBJECT_PATH_TO_FILTER } from '@/utils/subjectMapping';
 import { bankSubjectToSite } from '@/lib/subject-vocabulary';
-import { displaySchool } from '@/lib/school-display';
+import { paperSourceName } from '@/lib/school-display';
+import { NOT_FOUND_TITLE, NOT_FOUND_DESCRIPTION } from '@/lib/not-found-copy';
+import NotFound from '@/pages/NotFound';
 import { buildPaperSeo } from '@/lib/paper-seo';
-import { PAST_PAPERS_PATH } from '@/lib/nav-config';
 
 import {
   resolveDisplayNumber, showPaperExtras, showIncompleteNote, showQuestionInstructions,
@@ -93,14 +93,16 @@ function QuestionReport({
   async function submit() {
     if (state === 'sending') return;
     setState('sending');
-    const { data: sessionData } = await supabase.auth.getSession();
-    const { error } = await supabase.from('question_reports').insert({
-      question_id: questionId,
-      paper_id: paperId,
-      note: note.trim() ? note.trim().slice(0, 1000) : null,
-      reporter_id: sessionData.session?.user.id ?? null,
-    });
-    if (error) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { error } = await supabase.from('question_reports').insert({
+        question_id: questionId,
+        paper_id: paperId,
+        note: note.trim() ? note.trim().slice(0, 1000) : null,
+        reporter_id: sessionData.session?.user.id ?? null,
+      });
+      if (error) throw error;
+    } catch (error) {
       logger.error('question report failed', error);
       setState('error');
       return;
@@ -192,12 +194,36 @@ function FadeLabel({ show, children }: { show: boolean; children: import('react'
   );
 }
 
+/** A question's diagram. If the picture cannot load, a plain note stands in, so it does not read as a broken part of the question. */
+function FigureImage({ src, alt, dims }: { src: string; alt: string; dims?: [number, number] }) {
+  const [bad, setBad] = useState(false);
+  if (bad) {
+    return (
+      <p role="status" className="rounded-[12px] bg-card px-3 py-2 text-[13px] text-warm-secondary">
+        The diagram for this question did not load. Reload the page to try again.
+      </p>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      {...(dims ? { width: dims[0], height: dims[1] } : {})}
+      loading="lazy"
+      decoding="async"
+      onError={() => setBad(true)}
+      className="max-h-[300px] w-auto max-w-full rounded-[12px] bg-card p-2 shadow-border"
+    />
+  );
+}
+
 export default function BankPaper() {
   const { id } = useParams<{ id: string }>();
   const [paper, setPaper] = useState<BankPaperMeta | null>(null);
   const [questions, setQuestions] = useState<BankQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const [chapter, setChapter] = useState('');
   const [q, setQ] = useState('');
   const [reportFor, setReportFor] = useState('');
@@ -238,6 +264,13 @@ export default function BankPaper() {
      vocabulary ("Maths") -- see src/lib/subject-vocabulary.ts. Every display
      site below reads this, never paper.subject directly. */
   const displaySubject = paper ? bankSubjectToSite(paper.subject) : '';
+  /* The source a paper is shown under, or null when none is recorded. A null
+     source is dropped from the title, the header and the card rather than
+     printed as "School not recorded". */
+  const sourceName = paper ? paperSourceName(paper.school) : null;
+  const paperHeading = paper
+    ? [sourceName, `Class ${paper.cls} ${displaySubject}`].filter(Boolean).join(' · ')
+    : '';
 
   /* This paper's own row and this paper's own questions, and nothing else.
      It used to fetch the entire bank — 6,912 questions — to read one of them. */
@@ -271,7 +304,7 @@ export default function BankPaper() {
       })
       .catch(() => { if (!cancelled) { setFailed(true); setLoading(false); } });
     return () => { cancelled = true; };
-  }, [id, user?.id]);
+  }, [id, user?.id, retryTick]);
 
   useEffect(() => { setChapter(''); setQ(''); setReportFor(''); }, [id]);
 
@@ -296,7 +329,7 @@ export default function BankPaper() {
       .limit(50)
       .then(({ data }) => {
         if (cancelled || !data) return;
-        setSiblings(data.map((r) => ({ id: r.id, title: `${displaySchool(r.school)} Class ${r.cls} ${bankSubjectToSite(r.subject)}`, year: hasYear(r.year) ? r.year : null })));
+        setSiblings(data.map((r) => ({ id: r.id, title: [paperSourceName(r.school), `Class ${r.cls} ${bankSubjectToSite(r.subject)}`].filter(Boolean).join(' '), year: hasYear(r.year) ? r.year : null })));
       });
     return () => { cancelled = true; };
   }, [paper]);
@@ -452,13 +485,21 @@ export default function BankPaper() {
      scripts/prerender.ts uses, so the crawler's copy and the browser's copy of
      this page cannot disagree. */
   const paperSeo = paper ? buildPaperSeo(paper) : null;
+  /* A paper id that does not resolve shows the site's own not-found page,
+     with its title and description, rather than a paper-specific message.
+     A failed read is a separate state (`failed`) and is not "not found". */
+  const notFound = !loading && !failed && !paper;
   usePageMeta(
-    paperSeo ? paperSeo.title : 'Past paper | Shikshaq',
-    paper && paperSeo
-      ? paper.needsReview
-        ? `${paperSeo.heading.replace(/ question paper$/, '')} ${paper.exam}. This paper is being audited and is not open to read yet.`
-        : paperSeo.description
-      : 'Read a free past year question paper on Shikshaq.',
+    notFound
+      ? NOT_FOUND_TITLE
+      : paperSeo ? paperSeo.title : 'Past paper | Shikshaq',
+    notFound
+      ? NOT_FOUND_DESCRIPTION
+      : paper && paperSeo
+        ? paper.needsReview
+          ? `${paperSeo.heading.replace(/ question paper$/, '')} ${paper.exam}. This paper is being audited and is not open to read yet.`
+          : paperSeo.description
+        : 'Read a free past year question paper on Shikshaq.',
   );
 
   /* The description wording ("All N questions ... First two open to
@@ -675,15 +716,10 @@ export default function BankPaper() {
               bundle -- see supabase/migrations/20260925130000_paper_figures_bucket.sql.
               getPublicUrl does no network call, just URL construction, so
               this costs nothing extra per card. */}
-          <img
+          <FigureImage
             src={supabase.storage.from('paper-figures').getPublicUrl(row.f).data.publicUrl}
             alt={`Figure for question ${resolveDisplayNumber(row.dn, displayNumbers.get(row.i), row.n) ?? ''}`}
-            {...(figureDims?.[row.f]
-              ? { width: figureDims[row.f][0], height: figureDims[row.f][1] }
-              : {})}
-            loading="lazy"
-            decoding="async"
-            className="max-h-[300px] w-auto max-w-full rounded-[12px] bg-card p-2 shadow-border"
+            dims={figureDims?.[row.f]}
           />
         </figure>
       )}
@@ -696,7 +732,15 @@ export default function BankPaper() {
     return (
       <div className="flex min-h-screen flex-col bg-panel">
         <main id="main-content" className={`flex-1 ${CONTAINER} py-10`}>
-          <p className="text-[15px] text-white/80">This paper did not load. Refresh to try again.</p>
+          <p role="alert" className="text-[15px] text-white/80">This paper did not load. Check your connection and try again.</p>
+          <button
+            type="button"
+            onClick={() => { setFailed(false); setLoading(true); setRetryTick((n) => n + 1); }}
+            className="tap-44 mt-3 inline-flex items-center rounded-full bg-brand px-5 text-[15px] font-bold text-foreground"
+          >
+            Try again
+          </button>
+          <br />
           <Link to="/past-papers" className="mt-3 inline-flex min-h-11 items-center font-semibold text-brand-blue">
             Back to past papers
           </Link>
@@ -704,6 +748,11 @@ export default function BankPaper() {
       </div>
     );
   }
+
+  /* Not found is the site's own 404 page, so an old or removed paper link
+     reads like any other dead URL. Loading and error are handled above and
+     below and never reach this line. */
+  if (notFound) return <NotFound />;
 
   return (
     <div className="flex min-h-screen flex-col bg-panel">
@@ -735,10 +784,10 @@ export default function BankPaper() {
           <div className="min-w-0 flex-1">
             <h1
               className="flex items-center gap-1.5 truncate text-[14px] font-bold text-white"
-              title={paper ? `${displaySchool(paper.school)} · Class ${paper.cls} ${displaySubject}` : undefined}
+              title={paper ? paperHeading : undefined}
             >
               <span className="truncate">
-                {paper ? `${displaySchool(paper.school)} · Class ${paper.cls} ${displaySubject}` : 'Past paper'}
+                {paper ? paperHeading : 'Past paper'}
               </span>
               {paper ? <DebugId label="paper" value={paper.id} /> : null}
             </h1>
@@ -804,7 +853,7 @@ export default function BankPaper() {
             <PaperDisclaimerDialog />
             <PaperShareLock paperTitle={paperTitle(paper)} />
             <CaptureShield />
-            <DisclaimerStrip tone="dark" school={displaySchool(paper.school)} />
+            <DisclaimerStrip tone="dark" school={sourceName} isBoard={paper.isBoardPaper} />
           </>
         )}
 
@@ -817,22 +866,6 @@ export default function BankPaper() {
               {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="h-[104px] animate-shimmer rounded-[18px] bg-muted bg-[length:200%_100%]" />
               ))}
-            </div>
-          )}
-
-          {!loading && !paper && (
-            <div className="flex flex-col items-center gap-4 py-10 text-center">
-              <p className="text-[15px] text-warm-prose">
-                We could not find that paper. It may have been removed, or the link may be wrong.
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button asChild variant="primary" size={44}>
-                  <Link to={PAST_PAPERS_PATH}>Browse all papers</Link>
-                </Button>
-                <Button asChild variant="muted" size={44}>
-                  <Link to={`${PAST_PAPERS_PATH}/results`}>Search papers</Link>
-                </Button>
-              </div>
             </div>
           )}
 
@@ -874,7 +907,9 @@ export default function BankPaper() {
                the paper arriving rather than as decoration on every render
                (CRAFT §2: delight at success, not on every element). */
             <div className="mb-5 animate-card-blur-in border-b border-border pb-4 text-center motion-reduce:animate-none">
-              <p className="text-[13px] italic text-muted-foreground">{displaySchool(paper.school)}</p>
+              {sourceName !== null && (
+                <p className="text-[13px] italic text-muted-foreground">{sourceName}</p>
+              )}
               <h2 className="mt-1 font-display text-[20px] font-extrabold tracking-[-0.02em] text-foreground sm:text-[23px]">
                 {/* Middle dot, not an em dash -- CLAUDE.md bans em/en dashes in
                    site copy; · is this codebase's own standing separator
@@ -1030,7 +1065,7 @@ export default function BankPaper() {
         onOpenChange={setGateOpen}
         flavor="papers"
         redirectTo={`/past-papers/${id ?? ''}`}
-        paperTitle={paper ? `${displaySchool(paper.school)} Class ${paper.cls} ${displaySubject}` : null}
+        paperTitle={paper ? [sourceName, `Class ${paper.cls} ${displaySubject}`].filter(Boolean).join(' ') : null}
         paperSubject={displaySubject || "Maths"}
       />
 

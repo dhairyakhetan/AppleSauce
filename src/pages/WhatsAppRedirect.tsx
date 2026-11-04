@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { getWhatsAppLinkBySlug } from '@/lib/teachers';
+import { lookupWhatsAppLink } from '@/lib/teachers';
 import { resolveTeacherWhatsAppUrl, isWhatsAppUrl } from '@/utils/whatsapp';
 import { trackWhatsAppClick } from '@/utils/clarityEvents';
 import { recordWhatsAppClick } from '@/utils/whatsappClickLog';
@@ -31,7 +31,7 @@ import { useAuth } from '@/lib/auth-context';
  * "Opening WhatsApp…" would be a confusing dead end, not a fix. Redirecting
  * to /auth instead is the honest behaviour. */
 
-type Status = 'resolving' | 'redirecting' | 'manual' | 'notfound';
+type Status = 'resolving' | 'redirecting' | 'manual' | 'notfound' | 'failed';
 
 /** Grace period so analytics beacons flush before the page unloads. */
 const REDIRECT_DELAY_MS = 500;
@@ -45,12 +45,15 @@ export default function WhatsAppRedirect() {
   const [status, setStatus] = useState<Status>('resolving');
   const [url, setUrl] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
+  const [support, setSupport] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   // The profile page passes the already-resolved URL through router state, so
   // the common path needs no round-trip. State lives in memory only — it can't
   // be set by a crafted link, so this isn't an open-redirect surface.
   const stateUrl = (routerLocation.state as { url?: string; name?: string } | null)?.url;
   const stateName = (routerLocation.state as { url?: string; name?: string } | null)?.name;
+  const stateSupport = (routerLocation.state as { support?: boolean } | null)?.support === true;
 
   // Guards against firing analytics twice under StrictMode's double-invoke.
   const trackedRef = useRef(false);
@@ -92,6 +95,8 @@ export default function WhatsAppRedirect() {
       }
 
       if (stateName) setName(stateName);
+      setStatus('resolving');
+      setSupport(stateSupport);
 
       let target = stateUrl ?? null;
 
@@ -102,9 +107,9 @@ export default function WhatsAppRedirect() {
            they run together. Awaiting them in sequence doubled the round
            trips on a redirect interstitial, which is a screen whose entire
            job is to be over quickly — latency here IS the experience. */
-        const [teacherRes, rawLink] = await Promise.all([
+        const [teacherRes, lookup] = await Promise.all([
           supabase.from('teachers_list').select('name, slug').eq('slug', slug).maybeSingle(),
-          getWhatsAppLinkBySlug(slug),
+          lookupWhatsAppLink(slug),
         ]);
 
         if (cancelled) return;
@@ -116,7 +121,14 @@ export default function WhatsAppRedirect() {
         }
         setName((teacher as { name?: string }).name ?? null);
 
-        target = resolveTeacherWhatsAppUrl(rawLink);
+        // A failed lookup is not "no number": never fall through to Shikshaq's
+        // number, and record nothing, because no contact was made.
+        if (lookup.failed) {
+          setStatus('failed');
+          return;
+        }
+        setSupport(!lookup.link);
+        target = resolveTeacherWhatsAppUrl(lookup.link);
       }
 
       if (cancelled) return;
@@ -159,9 +171,26 @@ export default function WhatsAppRedirect() {
       cancelled = true;
       cleanupTimer?.();
     };
-  }, [slug, stateUrl, stateName]);
+  }, [slug, stateUrl, stateName, stateSupport, attempt]);
 
   const profilePath = slug ? `/tuition-teachers/${slug}` : '/all-tuition-teachers-in-kolkata';
+
+  if (status === 'failed') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 text-center">
+        <h1 className="text-lg font-semibold text-foreground">We could not get the number</h1>
+        <p className="mt-2 max-w-[34ch] text-sm text-muted-foreground">
+          {name ? `We could not get ${name}'s WhatsApp number.` : "We could not get this teacher's WhatsApp number."} Check your connection and try again. Nothing was sent.
+        </p>
+        <Button variant="primary" size={44} className="mt-6" onClick={() => setAttempt((n) => n + 1)}>
+          Try again
+        </Button>
+        <Link to={profilePath} className="tap-44 mt-2 text-[14px] font-semibold text-foreground">
+          Back to profile
+        </Link>
+      </div>
+    );
+  }
 
   if (status === 'notfound') {
     return (
@@ -210,6 +239,12 @@ export default function WhatsAppRedirect() {
             ? `Connecting you with ${name}. Fees and timings are settled directly between you two. Shikshaq takes no commission.`
             : 'Fees and timings are settled directly between you and the teacher. Shikshaq takes no commission.'}
         </p>
+
+        {support ? (
+          <p className="mx-auto mt-3 max-w-[34ch] rounded-2xl bg-card px-4 py-2 text-[14px] font-semibold text-foreground">
+            This teacher has no WhatsApp number on file, so this opens a chat with Shikshaq support instead.
+          </p>
+        ) : null}
 
         {/* Required, not optional: app handoff to WhatsApp fails often enough
             that a screen with no escape is a dead end. */}

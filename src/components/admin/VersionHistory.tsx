@@ -9,8 +9,8 @@ import {
   changedFields,
   opWords,
   PRIMARY_FIELDS,
+  personWords,
   revertConfirmText,
-  shortId,
   tableWords,
   valueText,
 } from '@/lib/activity-format';
@@ -88,7 +88,7 @@ export function VersionHistory({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h3 className="text-balance text-[15px] font-bold text-foreground">Version history</h3>
         <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold text-warm-secondary">
-          {tableWords(table)} {shortId(rowId)}
+          {tableWords(table)}
         </span>
         <DebugId label="row" value={rowId} />
         <DebugFacts facts={{ table, current }} />
@@ -143,8 +143,8 @@ export function VersionHistory({
                 <p className="mt-0.5 text-[12px] text-warm-meta">
                   {format(new Date(row.created_at), 'd MMM yyyy, h:mm a')}
                   {' · '}
-                  <span title={row.actor_user_id ?? row.actor ?? undefined} className="font-mono">
-                    {row.actor_user_id ? shortId(row.actor_user_id) : row.actor ?? 'system'}
+                  <span title={row.actor_user_id ? undefined : row.actor ?? undefined}>
+                    {row.actor_user_id ? personWords(row.actor) : row.actor ?? 'system'}
                   </span>
                   {row.reason ? <> · {row.reason}</> : null}
                 </p>

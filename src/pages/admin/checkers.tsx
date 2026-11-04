@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense, type ComponentProps, type ReactNode } from 'react';
 import { usePageMeta } from '@/hooks/usePageMeta';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { toast as sonnerToast } from 'sonner';
+import { writeErrorWords } from '@/lib/admin-approval-shape';
 import { useAuth } from '@/lib/auth-context';
 import { recordAdminAction } from '@/lib/audit';
 import { useAdminGuard, AdminGuardErrorState } from '@/components/AdminConsole';
 import { AdminHeader, AdminAuditNote, buildAdminNav } from '@/pages/admin/shell';
+import { AdminStack, useAdminEmbedded } from '@/pages/admin/embed';
 import { AdminTable, AdminPanelHeader, AdminStatusPill, type AdminStatus, type AdminTableColumn, type AdminTableRow } from '@/pages/admin/AdminTable';
-import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
+import { BentoPanel } from '@/components/layout/PageContainer';
 import { useAdminSectionCounts } from '@/pages/admin/useAdminSectionCounts';
 import { useConfirm } from '@/components/ui/use-confirm';
 import { HodSection } from '@/components/admin/HodSection';
@@ -50,12 +52,35 @@ const DummyAdminCheckers = PREVIEW_TOOLS ? lazy(() => import('@/dummy/AdminCheck
      verifiers (default)  who can verify papers, and who still lacks details
      hods                 HODs, and teacher reviewers (see HodSection)
 
+   Inside the Admin page (People tab) each of verifiers, hods and reviewers is
+   its own section: the page is handed `view`, draws no tab strip of its own, and
+   sends the verifier details form to the HOD desk, which already has it.
+
    One first-load gate covers both views. After that, adding or removing
    someone refreshes the lists quietly: the page stays mounted, nothing jumps,
    focus stays where it was. A failed read is an error with Try again, never
    an empty list. */
 
-type View = 'verifiers' | 'hods';
+export type CheckersView = 'verifiers' | 'hods' | 'reviewers';
+
+/* Which part of the HOD list a view draws. The reviewers section draws the
+   teacher reviewers, the HODs section (inside the Admin page) draws the HODs,
+   and the page on its own draws both under one tab. */
+export function sectionPart(view: CheckersView, embedded: boolean): 'both' | 'hods' | 'reviewers' {
+  if (view === 'reviewers') return 'reviewers';
+  return embedded ? 'hods' : 'both';
+}
+
+/* The browser tab title and the description for what is on screen. Each Admin
+   section mounts this page, so a fixed title would show "Verifiers" on the HODs
+   section too. Pure, so each section's title is checked on its own. */
+export function checkersPageMeta(view: CheckersView, part: 'both' | 'hods' | 'reviewers'): { title: string; description: string } {
+  if (view === 'verifiers') return { title: 'Verifiers | Shikshaq Admin', description: 'Who can verify papers, and their details.' };
+  if (part === 'reviewers') return { title: 'Teacher reviewers | Shikshaq Admin', description: 'Who can approve and edit teachers without being an admin.' };
+  if (part === 'hods') return { title: 'HODs | Shikshaq Admin', description: 'Who leads the verifiers and uses the HOD desk.' };
+  return { title: 'HODs and teacher reviewers | Shikshaq Admin', description: 'Who leads the verifiers, and who approves and edits teachers.' };
+}
+type View = CheckersView;
 
 const DETAILS_TONE: Record<DetailsState, AdminStatus> = { missing: 'pending', expired: 'hidden', ready: 'live', unknown: 'paused' };
 
@@ -96,8 +121,8 @@ export function VerifierListBody({
     { key: 'email', label: 'Verifier', width: '1.6fr', hint: TIPS['col.checker'] },
     { key: 'details', label: 'Details', width: '0.9fr', hint: DETAILS_HINT },
     { key: 'added', label: 'Added', width: '1fr', hint: TIPS['col.added'] },
-    { key: 'today', label: 'Today', width: '0.6fr', hint: TIPS['col.today'] },
-    { key: 'total', label: 'Total', width: '0.6fr', hint: TIPS['col.total'] },
+    { key: 'today', label: 'Checks today', width: '0.6fr', hint: TIPS['col.today'] },
+    { key: 'total', label: 'Checks in total', width: '0.6fr', hint: TIPS['col.total'] },
   ];
   const tableRows: AdminTableRow[] = sorted.map((r) => {
     const s = stateOf(r);
@@ -132,6 +157,13 @@ export function VerifierListBody({
   );
 }
 
+/** The strip that switches between the views when the page stands on its own;
+ *  inside the Admin page the section row above does that, so nothing is drawn. */
+function ViewFrame({ embedded, children, ...tabs }: { embedded: boolean; children: ReactNode } & ComponentProps<typeof AdminTabs>) {
+  if (embedded) return <>{children}</>;
+  return <AdminTabs {...tabs}>{children}</AdminTabs>;
+}
+
 export function AdminCheckersPage({
   api = realCheckerAdminApi,
   hodApi = realHodAdminApi,
@@ -139,6 +171,7 @@ export function AdminCheckersPage({
   reviewerApi = realTeacherReviewerAdminApi,
   dummy = false,
   banner,
+  view: viewProp,
 }: {
   api?: CheckerAdminApi;
   /** The HODs section's API (admin_*_hod). */
@@ -150,12 +183,17 @@ export function AdminCheckersPage({
   /** Dummy mode (D75): no sign-in, no real admin check, a fake API. */
   dummy?: boolean;
   banner?: ReactNode;
+  /** Which list to show. Left out, the address's ?view= decides (the page on its own). */
+  view?: View;
 }) {
-  usePageMeta('Verifiers | Shikshaq Admin', 'Who can verify papers, and their details.');
   const { user, profile } = useAuth();
   const actorName = dummy ? 'admin@example.com' : profile?.full_name || user?.email || 'Signed-in admin';
   const [searchParams, setSearchParams] = useSearchParams();
-  const view: View = searchParams.get('view') === 'hods' ? 'hods' : 'verifiers';
+  const view: View = viewProp ?? (searchParams.get('view') === 'hods' ? 'hods' : 'verifiers');
+  const embedded = useAdminEmbedded();
+  const navigate = useNavigate();
+  const meta = checkersPageMeta(view, sectionPart(view, embedded));
+  usePageMeta(meta.title, meta.description);
 
   const [rows, setRows] = useState<CheckerAdminRow[] | null>(null);
   const [rowsError, setRowsError] = useState(false);
@@ -227,7 +265,10 @@ export function AdminCheckersPage({
       const found = (await profileApi.profiles()).find((p) => p.user_id === userId);
       if (found) initial = found;
     } catch {
-      /* the form still works blank */
+      // A blank form would overwrite what is saved on Save, so do not open it.
+      sonnerToast.error('Could not load their details, so the form was not opened. Nothing was changed. Try again.');
+      setOpeningId(null);
+      return;
     }
     setOpeningId(null);
     setDetailsFor({ user_id: userId, label, initial });
@@ -245,7 +286,11 @@ export function AdminCheckersPage({
           : 'Could not add that verifier. Check the email and try again.',
       );
     }
-    sonnerToast.success(`${email} is now a verifier. Add their details so papers match their grade.`);
+    sonnerToast.success(
+      embedded
+        ? `${email} is now a verifier. Add their details on the HOD desk so papers match their grade.`
+        : `${email} is now a verifier. Add their details so papers match their grade.`,
+    );
     if (user) {
       void recordAdminAction({
         actorId: user.id,
@@ -258,7 +303,7 @@ export function AdminCheckersPage({
     }
     // Refresh quietly, then open the form: the list does not flash.
     await loadAll();
-    void openDetails(newUserId, email);
+    if (!embedded) void openDetails(newUserId, email);
   }
 
   async function handleRemove(row: CheckerAdminRow) {
@@ -285,7 +330,7 @@ export function AdminCheckersPage({
       }
     } catch (error) {
       if (import.meta.env.DEV) console.error('Error removing checker:', error);
-      sonnerToast.error('Failed to remove that verifier');
+      sonnerToast.error(writeErrorWords(error, 'Failed to remove that verifier. Nothing was changed.'));
     }
   }
 
@@ -311,7 +356,7 @@ export function AdminCheckersPage({
   const firstLoad = checkingAdmin || !settled;
   if (firstLoad) {
     return (
-      <BentoStack className="min-h-screen bg-muted">
+      <AdminStack>
         <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
         <BentoPanel fill="card" className="px-1.5 py-[18px] lg:px-1.5 lg:py-[18px]">
           <div className="px-[18px]">
@@ -319,22 +364,25 @@ export function AdminCheckersPage({
           </div>
         </BentoPanel>
         <AdminAuditNote />
-      </BentoStack>
+      </AdminStack>
     );
   }
 
   if (!isAdmin) return null;
 
   return (
-    <BentoStack className="min-h-screen bg-muted">
+    <AdminStack>
       <AdminHeader nav={nav} signedInEmail={dummy ? 'admin@example.com' : user?.email ?? actorName} />
       {banner}
 
       <BentoPanel fill="card" className="px-1.5 py-[18px] lg:px-1.5 lg:py-[18px]">
-        <div className="mb-3 px-[18px]">
-          <AdminPageIntro page="checkers" />
-        </div>
-        <AdminTabs
+        {embedded ? null : (
+          <div className="mb-3 px-[18px]">
+            <AdminPageIntro page="checkers" />
+          </div>
+        )}
+        <ViewFrame
+          embedded={embedded}
           label="Verifiers, or HODs and reviewers"
           value={view}
           onChange={setView}
@@ -348,7 +396,7 @@ export function AdminCheckersPage({
             },
           ]}
         >
-          <div className="-mx-[18px]" aria-busy={busy || undefined}>
+          <div className={embedded ? undefined : '-mx-[18px]'} aria-busy={busy || undefined}>
             {view === 'verifiers' ? (
               <section aria-label="Verifiers">
                 <AddStudentGuide />
@@ -375,12 +423,13 @@ export function AdminCheckersPage({
                   profiles={profiles}
                   openingId={openingId}
                   onRetry={() => void loadAll()}
-                  onDetails={(r) => void openDetails(r.user_id, r.full_name || r.email)}
+                  onDetails={(r) => (embedded ? navigate('/hod?tab=verifiers') : void openDetails(r.user_id, r.full_name || r.email))}
                   onRemove={(r) => void handleRemove(r)}
                 />
               </section>
             ) : (
               <HodSection
+                part={sectionPart(view, embedded)}
                 hodApi={hodApi}
                 reviewerApi={reviewerApi}
                 searchUsers={api.searchUsers}
@@ -394,7 +443,7 @@ export function AdminCheckersPage({
               />
             )}
           </div>
-        </AdminTabs>
+        </ViewFrame>
       </BentoPanel>
 
       <AdminAuditNote />
@@ -439,17 +488,17 @@ export function AdminCheckersPage({
           </div>
         ) : null}
       </AdminDialog>
-    </BentoStack>
+    </AdminStack>
   );
 }
 
-export default function AdminCheckers() {
+export default function AdminCheckers({ view }: { view?: CheckersView } = {}) {
   if (DummyAdminCheckers && isDummyMode()) {
     return (
       <Suspense fallback={null}>
-        <DummyAdminCheckers />
+        <DummyAdminCheckers view={view} />
       </Suspense>
     );
   }
-  return <AdminCheckersPage />;
+  return <AdminCheckersPage view={view} />;
 }

@@ -33,6 +33,11 @@ describe('coverPaper', () => {
     expect(shown.year).toBe('42 questions');
   });
 
+  it('falls back to the subject as the headline when no school is recorded', () => {
+    const shown = coverPaper(bankPaper({ school: 'School not recorded' }));
+    expect(shown.subject).toBe('Maths');
+  });
+
   it('uses the year as the headline for a board paper, and drops the year from the eyebrow', () => {
     const shown = coverPaper(bankPaper({ _isBoard: true, school: 'ICSE Board' }));
     expect(shown.subject).toBe('2025');
@@ -51,6 +56,12 @@ describe('coverPaper', () => {
 });
 
 describe('coverMeta', () => {
+  it('never lists "School not recorded" on a cover', () => {
+    const meta = coverMeta(bankPaper({ school: 'School not recorded' }));
+    expect(meta).toEqual(['Class 10']);
+    expect(meta.join(' ')).not.toContain('School not recorded');
+  });
+
   it('includes the real subject when the headline shows the school instead', () => {
     expect(coverMeta(bankPaper())).toEqual(['Maths', 'Class 10']);
   });

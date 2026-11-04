@@ -21,6 +21,8 @@ import {
   type TrustRow,
 } from '@/lib/ai-trust';
 import type { HodApi } from '@/lib/hod-api';
+import { actionToneClass } from '@/lib/checker-button-styles';
+import { errorWords, overallProgress, overallRateText, overallStatus, overallUnlocks } from '@/lib/hod-publish';
 import { useConfirm } from '@/components/ui/use-confirm';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +33,60 @@ import { cn } from '@/lib/utils';
    this: the AI's confidence would bias them. */
 
 export const AI_TRUST_KEY = (scope: string) => ['hod', scope, 'ai-trust'] as const;
+export const AI_TRUST_OVERALL_KEY = (scope: string) => ['hod', scope, 'ai-trust-overall'] as const;
+
+/* The one overall counter: how many student checks have been compared with the AI,
+   against the number that unlocks the AI approving clean questions by itself. */
+function OverallCard({ api, scope }: { api: HodApi; scope: string }) {
+  const q = useQuery({ queryKey: AI_TRUST_OVERALL_KEY(scope), queryFn: () => api.aiTrustOverall(), staleTime: 15_000, refetchOnMount: true });
+  if (q.isLoading) return <ListSkeleton rows={1} label="Loading the overall AI trust count" />;
+  if (q.isError || !q.data) return <LoadError what="The overall AI trust count" onRetry={() => void q.refetch()} />;
+  const o = q.data;
+  const pct = Math.min(100, Math.round((o.checks_done / Math.max(1, o.threshold)) * 100));
+  return (
+    <section aria-labelledby="trust-overall-title" className="mb-5 rounded-[18px] bg-muted p-4" data-testid="trust-overall" data-reached={o.reached}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 id="trust-overall-title" className="text-[15px] font-bold text-foreground">
+            Overall: student checks against the AI
+          </h2>
+          <p className="mt-1 text-[34px] font-bold leading-none tabular-nums text-foreground" data-testid="trust-overall-progress">
+            {overallProgress(o)}
+          </p>
+        </div>
+        <span
+          className={cn('rounded-full px-3 py-1 text-[12px] font-bold', o.reached ? 'bg-mint text-foreground' : 'bg-card text-warm-secondary')}
+          data-testid="trust-overall-status"
+        >
+          {overallStatus(o)}
+        </span>
+      </div>
+      <div
+        className="mt-3 h-2.5 w-full rounded-full bg-card"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={o.threshold}
+        aria-valuenow={Math.min(o.checks_done, o.threshold)}
+        aria-label={`${o.checks_done} of ${o.threshold} checks done`}
+      >
+        <div className={cn('h-full rounded-full', o.reached ? 'bg-emerald-500' : 'bg-brand')} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-3 text-[13px] text-foreground">
+        Students agreed with the AI <span className="font-semibold tabular-nums">{overallRateText(o)}</span> of the time
+        {o.checks_done > 0 ? (
+          <span className="tabular-nums">
+            {' '}
+            ({o.agreed} agreed, {o.changed} changed)
+          </span>
+        ) : null}
+        .
+      </p>
+      <p className="mt-1 text-[13px] leading-snug text-warm-secondary" data-testid="trust-overall-unlocks">
+        {overallUnlocks(o)}
+      </p>
+    </section>
+  );
+}
 
 const CHIP_TONE = {
   people: 'bg-muted text-warm-secondary',
@@ -80,7 +136,7 @@ function Cell({ cell, canSwitch, api, scope }: { cell: TrustCell; canSwitch: boo
   if (!row) {
     return (
       <div className="rounded-[18px] bg-muted p-4">
-        <p className="text-[14px] font-bold text-foreground">{title}</p>
+        <p className="text-[15px] font-bold text-foreground">{title}</p>
         <p className="mt-0.5 text-[13px] text-warm-secondary">{DECISION_HINT[cell.decision]}</p>
         <p className="mt-2 text-[13px] text-warm-secondary">No data yet.</p>
       </div>
@@ -103,7 +159,7 @@ function Cell({ cell, canSwitch, api, scope }: { cell: TrustCell; canSwitch: boo
       toast.success(sw.action === 'trust' ? 'This level is now trusted.' : 'This level goes to people again.');
       void qc.invalidateQueries({ queryKey: AI_TRUST_KEY(scope) });
     } catch (err) {
-      toast.error(err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Could not change that.');
+      toast.error(errorWords(err, 'Could not change that. This level is still as it was.'));
     } finally {
       setBusy(false);
     }
@@ -112,7 +168,7 @@ function Cell({ cell, canSwitch, api, scope }: { cell: TrustCell; canSwitch: boo
   return (
     <div className="flex flex-col gap-3 rounded-[18px] bg-muted p-4" data-testid="trust-cell" data-level={cell.level} data-decision={cell.decision}>
       <div>
-        <p className="text-[14px] font-bold text-foreground">{title}</p>
+        <p className="text-[15px] font-bold text-foreground">{title}</p>
         <p className="mt-0.5 text-[13px] leading-snug text-warm-secondary" data-testid="trust-hint">
           {DECISION_HINT[cell.decision]}
         </p>
@@ -138,7 +194,7 @@ function Cell({ cell, canSwitch, api, scope }: { cell: TrustCell; canSwitch: boo
             onClick={() => void flip()}
             disabled={busy || sw.disabled}
             aria-describedby={sw.reason ? `why-${cell.level}-${cell.decision}` : undefined}
-            className={cn('tap-44 rounded-full px-4 py-2 text-[14px] font-bold disabled:opacity-50', sw.action === 'stop' ? 'bg-panel text-background' : 'bg-brand text-foreground')}
+            className={actionToneClass(sw.action === 'stop' ? 'dark' : 'brand')}
           >
             {busy ? 'Saving...' : sw.label}
           </button>
@@ -177,6 +233,7 @@ export function AiTrustTab({ api, scope, canSwitchTrust: canSwitch }: { api: Hod
   const bar = q.data?.[0];
   return (
     <div>
+      <OverallCard api={api} scope={scope} />
       <p className="mb-4 rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] leading-snug text-foreground" data-testid="trust-explainer">
         {trustExplainer(bar?.min_checked, bar?.min_rate, bar?.spot_check_every)}
       </p>

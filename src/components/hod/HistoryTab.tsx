@@ -1,3 +1,4 @@
+// Decided 2026-10-12: History shows absolute dates; every other HOD tab shows relative times ("3 hours ago"). Keep it that way.
 import { useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
@@ -34,7 +35,7 @@ export function historyText(r: HistoryRow): string {
     }
   }
   // Never the code in words ("hod unassign"): an unknown code reads as a plain change.
-  return r.meaning ?? 'made a change';
+  return r.meaning ?? 'made a change (details are in the admin log)';
 }
 
 export function HistoryTab({ api, scope }: { api: HodApi; scope: string }) {
@@ -88,9 +89,9 @@ export function HistoryTab({ api, scope }: { api: HodApi; scope: string }) {
         <EmptyNote>Nothing has been recorded for that choice yet.</EmptyNote>
       ) : (
         <>
-          <ol className="space-y-1.5" aria-label="History, newest first">
+          <ol className="space-y-3" aria-label="History, newest first">
             {rowsAll.map((r, i) => (
-              <li key={`${r.at}-${i}`} className="rounded-2xl bg-muted px-4 py-3 text-[14px]" data-testid="history-row">
+              <li key={`${r.at}-${i}`} className="rounded-[18px] bg-muted p-4 text-[14px]" data-testid="history-row">
                 <p className="text-foreground">
                   <span className="font-semibold">{r.actor_name ?? 'Someone'}</span>
                   {r.actor_role ? <span className="ml-1 text-[12px] text-warm-meta">({roleWord(r.actor_role)})</span> : null} {markUndone(historyText(r), r.undone)}

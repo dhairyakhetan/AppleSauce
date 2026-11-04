@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import * as React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Sheet, SheetContent, SheetDescription, SheetGrabHandle, SheetTitle } from "@/components/ui/sheet";
@@ -113,6 +114,7 @@ export function ContactGateSheet({
       // Auth.tsx reads getAuthRedirect() and lands the user back where they tapped.
     } catch {
       setGoogleBusy(false);
+      toast.error('Google sign-in did not start. Try again, or use your email.');
     }
   };
 

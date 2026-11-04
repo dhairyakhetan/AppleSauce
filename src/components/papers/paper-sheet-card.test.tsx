@@ -52,3 +52,28 @@ describe('PaperSheetCard label', () => {
     expect(html({}, { ...PAPER, needsReview: true })).toContain('Coming soon');
   });
 });
+
+describe('PaperSheetCard year and source', () => {
+  it('prints the year when there is one', () => {
+    const out = html();
+    expect(out).toContain('aria-label="Year 2024"');
+    expect(out).toContain('>2024</span>');
+  });
+
+  it('prints no year for an undated paper (year 0 is not a year)', () => {
+    const out = html({}, { ...PAPER, year: 0 });
+    expect(out).not.toContain('Year 0');
+    expect(out).not.toMatch(/>0<\/span>/);
+    expect(out).not.toContain('aria-label="Year');
+  });
+
+  it('drops the school line when no school is recorded, never "School not recorded"', () => {
+    const out = html({}, { ...PAPER, school: 'School not recorded' });
+    expect(out).not.toContain('School not recorded');
+    expect(out).toContain('>Read</a>');
+  });
+
+  it('keeps a board paper\'s source line as stored', () => {
+    expect(html({}, { ...PAPER, school: 'ICSE board paper', year: 0 })).toContain('ICSE board paper');
+  });
+});

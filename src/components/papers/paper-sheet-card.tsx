@@ -6,7 +6,8 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { getSubjectPalette } from "@/lib/subject-palette";
 import { IconDisc } from "@/components/ui/icon-disc";
-import { displaySchool } from "@/lib/school-display";
+import { paperSourceName } from "@/lib/school-display";
+import { isComingSoon } from "@/lib/readable-papers";
 
 /* Redesign C3 (components.md §2).
 
@@ -41,7 +42,11 @@ function PaperSheetCard({ paper, locked = false, className }: PaperSheetCardProp
   const href = `/past-papers/${paper.id}`;
   const [leaving, setLeaving] = React.useState(false);
   const [justDownloaded, setJustDownloaded] = React.useState(false);
-  const comingSoon = Boolean(paper.needsReview);
+  const comingSoon = isComingSoon(paper);
+  /* 0 is how an undated bank paper arrives (see PastPapers / PaperResults).
+     It is not a year, so it is not printed. */
+  const year = Number.isFinite(paper.year) && paper.year > 0 ? paper.year : null;
+  const source = paperSourceName(paper.school);
 
   /* Reveal-on-open, matching PaperCover: a brief lift before the route
      change fires, short enough (150ms, `duration-tap`) to read as
@@ -127,13 +132,15 @@ function PaperSheetCard({ paper, locked = false, className }: PaperSheetCardProp
           >
             Class {paper.class}
           </span>
-          <span
-            className="inline-flex min-h-6 items-center rounded-full px-3 py-1 text-label font-bold uppercase tabular-nums"
-            style={{ backgroundColor: palette.tint, color: palette.text, boxShadow: `inset 0 0 0 1px ${palette.meta}` }}
-            aria-label={`Year ${paper.year}`}
-          >
-            {paper.year}
-          </span>
+          {year !== null && (
+            <span
+              className="inline-flex min-h-6 items-center rounded-full px-3 py-1 text-label font-bold uppercase tabular-nums"
+              style={{ backgroundColor: palette.tint, color: palette.text, boxShadow: `inset 0 0 0 1px ${palette.meta}` }}
+              aria-label={`Year ${year}`}
+            >
+              {year}
+            </span>
+          )}
           {comingSoon ? (
             <span
               className="ml-auto inline-flex min-h-6 items-center rounded-full bg-panel px-3 py-1 text-label font-bold uppercase text-white"
@@ -150,9 +157,11 @@ function PaperSheetCard({ paper, locked = false, className }: PaperSheetCardProp
         <span className="block break-words text-card-title-lg font-bold" style={{ color: palette.text }}>
           {paper.title}
         </span>
-        <span className="mt-1 block break-words text-meta font-medium" style={{ color: palette.meta }}>
-          {displaySchool(paper.school)}
-        </span>
+        {source !== null && (
+          <span className="mt-1 block break-words text-meta font-medium" style={{ color: palette.meta }}>
+            {source}
+          </span>
+        )}
 
         {/* Ruled lines standing in for body text. */}
         <span className="mt-3 flex flex-col gap-1.5" aria-hidden="true">
