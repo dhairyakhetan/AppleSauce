@@ -1,77 +1,124 @@
 import type { ReactNode } from 'react';
-import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MIN_OPTIONS } from '@/lib/games/format';
+import { Check, X } from 'lucide-react';
+import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_QUESTION, MIN_OPTIONS } from '@/lib/games/format';
 import { cn } from '@/lib/utils';
 import './games.css';
 
-/* "How to write your questions": the guide for people, at the bottom of Write questions. The same rules the checker
-   applies and the chatbot prompt states (src/lib/games/prompt.ts), said for people; the limits come from the code, so
-   they can't drift, and prompt.test.ts checks that the sample reads with no problems. */
+/* "How to write a good question", at the bottom of Write questions: for people, not chatbots. One question taken apart
+   line by line, a whole example, the usual mistakes each shown wrong and then right with why, and the limits. The same
+   rules the checker applies and the chatbot prompt states (src/lib/games/prompt.ts); the numbers come from the code, and
+   prompt.test.ts checks that the example reads with no problems. */
 
-const CODE = 'rounded-md bg-muted px-1 py-0.5 font-mono text-[13px] text-foreground';
+const CODE = 'rounded-md bg-muted px-1.5 py-0.5 font-mono text-[13px] text-foreground';
+const C = ({ children }: { children: ReactNode }) => <code className={CODE}>{children}</code>;
 
-function Card({ title, span = 1, children }: { title: string; span?: 1 | 2 | 3; children: ReactNode }) {
+function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <article className={cn('flex flex-col gap-2 rounded-2xl bg-card p-4 shadow-border sm:p-6', span === 2 && 'lg:col-span-2', span === 3 && 'lg:col-span-3')}>
+    <article className={cn('flex flex-col gap-3 rounded-2xl bg-card p-4 shadow-border sm:p-6', className)}>
       <h3 className="text-[15px] font-bold text-foreground">{title}</h3>
       {children}
     </article>
   );
 }
 
-const B = ({ children }: { children: ReactNode }) => <b className="text-foreground">{children}</b>;
-const C = ({ children }: { children: ReactNode }) => <code className={CODE}>{children}</code>;
+/** The lines of a question: the label, what to write, when it is needed, and an example. */
+const LINES: { label: string; what: ReactNode; when: string; eg: string }[] = [
+  { label: 'Q:', what: <>The question, or a clue. It asks about <b>one fact</b> with <b>one right answer</b>, and makes sense on its own.</>, when: 'Always', eg: 'Gas that green plants take in to make their food' },
+  { label: 'A:', what: <>The answer, <b>exactly as a student would type it</b>: a word, a name or a short phrase. Up to {MAX_ANSWER_WORDS} words.</>, when: 'Always', eg: 'Carbon dioxide' },
+  { label: 'Fill:', what: <>The same fact as a sentence, with <C>___</C> (three underscores) where the answer goes.</>, when: 'Always *', eg: 'Green plants take in ___ to make their food.' },
+  { label: 'Wrong:', what: <>{MIN_OPTIONS} wrong answers that sound believable, separated by <C>;</C>. They are the other choices in multiple choice.</>, when: 'Always *', eg: 'Oxygen; Nitrogen; Hydrogen' },
+  { label: 'Also:', what: <>Another answer that is <b>just as right</b>: a short form, another name, a number in words. One per line.</>, when: 'Only if there is one', eg: 'CO2' },
+  { label: 'Level:', what: <>easy (remembering a fact), medium (understanding it) or hard (using it).</>, when: 'If you like', eg: 'easy' },
+];
+
+/** The usual mistakes: what was written, what to write instead, and why. */
+const MISTAKES: { bad: string; good: string; why: string }[] = [
+  { bad: 'Q: Which of the following is a noble gas?', good: 'Q: Noble gas used in glowing advertising signs', why: 'Most games show no options, so "of the following" points at nothing.' },
+  { bad: 'Q: Photosynthesis is how plants make food. What is it called?', good: 'Q: Process by which green plants make food using sunlight', why: 'The question must not give the answer away.' },
+  { bad: 'A: Carbon dioxide (CO2)', good: 'A: Carbon dioxide\nAlso: CO2', why: 'Students would have to type the brackets too. Another right answer goes on an Also: line.' },
+  { bad: 'Q: Boiling point of water\nA: 100 °C', good: 'Q: Boiling point of water, in degrees Celsius\nA: 100', why: 'Most keyboards can\'t type °. The unit goes in the question.' },
+  { bad: 'A: It is the gas that plants give out in sunlight', good: 'A: Oxygen', why: `Answers are typed into a crossword or a box: up to ${MAX_ANSWER_WORDS} words, never a sentence.` },
+  { bad: 'Wrong: All of the above; None of these; Both a and b', good: 'Wrong: Oxygen; Nitrogen; Hydrogen', why: 'The choices are shuffled, so these make no sense. Write real wrong answers.' },
+  { bad: 'Fill: Plants take in carbon dioxide from the air.', good: 'Fill: Plants take in ___ from the air.', why: 'The ___ marks the gap a student fills in.' },
+  { bad: 'Q: Is the Sun a star?\nA: Yes', good: 'Q: The Sun is a star\nA: True', why: 'Yes or No can\'t be an answer: write a statement, and True or False.' },
+];
 
 export function Guide() {
   return (
     <section id="guide" tabIndex={-1} aria-labelledby="guide-h" className="scroll-mt-24 outline-none">
-      <h2 id="guide-h" className="mb-4 text-lg font-bold text-foreground">How to write your questions</h2>
-      <div className="grid grid-cols-1 gap-3 text-[14px] leading-relaxed text-warm-prose lg:grid-cols-3">
-        <Card title="The format" span={2}>
-          <ol className="flex list-decimal flex-col gap-1.5 pl-5">
-            <li><B>Fill in Board, Class, Subject and Chapter,</B> then a <C>Topic</C> line above each part's questions: one of the chapter's own topics, or, when the list leaves them open, your own, numbered from 1.</li>
-            <li>
-              <B>Write each question as a block of lines,</B> each starting with its label, with a blank line between questions:{' '}
-              <C>Q:</C> the question, <C>A:</C> the answer, <C>Also:</C> another answer that counts (one per line, only if there is one),{' '}
-              <C>Fill:</C> the same fact as a sentence with <C>___</C> where the answer goes, <C>Wrong:</C> {MIN_OPTIONS} wrong options separated by{' '}
-              <C>;</C>, and <C>Level:</C> easy, medium or hard.
-            </li>
-            <li><B>True/False:</B> only <C>Q:</C> with a statement, and <C>A: True</C> or <C>A: False</C>.</li>
-            <li><B>Fix every red or amber line,</B> then send. A question with a problem isn't sent.</li>
-          </ol>
-          <pre data-testid="guide-sample" className="mt-1 overflow-x-auto whitespace-pre rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
-Class: 10
-Subject: Science
-Chapter 1: Chemical Reactions and Equations
-Topic 2: Types of Chemical Reactions
+      <h2 id="guide-h" className="text-lg font-bold text-foreground">How to write a good question</h2>
+      <p className="mb-4 mt-1 max-w-prose text-[14px] text-warm-prose">
+        Each question is a short block of lines, and every line starts with a label. Leave a blank line between questions. A chatbot
+        given the prompt from step 2 writes them this way; this is what to check, or to follow when you write your own.
+      </p>
 
-Q: Reaction in which a single reactant breaks down into simpler products
-A: Decomposition reaction
-Also: Decomposition
-Fill: A reaction in which a single reactant breaks down into simpler products is called a ___.
-Wrong: Combination reaction; Displacement reaction; Neutralisation reaction
+      <div className="grid grid-cols-1 gap-3 text-[14px] leading-relaxed text-warm-prose lg:grid-cols-5">
+        <Card title="One question, line by line" className="lg:col-span-3">
+          <dl className="flex flex-col divide-y divide-border">
+            {LINES.map((l) => (
+              <div key={l.label} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt className="pt-0.5"><span className="inline-block rounded-md bg-panel px-1.5 py-0.5 font-mono text-[13px] font-bold text-background">{l.label}</span></dt>
+                <dd className="flex min-w-0 flex-col gap-1">
+                  <span>{l.what} <span className="whitespace-nowrap text-[12px] font-semibold text-warm-meta">({l.when})</span></span>
+                  <span className="break-words font-mono text-[13px] text-foreground">{l.label} {l.eg}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-[13px] text-warm-secondary">* Not for a True or False question: that has only <C>Q:</C>, a statement, and <C>A: True</C> or <C>A: False</C>.</p>
+        </Card>
+
+        <Card title="A whole example" className="lg:col-span-2">
+          <p>Two questions and a True or False one, as the box takes them:</p>
+          <pre data-testid="guide-sample" className="whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Q: Gas that green plants take in to make their food
+A: Carbon dioxide
+Also: CO2
+Fill: Green plants take in ___ to make their food.
+Wrong: Oxygen; Nitrogen; Hydrogen
 Level: easy
 
-Q: Gas given off when zinc reacts with dilute sulphuric acid
-A: Hydrogen
-Also: H2
-Fill: Zinc reacts with dilute sulphuric acid to give off ___ gas.
-Wrong: Oxygen; Chlorine; Nitrogen
-Level: medium
+Q: Number of sides of a hexagon
+A: 6
+Also: Six
+Fill: A hexagon has ___ sides.
+Wrong: 5; 7; 8
+Level: easy
 
 Q: Rusting of iron is a chemical change
 A: True`}</pre>
         </Card>
 
-        <Card title="Writing good questions">
-          <ul className="flex list-disc flex-col gap-1.5 pl-5">
-            <li><B>One fact, one right answer.</B> The question makes sense on its own: no <i>this</i>, <i>the above</i>, <i>of the following</i>, figure or passage. It never contains its answer.</li>
-            <li><B>The answer is exactly what a student types:</B> at most {MAX_ANSWER_WORDS} words, no brackets or notes. Units go in the question (<i>in degrees Celsius</i>).</li>
-            <li><B>Also</B> lists every other answer that is just as right (at most {MAX_ALSO}): a short form (<C>CPU</C>), another name (<C>Calcutta</C>), a number in words (<C>Six</C>). Nothing else counts, but a small spelling slip gets half marks.</li>
-            <li><B>Fill:</B> one <C>___</C> that stands for the whole answer; the rest of the sentence doesn't repeat it.</li>
-            <li><B>Wrong options</B> ({MIN_OPTIONS} to {MAX_OPTIONS}): believable, and the same kind as the answer (a year for a year). Never <i>All of the above</i>.</li>
-            <li><B>Any symbol is fine</B> in a question. If an answer needs one a keyboard doesn't have (<C>x²</C>), add an Also line typed with ordinary keys (<C>x^2</C>).</li>
-            <li><B>At most {MAX_PER_TOPIC} questions per topic</B> and {MAX_PER_CHAPTER} per chapter, no two the same.</li>
+        <Card title="Common mistakes, and what to write instead" className="lg:col-span-5">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {MISTAKES.map((m) => (
+              <li key={m.bad} className="flex flex-col gap-1.5 rounded-xl bg-muted p-3">
+                <p className="flex items-start gap-2"><X className="mt-0.5 size-4 shrink-0 text-destructive" aria-label="Not this" />
+                  <span className="whitespace-pre-wrap break-words font-mono text-[13px] text-foreground line-through decoration-destructive/60">{m.bad}</span></p>
+                <p className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-success-subtle-text" aria-label="This" />
+                  <span className="whitespace-pre-wrap break-words font-mono text-[13px] text-foreground">{m.good}</span></p>
+                <p className="pl-6 text-[13px] text-warm-secondary">{m.why}</p>
+              </li>
+            ))}
           </ul>
+        </Card>
+
+        <Card title="The limits" className="lg:col-span-2">
+          <ul className="flex list-disc flex-col gap-1 pl-5">
+            <li>An answer: up to {MAX_ANSWER_WORDS} words.</li>
+            <li>Wrong answers: {MIN_OPTIONS} to {MAX_OPTIONS}.</li>
+            <li>Also lines: up to {MAX_ALSO}.</li>
+            <li>A question: up to {MAX_QUESTION} characters, on one line.</li>
+            <li>One send: up to {MAX_PER_SEND} questions, all for one topic.</li>
+          </ul>
+        </Card>
+
+        <Card title="When something needs fixing" className="lg:col-span-3">
+          <ol className="flex list-decimal flex-col gap-1 pl-5">
+            <li>The list beside the box says what is wrong with each question, and the line is marked red in the box.</li>
+            <li>Fix it in the box yourself, or press <b>Copy a prompt to fix them</b> in step 4.</li>
+            <li>Paste that prompt into the same chat, then paste the chatbot's whole answer over the text in the box.</li>
+            <li>You can send the ready questions first: the ones to fix stay in the box.</li>
+          </ol>
         </Card>
       </div>
     </section>

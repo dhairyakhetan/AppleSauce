@@ -1,12 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { toRecord, type AdminList, type Bank, type BankQuestion, type Batch, type GamesRole, type ListChapter, type ListSave, type Person, type RoleCheck, type Row, type SentBack, type Status, type TopicQuestions } from './rows';
+import { toRecord, type AdminList, type Bank, type BankQuestion, type Batch, type GamesRole, type ListChapter, type ListSave, type Person, type RoleCheck, type Row, type SentBack, type Status, type TeamChange, type TopicQuestions } from './rows';
 
 /*
  * Everything the games pages ask the database, as one object, so the same pages run against the real database or,
  * in dummy mode, an in-memory fake (src/dummy/games-fake-api.ts).
  *
- * The real one talks to the `games` schema (supabase/games/install.sql), through its functions only, never its tables.
+ * The real one talks to the `games` schema (supabase/games/install.sql, then upgrade-1-team-log-and-pages.sql), through
+ * its functions only, never its tables.
  * It reads nothing of Shikshaq's own tables. Until that schema is installed (and added to the API's exposed schemas)
  * every call fails, so nobody is shown the games team: the account menu's check reads a failure as "not on the team".
  */
@@ -17,6 +18,8 @@ export interface SendResult { batchIds: string[]; sent: number; already: number;
 /** What a saved decision gives back: what changed, what stayed sent back (the same question is already waiting or
  * approved), and how many are waiting and approved now. */
 export interface SaveResult { changed: string[]; skipped: string[]; waiting: number; approved: number }
+/** The numbers on Approve questions' tabs. */
+export interface HodCounts { waiting: number; approved: number; sentBack: number }
 
 export interface GamesApi {
   /** The signed-in person's role on the games team; null when they aren't on it; 'reauth' when this sign-in (a
@@ -26,12 +29,15 @@ export interface GamesApi {
   loadCatalog(): Promise<ListChapter[]>;
   /** Sends questions to wait for an HoD: one batch per `BATCH_MAX`. */
   sendBatch(rows: Row[]): Promise<SendResult>;
-  /** HoDs and admins: every question waiting or sent back, with its batch. */
-  loadForHod(): Promise<Bank>;
+  /** HoDs and admins: the waiting questions, `WAITING_BATCHES` batches at a time, newest batch first: the batches sent
+   * before `after` that still have a question waiting, with those questions. */
+  loadWaiting(after?: Batch): Promise<Bank>;
   /** HoDs and admins: approved questions, newest first, `APPROVED_PAGE` at a time: those approved before `after`. */
   loadApproved(after?: BankQuestion): Promise<Bank>;
-  /** How many questions the bank holds. */
-  approvedCount(): Promise<number>;
+  /** HoDs and admins: sent-back questions, newest first, `SENT_BACK_PAGE` at a time: those sent back before `after`. */
+  loadSentBack(after?: BankQuestion): Promise<Bank>;
+  /** HoDs and admins: how many are waiting, approved and sent back. */
+  hodCounts(): Promise<HodCounts>;
   /** HoDs and admins: approve, send back (with a reason) or move back to waiting. */
   saveStatus(ids: string[], status: Status, reason?: string): Promise<SaveResult>;
   /** The number on the Approve tab. HoDs and admins only. */
@@ -44,10 +50,12 @@ export interface GamesApi {
   markSentBackSeen(ids: string[]): Promise<void>;
   /** Admins: the team. */
   loadPeople(): Promise<Person[]>;
-  /** Admins: add someone, or change their role. */
+  /** Admins: add someone, or change their role (noted in the team's log). */
   setPersonRole(email: string, role: GamesRole): Promise<void>;
-  /** Admins: take someone off the team. */
+  /** Admins: take someone off the team (noted in the team's log). */
   removePerson(email: string): Promise<void>;
+  /** Admins: the team's log, newest first, `TEAM_LOG_PAGE` at a time: the entries before `beforeId`. */
+  loadTeamLog(beforeId?: number): Promise<TeamChange[]>;
 
   /** Admins: the list as the Chapters page shows it, with question counts and the latest changes. */
   loadList(): Promise<AdminList>;
@@ -62,8 +70,13 @@ export interface GamesApi {
 
 /** The most questions the database takes in one batch; more are sent as several batches, one after another. */
 export const BATCH_MAX = 500;
-/** Approved questions load this many at a time on the HoD desk. */
-export const APPROVED_PAGE = 200;
+/** Approve questions loads this many batches of waiting questions at a time. */
+export const WAITING_BATCHES = 3;
+/** Approve questions loads this many approved, or sent-back, questions at a time. */
+export const APPROVED_PAGE = 20;
+export const SENT_BACK_PAGE = 20;
+/** The team's log loads this many entries at a time. */
+export const TEAM_LOG_PAGE = 20;
 
 // ---------------------------------------------------------------- the real database
 
@@ -123,10 +136,16 @@ export const realGamesApi: GamesApi = {
     return out;
   },
 
-  loadForHod: async () => toBank(await ask<DbQuestion[]>(db().rpc('hod_questions'))),
+  loadWaiting: async (after) =>
+    toBank(await ask<DbQuestion[]>(db().rpc('hod_waiting', { before_at: after?.at ?? null, before_batch: after?.id ?? null, take: WAITING_BATCHES }))),
   loadApproved: async (after) =>
     toBank(await ask<DbQuestion[]>(db().rpc('hod_approved', { before_at: after?.reviewedAt ?? null, before_id: after?.id ?? null, take: APPROVED_PAGE }))),
-  approvedCount: () => ask<number>(db().rpc('bank_count')),
+  loadSentBack: async (after) =>
+    toBank(await ask<DbQuestion[]>(db().rpc('hod_sent_back', { before_at: after?.reviewedAt ?? null, before_id: after?.id ?? null, take: SENT_BACK_PAGE }))),
+  hodCounts: async () => {
+    const c = await ask<{ waiting: number; approved: number; sent_back: number }>(db().rpc('hod_counts'));
+    return { waiting: c.waiting, approved: c.approved, sentBack: c.sent_back };
+  },
   saveStatus: (ids, status, reason = '') => ask<SaveResult>(db().rpc('hod_set_status', { ids, new_status: status, reason })),
   waitingCount: () => ask<number>(db().rpc('waiting_count')),
 
@@ -139,8 +158,10 @@ export const realGamesApi: GamesApi = {
   markSentBackSeen: async (ids) => { await ask<null>(db().rpc('mark_sent_back_seen', { ids })); },
 
   loadPeople: () => ask<Person[]>(db().rpc('admin_people')),
-  setPersonRole: async (email, role) => { await ask<null>(db().rpc('admin_set_role', { person: email, new_role: role })); },
-  removePerson: async (email) => { await ask<null>(db().rpc('admin_remove', { person: email })); },
+  // the upgrade's functions, which note each change in the team's log (supabase/games/upgrade-1-team-log-and-pages.sql)
+  setPersonRole: async (email, role) => { await ask<null>(db().rpc('admin_team_set', { person: email, new_role: role })); },
+  removePerson: async (email) => { await ask<null>(db().rpc('admin_team_remove', { person: email })); },
+  loadTeamLog: (beforeId) => ask<TeamChange[]>(db().rpc('admin_team_log', { before_id: beforeId ?? null, take: TEAM_LOG_PAGE })),
 
   loadList: () => ask<AdminList>(db().rpc('admin_list')),
   saveChapters: (save) => ask<{ changes: number }>(db().rpc('admin_save_chapters', { changes: save })),

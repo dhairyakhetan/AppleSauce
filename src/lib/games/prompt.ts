@@ -1,37 +1,25 @@
 /**
- * The two prompts the Write questions page copies for a chatbot:
+ * The prompts the games pages copy for a chatbot:
  *
- *   chatbotPrompt  "Copy chatbot prompt": how to write questions for ONE chapter on the team's list, in the block format
- *                  the page reads (src/lib/games/format.ts), with the teacher's material underneath. A chapter whose
- *                  topics the list fixes gets those; any other is divided into topics by the chatbot, keeping the
- *                  topics already in use.
- *   fixPrompt      "Copy prompt to fix them" (when sending with problems): the questions the page turned away and why,
- *                  the text as it is, and, last, to write the whole text again.
+ *   chatbotPrompt  Write questions, "Copy chatbot prompt": questions for ONE topic (or one open chapter with no topic),
+ *                  the one chosen with the dropdowns, in the block format the page reads (format.ts), with the
+ *                  teacher's material underneath. The reply is only question blocks: the page already knows where they
+ *                  go, so a chatbot has nothing to copy exactly and nothing to get wrong about the chapter.
+ *   fixPrompt      Write questions, "Copy a prompt to fix them": each question the page turned away with what to change,
+ *                  the text as it is, and to write all of it again.
+ *   bulkPrompt     Chapters (admins), Bulk add: chapters for the boards, classes and subjects named under it, in the
+ *                  form Bulk add reads (readBulk in list-draft.ts).
  *
- * And one the Chapters page copies (admins), from its Bulk add box:
- *
- *   bulkPrompt  chapters for the boards, classes and subjects the admin names under it, in the form Bulk add reads
- *               (readBulk in list-draft.ts): Board, Class and Subject lines, then one chapter per line.
- *
- * The rules here are the checker's rules, said once and plainly: a chatbot that follows them writes text the page
- * accepts as it is. prompt.test.ts fails if the two drift apart (labels, limits, levels, examples), and stand-in
- * chatbots were run on it (CHANGES.md). Everyone on the team copies the same prompt, and the teacher is already on the
- * page, so it says nothing about the site, signing in or sending.
+ * The rules are the checker's, said once (RULES) and used by both question prompts, so a chatbot that follows them
+ * writes text the page takes as it is. prompt.test.ts fails if they drift apart (labels, limits, levels, the example).
+ * Everyone on the team copies the same prompt, so it says nothing about the site.
  */
-import { isOpen } from './catalog';
-import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, missing, problemsByRow, type Issue } from './format';
-import { DIFFICULTIES, type ListChapter, type Row } from './rows';
+import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_QUESTION, MIN_OPTIONS, type Draft, type Issue, type Where } from './format';
+import { DIFFICULTIES } from './rows';
 
 const FENCE = '```';
-const block = (lines: string) => `${FENCE}\n${lines}\n${FENCE}`;
+const fenced = (lines: string, fence = FENCE) => `${fence}\n${lines}\n${fence}`;
 const or = (xs: readonly string[]) => `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
-
-/** The lines that start the chatbot's block: the chapter's details, as the page reads them. */
-export const chapterLines = (ch: ListChapter) =>
-  [`Board: ${ch.board}`, `Class: ${ch.class}`, `Subject: ${ch.subject}`, `Chapter ${ch.chapter_no}: ${ch.name}`].join('\n');
-
-/** The chapter's Topic lines, exactly as on the list. */
-export const topicLines = (ch: ListChapter) => ch.topics.map((t) => `Topic ${t.topic_no}: ${t.name}`).join('\n');
 
 /** Three questions that show every part of the format (from no chapter in particular). */
 export const EXAMPLE_BLOCKS = `Q: Gas that green plants take in from the air to make their food
@@ -52,171 +40,107 @@ Q: The Sun is a star
 A: True
 Level: easy`;
 
-/** The format with this chapter's own lines above the example questions, as the page reads it. */
-export const formatExample = (ch: ListChapter) =>
-  [chapterLines(ch), ...ch.topics.slice(0, 1).map((t) => `Topic ${t.topic_no}: ${t.name}`), '', EXAMPLE_BLOCKS].join('\n');
+/** The block, with what each line is. */
+const SHAPE = `Q: the question
+A: the answer
+Also: another answer that is just as right (only if there is one)
+Fill: the same fact as a sentence, with ___ where the answer goes
+Wrong: a wrong option; another; another
+Level: easy`;
 
-/** How a chatbot divides an open chapter (one whose topics the list doesn't fix) into topics of its own. */
-function ownTopics(ch: ListChapter): string {
-  const next = Math.max(0, ...ch.topics.map((t) => t.topic_no)) + 1;
-  return `Its topics aren't fixed, so divide the questions into topics yourself:
+/** Every rule the checker applies, as a chatbot needs them. */
+export const RULES = `- Every question has the lines Q, A, Fill, Wrong and Level, in the order shown, each on ONE line that starts with its label and a colon. Add Also lines, right after A, only when there is another right answer. Put a blank line between questions.
+- True/False: a statement after Q, then "A: True" or "A: False", then Level. No Also, Fill or Wrong lines. At most one question in five.
+- Q: tests one fact and has exactly one right answer. It makes sense on its own: never "of the following", "which of these", "the above", "given below", "this", and never a figure, diagram, map, table or passage. It never contains its answer, has no ___, is not a yes/no question, and does not start with "True or false". At most ${MAX_QUESTION} characters.
+- A: the shortest correct answer, exactly what a student would type: a word, a name, a short phrase or a number, at most ${MAX_ANSWER_WORDS} words. No brackets, no notes such as "(approx.)", never two answers joined by "/". Put units in the question ("Boiling point of water, in degrees Celsius" with A: 100). If the answer needs a symbol a keyboard doesn't have (x², √2, π), add an Also line written with ordinary keys (x^2, sqrt 2, pi). Prefer answers made of letters where the material allows: crosswords and word searches need them (3 to 15 letters).
+- Also: only answers that are just as right: a short form (CO2), another name (Calcutta for Kolkata), a number in words (Six for 6). Not the answer again with other capitals or spacing, and not spelling mistakes. At most ${MAX_ALSO}, one per line.
+- Fill: the same fact as one full sentence, with exactly one ___ (three underscores) standing for the whole answer. The rest of the sentence never contains the answer.
+- Wrong: ${MIN_OPTIONS} wrong options (at most ${MAX_OPTIONS}) separated by ";" (not commas). Believable, clearly wrong, and the same kind as the answer: a number for a number, a gas for a gas, about as long as it. Never the answer or an Also answer, and never "All of the above", "None of these" or "Both a and b": the options are shuffled.
+- Level: ${or(DIFFICULTIES)}. Easy is recalling a fact; medium needs understanding; hard needs applying it or linking ideas.`;
 
-- A topic is a part of the chapter that the textbook gives a heading of its own (in a chapter on heat: Conduction, Convection, Radiation). Not a kind of question ("MCQs", "Short answers"), not a single fact, and not the chapter's own name.
-- 2 to 6 topics, fewer if the chapter is short, numbered from 1 in the order the chapter teaches them. Write each as "Topic 1: Name" on its own line, with its questions under it, and put every question under the topic it belongs to.${ch.topics.length ? `
-- These topics are already in use for this chapter. Keep them, written exactly like this, for the questions that belong there, and number any new topic from ${next}:
+/** What the questions are about: the chosen chapter and topic, in words. */
+const about = (w: Where) =>
+  [`${w.board}, class ${w.class}, ${w.subject}`, `Chapter ${w.chapter_no}: ${w.chapter}`, w.topic_no === null ? 'The whole chapter (no single topic)' : `Topic: ${w.topic}`].join('\n');
 
-${block(topicLines(ch))}` : ''}`;
-}
-
-/** The instructions for one chapter. */
-export function chatbotInstructions(ch: ListChapter): string {
-  const open = isOpen(ch);
-  return `# Revision questions for one chapter
+/** "Copy chatbot prompt": the instructions for one topic, then a place for the teacher's material. */
+export function chatbotPrompt(w: Where): string {
+  const whole = w.topic_no === null;
+  return `# Revision questions for one ${whole ? 'chapter' : 'topic'}
 
 Write questions for school revision games: crossword, word search, matching, fill in the blank and multiple choice. The teacher pastes your reply into a page that checks every line and turns away any question that breaks a rule below, so follow them exactly.
 
-## The chapter
+## What the questions are about
 
-Write only for this chapter. Start with these lines, exactly as written:
+${about(w)}
 
-${block(chapterLines(ch))}
-
-${open
-  ? ownTopics(ch)
-  : `Its topics are fixed. Put each question under the one of these Topic lines it belongs to, written exactly like this. Use no other topic, and leave out a topic the material doesn't cover:
-
-${block(topicLines(ch))}`}
+Write only about this ${whole ? 'chapter' : 'topic'}. Use the teacher's material below these instructions: every question and answer must come from it. If there is none, use well-established facts from the standard textbook for this chapter, and leave out anything you are not sure of. Write in the material's language.
 
 ## How many
 
-20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
+15 to 25 questions, never more than ${MAX_PER_SEND}. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
 
-## The material
+## The format: one block per question
 
-- Use the teacher's material below these instructions: notes, a textbook passage or questions. Every question and answer must come from it.
-- If there is none, write from well-established facts in the standard textbook for this chapter, and leave out anything you are not sure of.
-- Write in the material's language: Hindi material gets Hindi questions.
+${fenced(SHAPE)}
 
-## Each question is a block
+## The rules
 
-${block(`Q: the question
-A: the answer
-Also: another answer that is just as right
-Fill: the same fact as a sentence, with ___ where the answer goes
-Wrong: a wrong option; another; another
-Level: easy`)}
-
-- Every question has Q, A, Fill, Wrong and Level. Add Also lines only when there is another right answer.
-- Each part on one line, starting with its label and a colon. A blank line between questions. Nothing else: no numbering, bullets, bold or headings.
-- True/False: a statement after Q, and A: True or A: False. No Also, Fill or Wrong. At most one question in five.
-
-**Q, the question**
-- Tests one fact, and has exactly one correct answer.
-- Makes sense on its own. Never "this", "the above", "of the following", "which of these" or "given below", and never a figure, diagram, map, table or passage.
-- Never contains its answer. Not a yes/no question, and not "True or false: ...".
-- At most ${MAX_QUESTION} characters, on one line. Any symbol is fine.
-
-**A, the answer**
-- The shortest correct answer: a word, a name, a short phrase or a number. At most ${MAX_ANSWER_WORDS} words, never a sentence.
-- Exactly what a student should type: no brackets, no notes such as "(approx.)", and never two answers joined by "/" or "or".
-- Put units in the question, not the answer: "Boiling point of water, in degrees Celsius" with A: 100.
-- Prefer words to numbers where the material allows: crosswords and word searches need answers of letters only (3 to 15 letters fit both).
-- If the answer needs a symbol a keyboard doesn't have (x², √2, π), also add an Also line written with ordinary keys (x^2, sqrt 2, pi).
-- Never change a fact, a number or a unit to make an answer shorter.
-
-**Also, other right answers** (at most ${MAX_ALSO}, one per line)
-- Only answers that are just as right: a short form (CPU) or the full form, another name (Calcutta for Kolkata), a number in words (Six for 6), or the answer without a word the question already says.
-- Not the answer with other capitals, spaces, hyphens or "the" (End point for Endpoint): those count already. Not spelling mistakes: the game gives half marks for a small slip by itself.
-
-**Fill, the fill-in-the-blank sentence**
-- The same fact as one sentence, with ___ (three underscores) where the answer goes. The ___ stands for the whole answer.
-- Exactly one ___. The rest of the sentence never contains the answer, and reads correctly with the answer in the blank.
-
-**Wrong, the wrong options for multiple choice**
-- ${MIN_OPTIONS} wrong options (at most ${MAX_OPTIONS}), separated by ";". Clearly wrong but believable, the same kind of thing as the answer (a year for a year, a gas for a gas), about as long as it.
-- Never the answer or an Also answer. Never "All of the above", "None of these" or "Both a and b": the options are shuffled. No ";" inside an option.
-
-**Level**: ${or(DIFFICULTIES)}. Easy is recalling a fact; medium needs understanding; hard needs applying it or linking ideas.
+${RULES}
 
 ## Example
 
-This shows the format only; your questions come from the chapter above.
+This shows the format only; your questions come from the ${whole ? 'chapter' : 'topic'} above.
 
-${block(EXAMPLE_BLOCKS)}
+${fenced(EXAMPLE_BLOCKS)}
 
 ## Your reply
 
-- Paste everything in ONE code block, so the teacher can copy it with one click: the chapter lines, then each Topic line with its questions under it. Nothing else inside the block.
-- After the block, at most two short sentences, only if needed: which answers you filled in yourself, or that you wrote from general knowledge and the teacher should check them.
+- Put all the questions in ONE code block, so the teacher can copy them with one click.
+- Inside it, only the question blocks: no headings, no numbering, no bold, and no Board, Chapter or Topic lines (the page already knows them).
+- After the block, at most two short sentences, and only if needed: which answers you were unsure of, or that you wrote from general knowledge and the teacher should check them.
+
+---
+
+Material (my notes, a textbook passage or questions; if there is nothing here, write from the textbook):
 `;
 }
 
-/** The whole prompt for one chapter: the instructions, then a place for the teacher's material. */
-export const chatbotPrompt = (ch: ListChapter) =>
-  `${chatbotInstructions(ch)}\n---\n\nMaterial (my notes or questions; if there is nothing here, write from the textbook):\n`;
-
 /**
- * "Copy prompt to fix them": each question the page turned away, with what to change, as short instructions for the
+ * "Copy a prompt to fix them": each question the page turned away, with what to change as short instructions for the
  * chatbot (each problem's `fix`, not the page's wording); the other lines it couldn't use; the rules; the whole text as
- * it is now; and last, to write the whole text again in one code block. Self-contained, so it works in a new chat as
- * well as in the one that wrote the questions, and for questions a teacher typed.
+ * it is now; and last, to write all of it again in one code block. Self-contained, so it works in a new chat as well as
+ * in the one that wrote the questions, and for questions a teacher typed.
  */
-export function fixPrompt(text: string, rows: Row[], issues: Issue[]): string {
+export function fixPrompt(text: string, drafts: Draft[], issues: Issue[]): string {
   const lines = text.split(/\r?\n/);
-  const { byRow, general } = problemsByRow(rows, issues);
   const quote = (n: number) => (lines[n - 1] ?? '').trim();
-  const own = (r: Row, x: Issue) => x.line >= r.line && x.line <= (r.end ?? r.line);
-  const say = (x: Issue) => x.fix ?? x.text;
   const unique = (xs: string[]) => [...new Set(xs)];
 
-  // the questions to fix, in the order they are written: blocks with problems on their own lines, and questions
-  // written on one line
-  const items: { at: number; head: string; fixes: string[] }[] = [];
-  for (const [i, xs] of byRow) {
-    const r = rows[i];
-    const mine = xs.filter((x) => own(r, x));
-    if (!mine.length) continue;
-    // what to change first, then what to add
-    const fixes = unique(mine.map(say)).sort((x, y) => Number(x.startsWith('Add ')) - Number(y.startsWith('Add ')));
-    // a question being fixed is made whole, as the first prompt asks of every question
-    const trueFalse = /^(true|false|yes|no)$/i.test(r.answer.trim());
-    if (!trueFalse && !r.wrong_options.length && !fixes.some((f) => f.includes('Wrong:'))) fixes.push(`Add a Wrong: line with ${MIN_OPTIONS} wrong options, separated by ";".`);
-    if (!r.difficulty && !fixes.some((f) => f.includes('Level:'))) fixes.push(`Add a Level: line (${or(DIFFICULTIES)}).`);
-    items.push({ at: r.line, head: `Q: ${r.question || '(no question)'}${r.answer ? `\n   A: ${r.answer}` : ''}`, fixes });
-  }
-  for (const x of general) if (x.oneLine) items.push({ at: x.line, head: `The line "${quote(x.line)}"`, fixes: [say(x)] });
-  items.sort((a, b) => a.at - b.at);
-
-  // the other lines: a stray line, or a detail line (whose problem every question under it shares), listed once
-  const others = new Map<string, string>();
-  for (const xs of byRow.values()) for (const x of xs) if (!rows.some((r) => own(r, x))) others.set(`${x.line}\u0000${say(x)}`, `"${quote(x.line)}": ${say(x)}`);
-  for (const x of general) if (!x.oneLine) others.set(`${x.line}\u0000${say(x)}`, `"${quote(x.line)}": ${say(x)}`);
-  const gaps = missing(rows);
-  if (gaps.id) others.set('ids', 'Start the text with complete Board, Class, Subject and Chapter lines.');
-
-  const listed = items.map(({ head, fixes }, k) => [`${k + 1}. ${head}`, ...fixes.map((f) => `   - ${f}`)].join('\n'));
+  const items = drafts.flatMap((d, i) => {
+    const fixes = unique(issues.filter((x) => x.q === i).map((x) => x.fix))
+      // what to change first, then what to add
+      .sort((x, y) => Number(x.startsWith('Add ')) - Number(y.startsWith('Add ')));
+    if (!fixes.length) return [];
+    return [[`Q: ${d.question || '(no question)'}${d.answer ? `\n   A: ${d.answer}` : ''}`, ...fixes.map((f) => `   - ${f}`)].join('\n')];
+  });
+  const others = unique(issues.filter((x) => x.q === undefined).map((x) => `- Line "${quote(x.line)}": ${x.fix}`));
   const fence = text.includes(FENCE) ? '````' : FENCE;
 
   return `# Fix these revision questions
 
-A page that checks revision questions turned these away. Fix exactly what is listed, and keep everything else as it is.
+A page that checks revision questions turned these away. Fix exactly what is listed, and keep every other question exactly as it is.
 
-${listed.length ? listed.join('\n\n') : '(no question by itself)'}
-${others.size ? `\nOther lines to fix:\n\n${[...others.values()].map((t) => `- ${t}`).join('\n')}\n` : ''}
-Every question you fix or write follows these rules:
-- Its lines: Q (the question), A (the answer), Also (only for another right answer, one per line), Fill (the same fact as a sentence, with ___ where the answer goes), Wrong (${MIN_OPTIONS} wrong options separated by ";"), Level (${or(DIFFICULTIES)}). A True/False question has only Q (a statement) and A: True or A: False.
-- Q makes sense on its own (no "of the following", "the above" or figure), and never contains its answer.
-- A is exactly what a student types: at most ${MAX_ANSWER_WORDS} words, no brackets or notes, units in the question, and only keyboard characters (else an Also line typed with ordinary keys).
-- Fill has exactly one ___, standing for the whole answer, and doesn't repeat it.
-- The wrong options are the same kind as the answer, and none of them is right.
+${items.length ? items.map((t, k) => `${k + 1}. ${t}`).join('\n\n') : '(No question by itself.)'}
+${others.length ? `\nOther lines:\n\n${others.join('\n')}\n` : ''}
+The rules every question follows:
+
+${RULES}
 
 The text:
 
-${fence}
-${text.trimEnd()}
-${fence}
+${fenced(text.trimEnd(), fence)}
 
-Write the entire text again, from the Board line to the last question, with these fixes and nothing else changed. Put all of it in ONE code block, so I can copy it at once.
+Write the whole text again, every question, with these fixes and nothing else changed. Put all of it in ONE code block, with only the question blocks inside, so I can copy it at once.
 `;
 }
 

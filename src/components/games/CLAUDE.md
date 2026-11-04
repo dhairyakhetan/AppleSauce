@@ -5,6 +5,19 @@
 > `src/dummy/games-*` and `GamesDummy.tsx`, and `supabase/games/`. Everything else about Shikshaq (the checks, the
 > design rules, the security model) is in the root `CLAUDE.md`, which applies here too.
 
+## Read first: this copy is the games branch
+
+(About the `games` branch of `dhairyakhetan/AppleSauce` only: leave this section out of the Shikshaq pull request.)
+
+This is branch `games` of `dhairyakhetan/AppleSauce`, not the Shikshaq repo. Commit `dc1d807` is Shikshaq's
+`shikshaq-2.0` exactly as it was at its `33a3788` (3 November 2026), which already has the games team; the new games
+work goes on top, so the difference from `dc1d807` is what gets handed to the Shikshaq repo. `CHANGES.md` says how, and
+every change made here is added to it as it is made.
+
+- **Push only to `games`**: `git push -u origin games`, nothing else. Never run `npm run push:all` here, and never add
+  or push to the Shikshaq or `kanitest` remotes. "Two remotes, ONE branch" in the root `CLAUDE.md` is about the
+  Shikshaq repo itself.
+
 ## The live database
 
 The `games` schema goes into Shikshaq's live database, which cannot be restored: there is no backup history to go back
@@ -18,6 +31,10 @@ to, so anything changed there stays changed.
   all of it is then one `drop schema games cascade`.
 - Never run SQL that writes on the live database yourself. Give it to the user, rehearsed first inside a transaction
   that raises at the end, with a backup taken before it is run.
+- Once `install.sql` has run, a change to the `games` schema is a new numbered upgrade script beside it
+  (`upgrade-1-team-log-and-pages.sql` is the first), made the same way: new names only, a dry run by default, and a
+  check at its end that nothing that existed changed and nothing but what it adds is new. The site calls the new
+  functions; the old ones stay, so the site already deployed keeps working until the new one is.
 
 ## The games team (`/games`)
 
@@ -39,7 +56,15 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   it, and nothing reads Shikshaq's own tables. The account menu's "Games team"
   links come from `useGamesRoleBadge` (`games.my_role()`); any failure means no
   link, which is also what happens until the schema is installed.
-- **The database:** `supabase/games/install.sql` makes the whole `games`
+- **Every list has a cap,** so nothing fills the page: Approve questions loads Waiting 3 batches at a time (a batch
+  shows 10 questions, then 10 more), Approved and Sent back 20 at a time, each with "Load more" (the database pages
+  them: `hod_waiting`, `hod_approved`, `hod_sent_back`; `hod_counts` gives the totals on the tabs). The questions sent
+  back to someone show 5 at a time; the Team list 20 at a time; its "Logs" button opens the team's log
+  (`games.team_log`: every add, role change and removal, by whom and when; `admin_team_set` and `admin_team_remove`
+  make the change and note it), 20 entries at a time.
+- **The database:** `supabase/games/install.sql`, then
+  `supabase/games/upgrade-1-team-log-and-pages.sql` (the team's log, and Approve questions a page at a time;
+  `lib/games/upgrade.test.ts` runs it on PGlite). `install.sql` makes the whole `games`
   schema in one transaction (a dry run by default; it stops if anything outside
   `games` would change), and puts in the starting list of chapters (rows
   near its end, through `games.list_add_chapters`, the checks the site's add
@@ -66,17 +91,23 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `games.chapters`, under the list's name. Topics: where the list gives a
   chapter topics (`games.topics.from_list`), only those; where it gives none
   the chapter is open, and the first question sent under a new topic adds it
-  (one number and one name per topic). `lib/games/catalog.ts` checks the
-  Questions box against it as people write (the database refuses the rest
-  anyway); the Chapter box becomes a picker and the topics become buttons
-  once board, class and subject match the list.
+  (one number and one name per topic).
+- **Write questions is four steps, one topic per send** (`components/games/WriteQuestions.tsx`): 1. choose board,
+  class, subject, chapter and topic with dropdowns of the list (`lib/games/place.ts`; an open chapter also offers a
+  new topic, numbered after the others, and no topic), so nothing about the place is typed; 2. copy the chatbot prompt
+  for that topic; 3. paste or write the questions in the box (`QuestionsBox.tsx`), which holds questions only;
+  4. send. Beside the box, in its own scrolling column (`QuestionList.tsx`), every question shows ready (and the games
+  it plays in) or what to fix, each problem with a link to its line. Send sends the ready ones; the ones to fix stay
+  in the box, and "Copy a prompt to fix them" is one click. Board/Class/Subject/Chapter/Topic lines in the box are
+  allowed only when they name what is chosen (`checkPlace`); one naming somewhere else holds back every question.
+  At most 30 questions a send. The place chosen is remembered on the device (localStorage, a convenience).
 - **Dummy mode:** `?dummy=1` on any `/games` page, or the preview toggle's
   "Games team" buttons, runs the real pages against
   `dummy/games-fake-api.ts`, which keeps the database's rules (list included).
   Its banner switches between admin, HoD, member, not on the team, and signed
   in with a password.
-- **Files:** `lib/games/` (rows and exports, `format.ts` the formatter,
-  `details.ts` boards, subjects and IDs, `catalog.ts` the list check,
+- **Files:** `lib/games/` (rows and exports, `format.ts` the checker,
+  `details.ts` boards, subjects and IDs, `catalog.ts` the list's rules, `place.ts` the dropdowns,
   `prompt.ts` what "Copy chatbot prompt" copies (and the Chapters page's
   Bulk add prompt), `engine/` the games: each has a
   maker and a separate checker, and a puzzle is only shown after its checker
@@ -84,11 +115,13 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   picker and player used full size by Try the games and small by the preview,
   the guide; `games.css` is only what utility classes can't say, in Shikshaq's
   colour variables).
-- **The format is one block per question** (`Q:`, `A:`, `Also:`, `Fill:`,
-  `Wrong:`, `Level:`), and `lib/games/format.ts` checks it strictly: every
-  problem is on the line to fix and says what to change, and a question with
-  any problem (red or amber) isn't sent. Send then offers "Remove those and
-  send" or "Copy prompt to fix them" (`fixPrompt` in `prompt.ts`).
+- **The format is one block per question:** `Q:`, `A:`, `Fill:` and `Wrong:` always (3 to 5 wrong options,
+  separated by `;`), `Also:` only for another right answer, `Level:` if wanted; a True/False question is only `Q:` (a
+  statement) and `A: True` or `A: False`. No `___` in `Q:`. `lib/games/format.ts` (`read`) checks it strictly: every
+  problem is one sentence on the line to fix, saying what to change (`text`), with the same as an instruction for a
+  chatbot (`fix`, for `fixPrompt`). It reads what chatbots add around labels as meant: bullets, numbers, bold,
+  headings, code fences, labels written out ("Answer:", "Wrong options:", "Difficulty:"), several answers on one
+  `Also:` line, several `Wrong:` lines. One level of problem only: a question with any problem isn't sent.
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options
@@ -98,10 +131,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
-- **The chatbot prompt is made for one chapter** on the list (its lines and
-  topics, nothing else; for an open chapter it asks the chatbot to divide the
-  questions into topics, keeping those already in use) and states every rule
-  the checker applies.
-  `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples
-  drift from the checker. Change `prompt.ts`, `Guide.tsx` and `format.ts`
-  together.
+- **The chatbot prompt is made for the one topic chosen** (or the whole of an open chapter), and asks for question
+  blocks only, in one code block, with no Board, Chapter or Topic lines: the page knows the place, so no line has to be
+  copied exactly. Its rules (`RULES` in `prompt.ts`) are the checker's, said once, and the fix prompt uses the same.
+  `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples drift from the checker, or if the guide's
+  example has a problem. Change `prompt.ts`, `Guide.tsx` (the guide for people, at the bottom of Write questions) and
+  `format.ts` together.

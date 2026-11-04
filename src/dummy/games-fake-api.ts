@@ -1,7 +1,7 @@
-import { APPROVED_PAGE, BATCH_MAX, type GamesApi, type SaveResult, type SendResult } from '@/lib/games/api';
-import { ALL_BOARDS, chapterId, checkBoard, checkSubject, pad2, SUBJECTS, topicId } from '@/lib/games/details';
-import { format } from '@/lib/games/format';
-import { TOPIC_QUESTIONS_MAX, type AdminList, type Bank, type BankQuestion, type Batch, type ListChange, type ListChapter, type ListSave, type Person, type RoleCheck, type Row, type SavedChapter, type SentBack, type Status } from '@/lib/games/rows';
+import { APPROVED_PAGE, BATCH_MAX, SENT_BACK_PAGE, TEAM_LOG_PAGE, WAITING_BATCHES, type GamesApi, type SaveResult, type SendResult } from '@/lib/games/api';
+import { ALL_BOARDS, chapterId, checkBoard, checkClass, checkSubject, pad2, parseNumbered, readMeta, SUBJECTS, topicId } from '@/lib/games/details';
+import { read, toRows, type Where } from '@/lib/games/format';
+import { TOPIC_QUESTIONS_MAX, type AdminList, type Bank, type BankQuestion, type Batch, type ListChange, type ListChapter, type ListSave, type Person, type RoleCheck, type Row, type SavedChapter, type SentBack, type Status, type TeamChange } from '@/lib/games/rows';
 
 /* The games pages in dummy mode (D75): an in-memory stand-in for the `games` schema, with no sign-in. It keeps the
    same rules as the database: who may do what, duplicates skipped, questions numbered within their topic and never
@@ -14,7 +14,7 @@ import { TOPIC_QUESTIONS_MAX, type AdminList, type Bank, type BankQuestion, type
 export const DUMMY_ME = { email: 'you@example.com', name: 'You (dummy)' };
 
 interface FakeQuestion extends BankQuestion { teacherEmail: string; reviewedBy: string | null; seenAt: string | null }
-interface State { team: Person[]; batches: Batch[]; questions: FakeQuestion[]; catalog: ListChapter[]; log: ListChange[] }
+interface State { team: Person[]; batches: Batch[]; questions: FakeQuestion[]; catalog: ListChapter[]; log: ListChange[]; teamLog: TeamChange[] }
 
 const MODERATOR = { email: 'asha.rao@example.com', name: 'Asha Rao' };
 const HOD = { email: 'vikram.singh@example.com', name: 'Vikram Singh' };
@@ -670,6 +670,40 @@ const canon = (cs: SavedChapter[]) => JSON.stringify([...cs].sort((a, b) => a.ch
 const indiaDay = (iso: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)).replace(/-/g, '');
 
+/**
+ * The made-up texts are written as a chapter's questions under its Board, Class, Subject, Chapter and Topic lines (the
+ * page itself takes these from its dropdowns): each topic's questions become rows under it, as the page would send them.
+ */
+export function rowsOf(text: string): Row[] {
+  const out: Row[] = [];
+  const at: Partial<Record<'board' | 'class' | 'subject' | 'chapter' | 'topic', string>> = {};
+  let chunk: string[] = [];
+  const flush = () => {
+    const body = chunk.join('\n');
+    chunk = [];
+    if (!body.trim()) return;
+    const ch = DUMMY_LIST.find((c) => c.board === checkBoard(at.board ?? '').name && c.class === checkClass(at.class ?? '').value
+      && c.subject === checkSubject(at.subject ?? '').name && c.chapter_no === parseNumbered(at.chapter ?? '', 'chapter').no);
+    if (!ch) throw new Error(`A made-up text is for a chapter that isn't on the made-up list: ${JSON.stringify(at)}`);
+    // the topic as written, on the list or not: the fake checks it as the database does
+    const t = at.topic ? parseNumbered(at.topic, 'topic') : null;
+    const where: Where = { chapter_id: ch.chapter_id, board: ch.board, class: ch.class, subject: ch.subject, chapter_no: ch.chapter_no, chapter: ch.name, topic_no: t?.no ?? null, topic: t?.name ?? '' };
+    out.push(...toRows(read(body).drafts, where));
+  };
+  for (const line of text.split('\n')) {
+    const m = readMeta(line);
+    if (m && m.key !== 'difficulty') {
+      flush();
+      at[m.key] = m.value;
+      if (m.key === 'chapter') delete at.topic;
+      continue;
+    }
+    chunk.push(line);
+  }
+  flush();
+  return out;
+}
+
 function seed(): State {
   const s: State = {
     team: [
@@ -683,9 +717,19 @@ function seed(): State {
     questions: [],
     catalog: structuredClone(DUMMY_LIST),
     log: [{ at: hoursAgo(24 * 30), by: MODERATOR.name, action: 'add', detail: `Added ${DUMMY_LIST.length} chapters and ${DUMMY_LIST.reduce((n, c) => n + c.topics.length, 0)} topics.` }],
+    teamLog: [],
   };
+  // the team's log starts with everyone on the team, as they were added (as upgrade 1 starts it), then a few changes
+  for (const p of [...s.team].sort((a, b) => a.added_at.localeCompare(b.added_at))) {
+    s.teamLog.push({ id: s.teamLog.length + 1, at: p.added_at, by: p.moderator ? null : MODERATOR.name, action: 'add', person: p.email, name: p.name, role: p.email === HOD.email ? 'member' : p.role, old_role: null, before_log: p.moderator });
+  }
+  const later = (h: number, change: Omit<TeamChange, 'id' | 'at' | 'before_log'>) => s.teamLog.push({ ...change, id: s.teamLog.length + 1, at: hoursAgo(h), before_log: false });
+  later(24 * 12, { by: MODERATOR.name, action: 'role', person: HOD.email, name: HOD.name, role: 'hod', old_role: 'member' });
+  later(24 * 2, { by: MODERATOR.name, action: 'add', person: 'meera.iyer@example.com', name: null, role: 'member', old_role: null });
+  later(24, { by: MODERATOR.name, action: 'remove', person: 'meera.iyer@example.com', name: null, role: 'member', old_role: null });
+  s.teamLog.sort((x, y) => x.at.localeCompare(y.at)).forEach((l, i) => { l.id = i + 1; });
   const put = (text: string, who: { email: string; name: string }, sentAt: string, status: Status, reviewedAt: string | null, note = '') => {
-    const ids = add(s, format(text).rows, who, sentAt).ids;
+    const ids = add(s, rowsOf(text), who, sentAt).ids;
     for (const q of s.questions) {
       if (!ids.includes(q.id)) continue;
       q.status = status;
@@ -740,7 +784,7 @@ function add(s: State, rows: Row[], who: { email: string; name: string }, at = n
     }
     const id = `${cid}T${pad2(tno)}Q${String(n).padStart(3, '0')}`;
     s.questions.push({
-      ...r, line: 0, end: undefined, under: undefined, question: r.question.trim(), answer: r.answer.trim(), also: r.also.map((o) => o.trim()), fill: r.fill?.trim() || null,
+      ...r, line: 0, end: undefined, question: r.question.trim(), answer: r.answer.trim(), also: r.also.map((o) => o.trim()), fill: r.fill?.trim() || null,
       wrong_options: (r.wrong_options ?? []).map((o) => o.trim()), topic_id: r.topic_no === null ? null : `${cid}T${pad2(tno)}`, question_no: n,
       id, batch: batch.id, status: 'pending', note: '', reviewedAt: null, teacherEmail: who.email, reviewedBy: null, seenAt: null,
     });
@@ -950,6 +994,15 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
   });
   const approved = () => s.questions.filter((q) => q.status === 'approved');
   const waiting = () => s.questions.filter((q) => q.status === 'pending').length;
+  /** Newest first, then the page after `after` (as the database pages them). */
+  const pageOf = (qs: FakeQuestion[], after: BankQuestion | undefined, size: number) => {
+    const newest = [...qs].sort((a, b) => (b.reviewedAt ?? '').localeCompare(a.reviewedAt ?? '') || b.id.localeCompare(a.id));
+    const from = after ? newest.findIndex((q) => (q.reviewedAt ?? '') < (after.reviewedAt ?? '') || (q.reviewedAt === after.reviewedAt && q.id < after.id)) : 0;
+    return bankOf(from < 0 ? [] : newest.slice(from, from + size));
+  };
+  const noteTeam = (change: Omit<TeamChange, 'id' | 'at' | 'by' | 'before_log' | 'name'>) => {
+    s.teamLog.push({ ...change, id: Math.max(0, ...s.teamLog.map((l) => l.id)) + 1, at: new Date().toISOString(), by: DUMMY_ME.name, name: null, before_log: false });
+  };
 
   return {
     reset() { s = seed(); password = false; },
@@ -1011,24 +1064,34 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       return out;
     },
 
-    async loadForHod() {
+    async loadWaiting(after) {
       await wait();
       need('hod');
-      return bankOf(s.questions.filter((q) => q.status !== 'approved'));
+      const key = (b: Batch) => `${b.at}\u0000${b.id}`;
+      const batches = s.batches
+        .filter((b) => s.questions.some((q) => q.batch === b.id && q.status === 'pending') && (!after || key(b) < key(after)))
+        .sort((a, b) => key(b).localeCompare(key(a)))
+        .slice(0, WAITING_BATCHES);
+      const qs = batches.flatMap((b) => s.questions.filter((q) => q.batch === b.id && q.status === 'pending').sort((x, y) => x.id.localeCompare(y.id)));
+      return { batches, questions: qs.map(strip) };
     },
 
     async loadApproved(after) {
       await wait();
       need('hod');
-      const newest = approved().sort((a, b) => (b.reviewedAt ?? '').localeCompare(a.reviewedAt ?? '') || b.id.localeCompare(a.id));
-      const from = after ? newest.findIndex((q) => q.id === after.id) + 1 : 0;
-      return bankOf(newest.slice(from, from + APPROVED_PAGE));
+      return pageOf(approved(), after, APPROVED_PAGE);
     },
 
-    async approvedCount() {
+    async loadSentBack(after) {
+      await wait();
+      need('hod');
+      return pageOf(s.questions.filter((q) => q.status === 'rejected'), after, SENT_BACK_PAGE);
+    },
+
+    async hodCounts() {
       await wait(100);
-      need('team');
-      return approved().length;
+      need('hod');
+      return { waiting: waiting(), approved: approved().length, sentBack: s.questions.filter((q) => q.status === 'rejected').length };
     },
 
     async saveStatus(ids, status, reason = '') {
@@ -1108,6 +1171,8 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       if (mail === DUMMY_ME.email && role !== 'admin') throw new Error("You can't take away your own admin role.");
       const p = s.team.find((x) => x.email === mail);
       if (p?.moderator && role !== 'admin') throw new Error('The moderator stays an admin.');
+      if (!p) noteTeam({ action: 'add', person: mail, role, old_role: null });
+      else if (p.role !== role) noteTeam({ action: 'role', person: mail, role, old_role: p.role });
       if (p) p.role = role;
       else s.team.push({ email: mail, name: null, role, moderator: false, added_at: new Date().toISOString(), last_seen_at: null });
     },
@@ -1117,8 +1182,18 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
       need('admin');
       const mail = email.trim().toLowerCase();
       if (mail === DUMMY_ME.email) throw new Error("You can't remove yourself.");
-      if (s.team.find((x) => x.email === mail)?.moderator) throw new Error("The moderator can't be removed.");
+      const p = s.team.find((x) => x.email === mail);
+      if (p?.moderator) throw new Error("The moderator can't be removed.");
+      if (p) noteTeam({ action: 'remove', person: mail, role: p.role, old_role: null });
       s.team = s.team.filter((x) => x.email !== mail);
+    },
+
+    async loadTeamLog(beforeId) {
+      await wait();
+      need('admin');
+      const name = (email: string) => s.team.find((p) => p.email === email)?.name ?? null;
+      return s.teamLog.filter((l) => beforeId === undefined || l.id < beforeId).sort((a, b) => b.id - a.id).slice(0, TEAM_LOG_PAGE)
+        .map((l) => ({ ...l, name: name(l.person) }));
     },
 
     // ---------------------------------------------------------------- the list, for admins, by the database's rules

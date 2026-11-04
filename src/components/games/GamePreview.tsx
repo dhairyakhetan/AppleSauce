@@ -5,7 +5,7 @@ import type { Row } from '@/lib/games/rows';
 import { chip } from './helpers';
 import { Revise, type ReviseQuestion } from './Revise';
 
-/* "See how it plays": Try the games, scaled down, made from the questions in the Questions box as they are written
+/* "See how they play": Try the games, scaled down, made from the ready questions in the Questions box as they are written
    (the same view and the same engine, so it is exactly what a student would get from these questions). Every topic is
    in to start with; tap a topic to leave it out. Nothing here is saved or sent. "Full size" opens it as students see it. */
 
@@ -35,20 +35,19 @@ export function GamePreview({ rows }: { rows: Row[] }) {
   const [big, setBig] = useState(false);
 
   return (
-    <section aria-labelledby="preview-h" className="flex flex-col gap-3">
-      <h2 id="preview-h" className="text-[15px] font-bold text-foreground">3. See how it plays</h2>
-      {!rows.length && <p className="text-[14px] text-warm-secondary">A game made from your questions shows here.</p>}
+    <div className="flex flex-col gap-3">
+      {!rows.length && <p className="text-[14px] text-warm-secondary">No question is ready yet. A game made from the ready ones shows here.</p>}
       {questions.length > 0 && (
         <Revise compact written questions={questions}
           extra={() => <button type="button" className={chip('card')} onClick={() => setBig(true)}><Maximize2 aria-hidden /> Full size</button>} />
       )}
       <Dialog open={big} onOpenChange={setBig}>
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl bg-card">
-          <DialogTitle>See how it plays</DialogTitle>
+          <DialogTitle>See how they play</DialogTitle>
           <DialogDescription className="sr-only">Full size, as students see it.</DialogDescription>
           {big && <Revise written questions={questions} />}
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   );
 }

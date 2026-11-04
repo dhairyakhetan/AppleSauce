@@ -2,17 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 
-import { createFakeGamesApi, DUMMY_LIST, DUMMY_TEXTS } from '@/dummy/games-fake-api';
-import { checkList } from '@/lib/games/catalog';
+import { createFakeGamesApi, DUMMY_LIST, DUMMY_TEXTS, rowsOf } from '@/dummy/games-fake-api';
 import { GAME_TYPES, makeGame } from '@/lib/games/engine';
-import { format } from '@/lib/games/format';
+import { read } from '@/lib/games/format';
 import { addChapter, addTopic, changeCount, chaptersOf, deleteChapter, draftOf, readBulk, renameChapter, renumberChapter, setOpen, toSave, type DraftChapter } from '@/lib/games/list-draft';
 import type { AdminChapter } from '@/lib/games/rows';
 
 /* Dummy mode's stand-in for the `games` schema keeps the database's rules, so what people try in dummy mode is what
    the real pages will do. Its made-up questions are written the way the prompt asks, so they pass the checker. */
 
-const rows = (text: string) => format(text).rows;
+const rows = (text: string) => rowsOf(text);
 const HEAT = `Board: CBSE
 Class: 7
 Subject: Science
@@ -20,12 +19,24 @@ Chapter 4: Heat
 Topic 2: Transfer of Heat
 `;
 const q = (question: string, answer: string, more = '') => `\nQ: ${question}\nA: ${answer}\n${more}`;
+type Api = ReturnType<typeof createFakeGamesApi>;
+/** Every waiting question, page by page, as Approve questions loads them. */
+async function waitingAll(api: Api) {
+  const out: Awaited<ReturnType<Api['loadWaiting']>>['questions'] = [];
+  for (let after; ;) {
+    const page = await api.loadWaiting(after);
+    if (!page.batches.length) return out;
+    out.push(...page.questions);
+    after = page.batches.at(-1);
+  }
+}
 
 describe('the made-up questions', () => {
   it.each(Object.entries(DUMMY_TEXTS))('%s passes the checker and the list, and makes every game', (_name, text) => {
-    const { rows: rs, issues } = format(text);
-    expect(issues).toEqual([]);
-    expect(checkList(text, rs, DUMMY_LIST).issues).toEqual([]);
+    expect(read(text).issues).toEqual([]);
+    const rs = rowsOf(text);
+    expect(rs).toHaveLength(read(text).drafts.length);
+    expect(rs.every((r) => DUMMY_LIST.some((c) => c.chapter_id === r.chapter_id && (r.topic_no === null || c.topics.some((t) => t.topic_no === r.topic_no && t.name === r.topic))))).toBe(true);
     if (text.includes('Level: hard')) {
       const items = rs.map((r, i) => ({ id: String(i), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }));
       if (rs.length >= 8) for (const t of GAME_TYPES) expect(makeGame(t, items, 1), t).not.toBeNull();
@@ -43,7 +54,7 @@ describe('the dummy games database', () => {
     ]);
     expect(r).toMatchObject({ sent: 1, already: 2, sentBack: 0 });
     expect(r.batchIds).toHaveLength(1);
-    const waiting = (await api.loadForHod()).questions.filter((x) => x.status === 'pending' && x.chapter_id === 'CBSE07SCI04');
+    const waiting = (await waitingAll(api)).filter((x) => x.chapter_id === 'CBSE07SCI04');
     expect(waiting.map((x) => x.id)).toEqual(['CBSE07SCI04T02Q010']); // 8 approved and 1 sent back before it
   });
 
@@ -60,16 +71,16 @@ describe('the dummy games database', () => {
   it('keeps the other answers and the fill-in sentence', async () => {
     const api = createFakeGamesApi(false);
     await api.sendBatch(rows(`${HEAT}${q('Process by which heat moves through a solid', 'Conduction', 'Also: Thermal conduction\nFill: Heat moves through a solid by ___.\n')}`));
-    const sent = (await api.loadForHod()).questions.find((x) => x.question === 'Process by which heat moves through a solid')!;
+    const sent = (await waitingAll(api)).find((x) => x.question === 'Process by which heat moves through a solid')!;
     expect(sent).toMatchObject({ also: ['Thermal conduction'], fill: 'Heat moves through a solid by ___.' });
   });
 
   it('refuses the whole send when a question is off the list of chapters and topics', async () => {
     const api = createFakeGamesApi(false);
-    const before = (await api.loadForHod()).questions.length;
+    const before = (await waitingAll(api)).length;
     const off = rows(`Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 9: Weather${q('Wind from the sea by day', 'Sea breeze')}`);
     await expect(api.sendBatch([...rows(`${HEAT}${q('Heat flowing through a solid', 'Conduction')}`), ...off])).rejects.toThrow(/topic 9/i);
-    expect((await api.loadForHod()).questions).toHaveLength(before);
+    expect(await waitingAll(api)).toHaveLength(before);
     expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI04')?.topics.map((t) => t.topic_no)).toEqual([1, 2, 3]);
   });
 
@@ -110,7 +121,7 @@ describe('the dummy games database', () => {
     d = setOpen(d, 'CBSE07SCI02', false);
     expect(changeCount(d)).toBe(4);
     expect(await save(loaded, d)).toEqual({ changes: 4 });
-    expect((await api.loadForHod()).questions.filter((q) => q.chapter_id === 'CBSE07SCI04').every((q) => q.chapter === 'Heat and Temperature')).toBe(true);
+    expect([...(await waitingAll(api)), ...(await api.loadSentBack()).questions].filter((q) => q.chapter_id === 'CBSE07SCI04').every((q) => q.chapter === 'Heat and Temperature')).toBe(true);
     const nutrition = (await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!;
     expect([nutrition.open, nutrition.topics.map((t) => t.topic_id)]).toEqual([false, ['CBSE07SCI02T01']]);
     // saving from the list as it was before refuses, and keeps nothing
@@ -161,7 +172,9 @@ describe('the dummy games database', () => {
   it('lets only HoDs and admins approve, and only admins manage the team', async () => {
     const api = createFakeGamesApi(false);
     api.setRole('member');
-    await expect(api.loadForHod()).rejects.toThrow(/HoD/);
+    await expect(api.loadWaiting()).rejects.toThrow(/HoD/);
+    await expect(api.hodCounts()).rejects.toThrow(/HoD/);
+    await expect(api.loadTeamLog()).rejects.toThrow(/admin/);
     await expect(api.loadPeople()).rejects.toThrow(/admin/);
     api.setRole(null);
     expect(await api.myRole()).toBeNull();
@@ -173,9 +186,8 @@ describe('the dummy games database', () => {
 
   it('approves, sends back with a reason, and keeps a sent-back question back while its copy waits', async () => {
     const api = createFakeGamesApi(false);
-    const bank = await api.loadForHod();
-    const pending = bank.questions.filter((x) => x.status === 'pending');
-    const before = await api.approvedCount();
+    const pending = await waitingAll(api);
+    const before = (await api.hodCounts()).approved;
     const r = await api.saveStatus([pending[0].id], 'approved');
     expect(r.changed).toEqual([pending[0].id]);
     expect(r.approved).toBe(before + 1);
@@ -195,5 +207,42 @@ describe('the dummy games database', () => {
     await expect(api.removePerson('you@example.com')).rejects.toThrow(/yourself/);
     await api.setPersonRole('New.Person@Example.com ', 'hod');
     expect((await api.loadPeople()).find((p) => p.email === 'new.person@example.com')?.role).toBe('hod');
+  });
+
+  it("notes each change to the team in its log, newest first, 20 at a time, and nothing refused", async () => {
+    const api = createFakeGamesApi(false);
+    const start = await api.loadTeamLog();
+    await api.setPersonRole('new.person@example.com', 'member');
+    await api.setPersonRole('new.person@example.com', 'hod');
+    await api.setPersonRole('new.person@example.com', 'hod');
+    await api.removePerson('new.person@example.com');
+    await expect(api.removePerson('you@example.com')).rejects.toThrow(/yourself/);
+    const log = await api.loadTeamLog();
+    expect(log.slice(0, 3).map((l) => [l.action, l.person, l.role, l.old_role])).toEqual([
+      ['remove', 'new.person@example.com', 'hod', null],
+      ['role', 'new.person@example.com', 'hod', 'member'],
+      ['add', 'new.person@example.com', 'member', null],
+    ]);
+    expect(log.length).toBe(start.length + 3);
+    for (let i = 0; i < 25; i++) await api.setPersonRole(`p${i}@example.com`, 'member');
+    const first = await api.loadTeamLog();
+    expect(first).toHaveLength(20);
+    expect((await api.loadTeamLog(first.at(-1)!.id)).every((l) => l.id < first.at(-1)!.id)).toBe(true);
+  });
+
+  it('gives Approve questions a few batches, or 20 questions, at a time, and the counts', async () => {
+    const api = createFakeGamesApi(false);
+    for (let i = 0; i < 4; i++) await api.sendBatch(rows(`${HEAT}${q(`Made-up waiting question ${i}`, `Answer ${i}`)}`));
+    const first = await api.loadWaiting();
+    expect(first.batches).toHaveLength(3);
+    expect(first.batches.map((b) => b.at)).toEqual([...first.batches.map((b) => b.at)].sort().reverse());
+    expect(first.questions.every((x) => x.status === 'pending' && first.batches.some((b) => b.id === x.batch))).toBe(true);
+    const counts = await api.hodCounts();
+    expect((await waitingAll(api)).length).toBe(counts.waiting);
+    const approvedFirst = await api.loadApproved();
+    expect(approvedFirst.questions).toHaveLength(20);
+    const approvedNext = await api.loadApproved(approvedFirst.questions.at(-1));
+    expect(approvedNext.questions.some((x) => approvedFirst.questions.some((y) => y.id === x.id))).toBe(false);
+    expect((await api.loadSentBack()).questions.length).toBe(counts.sentBack);
   });
 });

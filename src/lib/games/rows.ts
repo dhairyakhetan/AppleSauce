@@ -38,9 +38,8 @@ export interface Row {
   difficulty: Difficulty | null;
   /** The line of the Questions box the question starts on (its Q: line). Not exported. */
   line: number;
-  /** Its last line, and the detail lines it is under (Board, Class, Subject, Chapter, Topic). Not exported. */
+  /** Its last line. Not exported. */
   end?: number;
-  under?: number[];
 }
 
 // ---------------------------------------------------------------- rows as files
@@ -114,6 +113,16 @@ export type RoleCheck = GamesRole | 'reauth' | null;
 
 /** Someone on the games team. `moderator`: the admin who runs it, whom nobody can remove or demote. */
 export interface Person { email: string; name: string | null; role: GamesRole; moderator: boolean; added_at: string; last_seen_at: string | null }
+
+/**
+ * A change to the team, from its log: someone added (`role` is the role given), a role changed (from `old_role` to
+ * `role`), or someone taken off (`role` is the one they had). `by`: the admin's name on the team (else their email);
+ * null for someone already on the team when the log began (`before_log`). `name`: the person's name, while on the team.
+ */
+export interface TeamChange {
+  id: number; at: string; by: string | null; action: 'add' | 'role' | 'remove';
+  person: string; name: string | null; role: GamesRole; old_role: GamesRole | null; before_log: boolean;
+}
 
 // ---------------------------------------------------------------- the fixed list of chapters and topics
 

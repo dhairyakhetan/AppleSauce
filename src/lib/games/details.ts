@@ -409,20 +409,6 @@ export function parseNumbered(s: string, kind: 'chapter' | 'topic'): { no: numbe
   return { no: kind === 'chapter' ? parts[0] : parts[parts.length - 1], name: tidy(m[2]) };
 }
 
-/** A chapter or topic: its number (null when missing or out of range), its name capitalised, and any problem. */
-export function checkNumbered(value: string, kind: 'chapter' | 'topic'): { no: number | null; name: string; problem?: Problem } {
-  const { no, name } = parseNumbered(value, kind);
-  const Kind = kind === 'chapter' ? 'Chapter' : 'Topic';
-  const inRange = no !== null && no >= 1 && no <= MAX_NO;
-  const problem: Problem | undefined = no !== null && !inRange ? { level: 'error', text: `${Kind} number must be from 1 to ${MAX_NO}.` }
-    : name.length > MAX_NAME ? { level: 'error', text: `${Kind} name is longer than ${MAX_NAME} characters.` }
-    : kind === 'chapter' && no === null ? { level: 'warn', text: 'Add the chapter number, for example "3: Acids". It is part of the chapter ID.' }
-    : !name && kind === 'chapter' ? { level: 'warn', text: 'Add the chapter name, for example "3: Acids". Questions can\'t be sent without it.' }
-    : !name ? { level: 'warn', text: `Add the ${kind} name.` }
-    : undefined;
-  return { no: inRange ? no : null, name: titleCase(name), problem };
-}
-
 // ---------------------------------------------------------------- IDs
 
 export function chapterId(boardCode: string | null, cls: number | null, subjectCode: string | null, chapterNo: number | null): string | null {
@@ -430,15 +416,6 @@ export function chapterId(boardCode: string | null, cls: number | null, subjectC
 }
 
 export const topicId = (chapter: string | null, topicNo: number | null) => (chapter && topicNo ? `${chapter}T${pad2(topicNo)}` : null);
-
-/** Board mismatches worth a warning, such as ICSE in class 11 (that is ISC). */
-export function boardClassProblem(boardCode: string | null, cls: number | null): string | undefined {
-  if (!cls) return undefined;
-  if (boardCode === 'ICSE' && cls >= 11) return 'ICSE ends at class 10. Classes 11 and 12 are ISC.';
-  if (boardCode === 'ISC' && cls <= 10) return 'ISC is for classes 11 and 12. Up to class 10 it is ICSE.';
-  if (boardCode === 'IGCSE' && cls >= 11) return 'IGCSE ends at grade 10. For 11 and 12 use Cambridge or IB.';
-  return undefined;
-}
 
 // ---------------------------------------------------------------- detail lines
 
@@ -453,7 +430,6 @@ const KEY_OF: Record<string, MetaKey> = {
 
 /** Removes a Markdown heading mark, a bullet and bold from a line. Spaces inside are kept, so a box can be typed into word by word. */
 const unmark = (line: string) => line.replace(/^\s*#{1,6}\s*/, '').replace(/^\s*[-*•]\s+/, '').replace(/\*\*/g, '').replace(/^\s+/, '');
-export const plainLine = (line: string) => tidy(unmark(line));
 
 /**
  * A detail line such as "Chapter 3: Acids", "Class 10", "**Board:** CBSE" or "## Topic 2 - Indicators", or null.
@@ -479,71 +455,4 @@ export function readMeta(line: string): { key: MetaKey; value: string } | null {
   }
   const r = rest.match(/^[:\-–—]\s?(.*)$/);
   return r ? { key: k, value: r[1] } : null;
-}
-
-// ---------------------------------------------------------------- the four boxes, kept in the text
-
-export type DetailKey = 'board' | 'class' | 'subject' | 'chapter';
-export const DETAIL_KEYS: DetailKey[] = ['board', 'class', 'subject', 'chapter'];
-export const LABEL: Record<DetailKey, string> = { board: 'Board', class: 'Class', subject: 'Subject', chapter: 'Chapter' };
-
-const detailOf = (line: string) => {
-  const m = readMeta(line);
-  return m && m.key in LABEL ? (m as { key: DetailKey; value: string }) : null;
-};
-
-/** Where a box's line is: among the detail lines at the top of the text, before the first topic or question. -1 if none. */
-function find(lines: string[], k: DetailKey): number {
-  const end = lines.findIndex((l) => l.trim() && !detailOf(l));
-  return lines.findIndex((l, i) => (end < 0 || i < end) && detailOf(l)?.key === k);
-}
-
-/** What the four boxes show: their lines at the top of the text. */
-export function readDetails(text: string): Record<DetailKey, string> {
-  const lines = text.split('\n');
-  const get = (k: DetailKey) => {
-    const i = find(lines, k);
-    return i < 0 ? '' : detailOf(lines[i])!.value;
-  };
-  return { board: get('board'), class: get('class'), subject: get('subject'), chapter: get('chapter') };
-}
-
-/** The line (from 1) a box writes to, or null when it has none yet. */
-export function detailLine(text: string, k: DetailKey): number | null {
-  const i = find(text.split('\n'), k);
-  return i < 0 ? null : i + 1;
-}
-
-/** Typing in a box writes its line at the top of the text (in the order Board, Class, Subject, Chapter); emptying it removes the line. */
-export function writeDetail(text: string, k: DetailKey, value: string): string {
-  const v = value.replace(/\s*[|\t\r\n]+\s*/g, ' ');
-  const lines = text.split('\n');
-  const at = find(lines, k);
-  const line = k === 'chapter' && /^\d/.test(v) ? `Chapter ${v}` : `${LABEL[k]}: ${v}`;
-  if (at >= 0) lines.splice(at, 1, ...(v.trim() ? [line] : []));
-  else if (v.trim()) lines.splice(Math.max(-1, ...DETAIL_KEYS.slice(0, DETAIL_KEYS.indexOf(k)).map((b) => find(lines, b))) + 1, 0, line);
-  return lines.join('\n');
-}
-
-const CHECK: Record<DetailKey, (v: string) => { problem?: Problem }> = {
-  board: checkBoard, class: checkClass, subject: checkSubject, chapter: (v) => checkNumbered(v, 'chapter'),
-};
-
-/** A box's problem, shown under it. */
-export const checkDetail = (k: DetailKey, value: string): Problem | undefined => (value.trim() ? CHECK[k](value).problem : undefined);
-
-/** A box's value written the standard way (CBSE, 11, Chemistry, "1: Some Basic Concepts"), or as it was if it can't be read. */
-export function standardDetail(k: DetailKey, value: string): string {
-  if (!value.trim()) return '';
-  if (k === 'board') { const b = checkBoard(value); return b.code ? b.name : value; }
-  if (k === 'class') return String(checkClass(value).value ?? value);
-  if (k === 'subject') return checkSubject(value).name || value;
-  const c = checkNumbered(value, 'chapter');
-  if (c.problem?.level === 'error') return value;
-  return c.no === null ? c.name : c.name ? `${c.no}: ${c.name}` : String(c.no);
-}
-
-/** The chapter ID the four boxes make, if they are all there. */
-export function detailsId(d: Record<DetailKey, string>): string | null {
-  return chapterId(checkBoard(d.board).code, checkClass(d.class).value, checkSubject(d.subject).code, checkNumbered(d.chapter, 'chapter').no);
 }
