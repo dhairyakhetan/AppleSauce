@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { blockOf, checkPlace, EXAMPLE, MAX_PER_SEND, read, toRows, visibleIssues, type Where } from './format';
-import { counts, setStatus, toCSV, toJSON, toRecord, type Bank } from './rows';
+import { blockOf, checkPlace, checkTopics, EXAMPLE, leftAfterSend, MAX_PER_SEND, MAX_PER_TOPIC, read, toRows, visibleIssues, type Where } from './format';
+import { counts, setStatus, toCSV, toJSON, toRecord, type Bank, type ListChapter } from './rows';
 
 /** A question with every part, which passes every check. */
 const GOOD = `Q: Gas that green plants take in from the air to make their food
@@ -13,10 +13,16 @@ Level: easy`;
 const problems = (text: string) => read(text).issues.map((x) => [x.line, x.text]);
 /** The problems' texts only. */
 const says = (text: string) => read(text).issues.map((x) => x.text);
-const WHERE: Where = {
-  chapter_id: 'CBSE10SCI01', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1, chapter: 'Chemical Reactions and Equations',
-  topic_no: 2, topic: 'Types of Chemical Reactions',
+const WHERE: Where = { chapter_id: 'CBSE10SCI01', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1, chapter: 'Chemical Reactions and Equations' };
+/** The chapter on the list: open (its topics aren't fixed), with two topics in use. */
+const OPEN: ListChapter = {
+  chapter_id: 'CBSE10SCI01', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1, name: 'Chemical Reactions and Equations', open: true,
+  topics: [{ topic_id: 'CBSE10SCI01T01', topic_no: 1, name: 'Chemical Equations' }, { topic_id: 'CBSE10SCI01T02', topic_no: 2, name: 'Types of Chemical Reactions' }],
 };
+/** The same chapter with its topics fixed by the list. */
+const FIXED: ListChapter = { ...OPEN, open: false };
+/** Rows for a text, under the topics its Topic lines name. */
+const rowsOf = (text: string, ch = OPEN) => { const { drafts } = read(text); return toRows(drafts, WHERE, checkTopics(drafts, ch).topics); };
 
 describe('reading questions', () => {
   it('reads each part from its labelled line, and a question with every part has no problems', () => {
@@ -25,7 +31,7 @@ describe('reading questions', () => {
     expect(headers).toEqual([]);
     expect(drafts).toEqual([{
       question: 'Gas that green plants take in from the air to make their food', answer: 'Carbon dioxide', also: ['CO2'],
-      fill: 'Green plants take in ___ from the air to make their food.', wrong: ['Oxygen', 'Nitrogen', 'Hydrogen'], level: 'easy', line: 1, end: 6,
+      fill: 'Green plants take in ___ from the air to make their food.', wrong: ['Oxygen', 'Nitrogen', 'Hydrogen'], level: 'easy', line: 1, end: 6, topic: null,
     }]);
   });
 
@@ -161,8 +167,8 @@ describe('the checks, each on the line to fix', () => {
     expect(problems(`${GOOD}\n\n${GOOD.replace('food', 'food.')}`)).toEqual([[8, 'The same question is on line 1. Remove one of them.']]);
     const many = Array.from({ length: MAX_PER_SEND + 2 }, (_, i) => `Q: Statement number ${i + 1}\nA: True`).join('\n\n');
     expect(problems(many)).toEqual([
-      [91, 'At most 30 questions are sent at a time. This one and the ones after it go in the next send.'],
-      [94, 'More than 30 questions: this one goes in the next send.'],
+      [MAX_PER_SEND * 3 + 1, `At most ${MAX_PER_SEND} questions are sent at a time. This one and the ones after it go in the next send.`],
+      [MAX_PER_SEND * 3 + 4, `More than ${MAX_PER_SEND} questions: this one goes in the next send.`],
     ]);
   });
 });
@@ -186,20 +192,70 @@ describe('lines that are not questions', () => {
   });
 });
 
-describe('Board, Class, Subject, Chapter and Topic lines', () => {
+describe('Board, Class, Subject and Chapter lines', () => {
   const head = (lines: string) => checkPlace(read(`${lines}\n\n${GOOD}`).headers, WHERE).map((x) => [x.line, x.text.split('.')[0]]);
 
-  it('are fine when they name what is chosen above, written any common way', () => {
-    expect(head('Board: cbse\nClass: X\nSubject: science\nChapter 1: Chemical reactions and equations\nTopic 2: Types of chemical reactions')).toEqual([]);
-    expect(head('**Chapter 1**\n## Topic: Types of Chemical Reactions')).toEqual([]);
+  it('are fine when they name the chapter chosen above, written any common way', () => {
+    expect(head('Board: cbse\nClass: X\nSubject: science\nChapter 1: Chemical reactions and equations')).toEqual([]);
+    expect(head('**Chapter 1**')).toEqual([]);
   });
 
-  it('are a problem when they name somewhere else, as their questions would go to the wrong place', () => {
-    expect(head('Class: 9\nChapter 1: Matter\nTopic 3: Oxidation')).toEqual([
-      [1, 'This line names somewhere else'], [2, 'This line names somewhere else'], [3, 'This line names somewhere else'],
+  it('are a problem when they name another, as their questions would go to the wrong place', () => {
+    expect(head('Class: 9\nChapter 1: Matter')).toEqual([[1, 'This line names another chapter'], [2, 'This line names another chapter']]);
+    expect(checkPlace(read('Chapter 4: Heat').headers, null)).toEqual([]);
+  });
+});
+
+describe('topics: Topic lines, decided by whoever writes the questions', () => {
+  const topicsOf = (text: string, ch = OPEN) => { const { drafts } = read(text); return checkTopics(drafts, ch); };
+
+  it('reads each question under the Topic line above it, and a Chapter line starts again with none', () => {
+    const { drafts } = read(`Topic: Balancing\n\n${GOOD}\n\nChapter 1: Chemical Reactions and Equations\n\n${GOOD.replace('food', 'meal')}`);
+    expect(drafts.map((d) => d.topic)).toEqual([{ line: 1, value: 'Balancing' }, null]);
+  });
+
+  it("finds a topic by its name (a number only counts with no name), under the list's name", () => {
+    const { topics, issues } = topicsOf(`Topic 7: types of chemical reactions.\n\n${GOOD}\n\nTopic 1\n\n${GOOD.replace('food', 'meal')}`);
+    expect(issues).toEqual([]);
+    expect(topics).toEqual([{ topic_no: 2, name: 'Types of Chemical Reactions', isNew: false }, { topic_no: 1, name: 'Chemical Equations', isNew: false }]);
+  });
+
+  it('in an open chapter, any other name is a new topic, written the standard way and numbered after the others in order', () => {
+    const text = `Topic: oxidation and reduction\n\n${GOOD}\n\nTopic: Corrosion\n\n${GOOD.replace('food', 'meal')}\n\nTopic: Oxidation and Reduction\n\n${GOOD.replace('food', 'snack')}`;
+    expect(topicsOf(text).topics).toEqual([
+      { topic_no: 3, name: 'Oxidation and Reduction', isNew: true }, { topic_no: 4, name: 'Corrosion', isNew: true }, { topic_no: 3, name: 'Oxidation and Reduction', isNew: true },
     ]);
-    expect(checkPlace(read('Topic 1: Equations').headers, { ...WHERE, topic_no: null, topic: '' })).toHaveLength(1);
-    expect(checkPlace(read('Topic 1: Equations').headers, null)).toEqual([]);
+    expect(topicsOf(text).issues).toEqual([]);
+  });
+
+  it('in a chapter whose topics are fixed, any other name is a problem on its Topic line, and holds back its questions', () => {
+    const { topics, issues } = topicsOf(`Topic: Corrosion\n\n${GOOD}`, FIXED);
+    expect(topics).toEqual([null]);
+    expect(issues.map((x) => [x.line, x.q, x.text])).toEqual([
+      [1, undefined, '"Corrosion" isn\'t one of this chapter\'s topics. Its topics are fixed: Chemical Equations, Types of Chemical Reactions. Use one of them.'],
+      [3, 0, 'Its Topic line (line 1) needs fixing first.'],
+    ]);
+  });
+
+  it('every question needs a Topic line above it, and a topic takes at most 30 questions', () => {
+    expect(topicsOf(GOOD).issues.map((x) => [x.line, x.text])).toEqual([[1, 'Put a Topic line above this question, such as "Topic: Conduction": the part of the chapter it is about.']]);
+    expect(topicsOf(GOOD, FIXED).issues[0].text).toBe('Put a Topic line above this question: one of "Topic: Chemical Equations", "Topic: Types of Chemical Reactions".');
+    const many = `Topic: Statements\n\n${Array.from({ length: MAX_PER_TOPIC + 1 }, (_, i) => `Q: Statement number ${i + 1}\nA: True`).join('\n\n')}`;
+    expect(topicsOf(many).issues.map((x) => x.q)).toEqual([MAX_PER_TOPIC]);
+  });
+
+  it('a Topic line needs a name, without long dashes', () => {
+    expect(topicsOf(`Topic 9\n\n${GOOD}`).issues[0].text).toBe('Write the topic\'s name on its Topic line, such as "Topic: Conduction".');
+    expect(topicsOf(`Topic: Rust – and corrosion\n\n${GOOD}`).issues[0].text).toBe('No long dashes in a topic\'s name: use a colon or a comma.');
+  });
+});
+
+describe('what stays in the box after a send', () => {
+  it('the sent questions go, with Topic and other lines left with nothing under them, and code fences; the rest stays', () => {
+    const text = `\`\`\`\nBoard: CBSE\nChapter 1: Chemical Reactions and Equations\n\nTopic: Sent\n\n${GOOD}\n\nTopic: Kept\n\n${GOOD.replace('food', 'meal')}\n\nQ: Unfinished question\nA: Yes\n\`\`\``;
+    const { drafts } = read(text);
+    expect(leftAfterSend(text, [drafts[0], drafts[1]])).toBe('Board: CBSE\nChapter 1: Chemical Reactions and Equations\n\nTopic: Kept\n\nQ: Unfinished question\nA: Yes\n');
+    expect(leftAfterSend(text, drafts)).toBe('');
   });
 });
 
@@ -221,25 +277,21 @@ describe('letting people finish writing before flagging', () => {
 });
 
 describe('rows for the database', () => {
-  const rows = toRows(read(`${GOOD}\n\nQ: The Sun is a star\nA: True`).drafts, WHERE);
+  const rows = rowsOf(`Topic: Types of Chemical Reactions\n\n${GOOD}\n\nTopic: Rusting\n\nQ: The Sun is a star\nA: True`);
 
-  it('puts every question under the chosen chapter and topic, numbered in order', () => {
+  it('puts every question in the chosen chapter, under its topic, numbered in order', () => {
     expect(toRecord(rows[0])).toEqual({
       chapter_id: 'CBSE10SCI01', topic_id: 'CBSE10SCI01T02', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1,
       chapter: 'Chemical Reactions and Equations', topic_no: 2, topic: 'Types of Chemical Reactions', question_no: 1,
       question: 'Gas that green plants take in from the air to make their food', answer: 'Carbon dioxide', also: ['CO2'],
       fill: 'Green plants take in ___ from the air to make their food.', wrong_options: ['Oxygen', 'Nitrogen', 'Hydrogen'], difficulty: 'easy',
     });
-    expect(rows[1]).toMatchObject({ question_no: 2, fill: null, wrong_options: [], difficulty: null });
+    expect(rows[1]).toMatchObject({ question_no: 2, topic_id: 'CBSE10SCI01T03', topic_no: 3, topic: 'Rusting', fill: null, wrong_options: [], difficulty: null });
     expect(JSON.parse(toJSON(rows))).toHaveLength(2);
   });
 
-  it('with no topic chosen, has no topic', () => {
-    expect(toRows(read(GOOD).drafts, { ...WHERE, topic_no: null, topic: '' })[0]).toMatchObject({ topic_id: null, topic_no: null, topic: '' });
-  });
-
   it('writes CSV with proper quoting and no byte-order mark', () => {
-    const csv = toCSV(toRows(read('Q: He said "hi", then left\nA: Hi, there').drafts, WHERE));
+    const csv = toCSV(rowsOf('Topic: Types of Chemical Reactions\nQ: He said "hi", then left\nA: Hi, there'));
     expect(csv.charCodeAt(0)).not.toBe(0xfeff);
     expect(csv.split('\n')[1]).toBe('CBSE10SCI01,CBSE10SCI01T02,CBSE,10,Science,1,Chemical Reactions and Equations,2,Types of Chemical Reactions,1,"He said ""hi"", then left","Hi, there",,,,');
   });
@@ -266,7 +318,7 @@ describe('the question bank (behind the HoD desk)', () => {
   it("approves, sends back with a reason, and moves back to waiting, on the page's copy", () => {
     const bank: Bank = {
       batches: [{ id: 'B20261009-01', by: 'A', email: '', at }],
-      questions: toRows(read(EXAMPLE).drafts, WHERE).map((r, i) => ({ ...r, id: `q${i}`, batch: 'B20261009-01', status: 'pending', note: '', reviewedAt: null })),
+      questions: rowsOf(EXAMPLE).map((r, i) => ({ ...r, id: `q${i}`, batch: 'B20261009-01', status: 'pending', note: '', reviewedAt: null })),
     };
     const [a, b, c] = bank.questions.map((q) => q.id);
     let next = setStatus(bank, [a, b], 'approved', 'ignored', at);

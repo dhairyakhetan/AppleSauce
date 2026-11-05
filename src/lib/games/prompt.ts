@@ -1,10 +1,11 @@
 /**
  * The prompts the games pages copy for a chatbot:
  *
- *   chatbotPrompt  Write questions, "Copy chatbot prompt": questions for ONE topic (or one open chapter with no topic),
- *                  the one chosen with the dropdowns, in the block format the page reads (format.ts), with the
- *                  teacher's material underneath. The reply is only question blocks: the page already knows where they
- *                  go, so a chatbot has nothing to copy exactly and nothing to get wrong about the chapter.
+ *   chatbotPrompt  Write questions, "Copy chatbot prompt": questions for the ONE chapter chosen with the dropdowns, in
+ *                  the format the page reads (format.ts), with the teacher's material underneath. The chatbot divides
+ *                  the questions into topics itself, as many as the chapter needs ("Topic: Name" lines; the page numbers
+ *                  them), keeping the topics already in use; where the list fixes the chapter's topics, it uses those.
+ *                  The reply is Topic lines and question blocks only: the page already knows the chapter.
  *   fixPrompt      Write questions, "Copy a prompt to fix them": each question the page turned away with what to change,
  *                  the text as it is, and to write all of it again.
  *   bulkPrompt     Chapters (admins), Bulk add: chapters for the boards, classes and subjects named under it, in the
@@ -14,29 +15,34 @@
  * writes text the page takes as it is. prompt.test.ts fails if they drift apart (labels, limits, levels, the example).
  * Everyone on the team copies the same prompt, so it says nothing about the site.
  */
-import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_QUESTION, MIN_OPTIONS, type Draft, type Issue, type Where } from './format';
-import { DIFFICULTIES } from './rows';
+import { isOpen } from './catalog';
+import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, type Draft, type Issue } from './format';
+import { DIFFICULTIES, type ListChapter } from './rows';
 
 const FENCE = '```';
 const fenced = (lines: string, fence = FENCE) => `${fence}\n${lines}\n${fence}`;
 const or = (xs: readonly string[]) => `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
 
-/** Three questions that show every part of the format (from no chapter in particular). */
-export const EXAMPLE_BLOCKS = `Q: Gas that green plants take in from the air to make their food
+/** Two topics and three questions that show every part of the format (from no chapter in particular). */
+export const EXAMPLE_BLOCKS = `Topic: Photosynthesis
+
+Q: Gas that green plants take in from the air to make their food
 A: Carbon dioxide
 Also: CO2
 Fill: Green plants take in ___ from the air to make their food.
 Wrong: Oxygen; Nitrogen; Hydrogen
 Level: easy
 
-Q: Number of sides of a hexagon
+Q: Number of molecules of carbon dioxide used to make one molecule of glucose
 A: 6
 Also: Six
-Fill: A hexagon has ___ sides.
-Wrong: 5; 7; 8
-Level: easy
+Fill: Plants use ___ molecules of carbon dioxide to make one molecule of glucose.
+Wrong: 2; 4; 12
+Level: medium
 
-Q: The Sun is a star
+Topic: Transpiration
+
+Q: Plants lose water vapour mainly through the stomata of their leaves
 A: True
 Level: easy`;
 
@@ -49,7 +55,8 @@ Wrong: a wrong option; another; another
 Level: easy`;
 
 /** Every rule the checker applies, as a chatbot needs them. */
-export const RULES = `- Every question has the lines Q, A, Fill, Wrong and Level, in the order shown, each on ONE line that starts with its label and a colon. Add Also lines, right after A, only when there is another right answer. Put a blank line between questions.
+export const RULES = `- A Topic line ("Topic: Name") above each topic's questions. Every question is under one.
+- Every question has the lines Q, A, Fill, Wrong and Level, in the order shown, each on ONE line that starts with its label and a colon. Add Also lines, right after A, only when there is another right answer. Put a blank line between questions.
 - True/False: a statement after Q, then "A: True" or "A: False", then Level. No Also, Fill or Wrong lines. At most one question in five.
 - Q: tests one fact and has exactly one right answer. It makes sense on its own: never "of the following", "which of these", "the above", "given below", "this", and never a figure, diagram, map, table or passage. It never contains its answer, has no ___, is not a yes/no question, and does not start with "True or false". At most ${MAX_QUESTION} characters.
 - A: the shortest correct answer, exactly what a student would type: a word, a name, a short phrase or a number, at most ${MAX_ANSWER_WORDS} words. No brackets, no notes such as "(approx.)", never two answers joined by "/". Put units in the question ("Boiling point of water, in degrees Celsius" with A: 100). If the answer needs a symbol a keyboard doesn't have (x², √2, π), add an Also line written with ordinary keys (x^2, sqrt 2, pi). Prefer answers made of letters where the material allows: crosswords and word searches need them (3 to 15 letters).
@@ -58,30 +65,48 @@ export const RULES = `- Every question has the lines Q, A, Fill, Wrong and Level
 - Wrong: ${MIN_OPTIONS} wrong options (at most ${MAX_OPTIONS}) separated by ";" (not commas). Believable, clearly wrong, and the same kind as the answer: a number for a number, a gas for a gas, about as long as it. Never the answer or an Also answer, and never "All of the above", "None of these" or "Both a and b": the options are shuffled.
 - Level: ${or(DIFFICULTIES)}. Easy is recalling a fact; medium needs understanding; hard needs applying it or linking ideas.`;
 
-/** What the questions are about: the chosen chapter and topic, in words. */
-const about = (w: Where) =>
-  [`${w.board}, class ${w.class}, ${w.subject}`, `Chapter ${w.chapter_no}: ${w.chapter}`, w.topic_no === null ? 'The whole chapter (no single topic)' : `Topic: ${w.topic}`].join('\n');
+const FENCED_TOPICS = (ch: ListChapter) => fenced(ch.topics.map((t) => `Topic: ${t.name}`).join('\n'));
 
-/** "Copy chatbot prompt": the instructions for one topic, then a place for the teacher's material. */
-export function chatbotPrompt(w: Where): string {
-  const whole = w.topic_no === null;
-  return `# Revision questions for one ${whole ? 'chapter' : 'topic'}
+/** How the chatbot divides the chapter into topics: the list's when it fixes them, else its own, keeping those in use. */
+function topicsPart(ch: ListChapter): string {
+  if (!isOpen(ch)) {
+    return `Its topics are fixed. Put each question under the one of these Topic lines it belongs to, written exactly like this. Use no other topic, and leave out a topic the material doesn't cover:
+
+${FENCED_TOPICS(ch)}`;
+  }
+  return `Divide the questions into topics yourself: as many topics as the chapter needs, no more.
+
+- A topic is a part of the chapter that the textbook gives a heading of its own (in a chapter on heat: Conduction, Convection, Radiation). Not a kind of question ("MCQs", "Short answers"), not a single fact, and not the chapter's own name.
+- Put the topics in the order the chapter teaches them. Write each as a line "Topic: Name" (no number) with its questions under it.${ch.topics.length ? `
+- These topics are already in use for this chapter. Use them, written exactly like this, for the questions that belong there, and add new topics only for parts they don't cover:
+
+${FENCED_TOPICS(ch)}` : ''}`;
+}
+
+/** "Copy chatbot prompt": the instructions for one chapter, then a place for the teacher's material. */
+export function chatbotPrompt(ch: ListChapter): string {
+  return `# Revision questions for one chapter
 
 Write questions for school revision games: crossword, word search, matching, fill in the blank and multiple choice. The teacher pastes your reply into a page that checks every line and turns away any question that breaks a rule below, so follow them exactly.
 
-## What the questions are about
+## The chapter
 
-${about(w)}
+${ch.board}, class ${ch.class}, ${ch.subject}
+Chapter ${ch.chapter_no}: ${ch.name}
 
-Write only about this ${whole ? 'chapter' : 'topic'}. Use the teacher's material below these instructions: every question and answer must come from it. If there is none, use well-established facts from the standard textbook for this chapter, and leave out anything you are not sure of. Write in the material's language.
+Write only about this chapter. Use the teacher's material below these instructions: every question and answer must come from it. If there is none, use well-established facts from the standard textbook for this chapter, and leave out anything you are not sure of. Write in the material's language.
+
+## Topics
+
+${topicsPart(ch)}
 
 ## How many
 
-15 to 25 questions, never more than ${MAX_PER_SEND}. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
+About 10 to 20 questions per topic, never more than ${MAX_PER_TOPIC} in a topic and never more than ${MAX_PER_SEND} in all. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
 
-## The format: one block per question
+## The format: Topic lines, and one block per question
 
-${fenced(SHAPE)}
+${fenced(`Topic: Name of the topic\n\n${SHAPE}`)}
 
 ## The rules
 
@@ -89,14 +114,14 @@ ${RULES}
 
 ## Example
 
-This shows the format only; your questions come from the ${whole ? 'chapter' : 'topic'} above.
+This shows the format only; your topics and questions come from the chapter above.
 
 ${fenced(EXAMPLE_BLOCKS)}
 
 ## Your reply
 
-- Put all the questions in ONE code block, so the teacher can copy them with one click.
-- Inside it, only the question blocks: no headings, no numbering, no bold, and no Board, Chapter or Topic lines (the page already knows them).
+- Put everything in ONE code block, so the teacher can copy it with one click: each Topic line with its questions under it.
+- Inside it, only Topic lines and question blocks: no headings, no numbering, no bold, and no Board or Chapter lines (the page already knows the chapter).
 - After the block, at most two short sentences, and only if needed: which answers you were unsure of, or that you wrote from general knowledge and the teacher should check them.
 
 ---
@@ -117,7 +142,7 @@ export function fixPrompt(text: string, drafts: Draft[], issues: Issue[]): strin
   const unique = (xs: string[]) => [...new Set(xs)];
 
   const items = drafts.flatMap((d, i) => {
-    const fixes = unique(issues.filter((x) => x.q === i).map((x) => x.fix))
+    const fixes = unique(issues.filter((x) => x.q === i && x.fix).map((x) => x.fix))
       // what to change first, then what to add
       .sort((x, y) => Number(x.startsWith('Add ')) - Number(y.startsWith('Add ')));
     if (!fixes.length) return [];
@@ -140,7 +165,7 @@ The text:
 
 ${fenced(text.trimEnd(), fence)}
 
-Write the whole text again, every question, with these fixes and nothing else changed. Put all of it in ONE code block, with only the question blocks inside, so I can copy it at once.
+Write the whole text again, every Topic line and every question, with these fixes and nothing else changed. Put all of it in ONE code block, with only Topic lines and question blocks inside, so I can copy it at once.
 `;
 }
 

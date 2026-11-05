@@ -54,48 +54,51 @@ For the description, use the next section as it is.
 
 ## For the PR description
 
-**Write questions is rebuilt to be simple for people and for chatbots, every list on the games pages is capped, and the
-Team page gets a log.** Only the games team's pages change; nobody else sees any of it.
+**Write questions is rebuilt to be simple for people and for chatbots (the chatbot decides a chapter's topics), every
+list on the games pages is capped, the Team page gets a log, and dummy mode uses the real list of chapters.** Only the
+games team's pages change; nobody else sees any of it.
 
 **Write questions, in four steps:**
 
-1. **Choose where the questions go**: Board, Class, Subject, Chapter and Topic are dropdowns of the team's list, so
-   nothing about the place is typed and nothing can be misspelt. A chapter whose topics aren't fixed also offers "A new
-   topic" (its name, written the standard way, numbered after the others) and "No topic". The choice is remembered on
-   the device.
-2. **Get questions from a chatbot**: "Copy chatbot prompt" copies a prompt for that one topic, with three short steps
-   on how to use it.
-3. **Paste or write the questions**: the box holds questions only. Lines with a problem are underlined in red, and the
-   cursor on one says why.
-4. **Send for approval**: "Send the 12 ready questions" sends those that pass; the ones to fix stay in the box. "Copy a
-   prompt to fix them" asks the chatbot to fix them, and its answer goes back in the box.
+1. **Choose the chapter**: Board, Class, Subject and Chapter are dropdowns of the team's list, so nothing about the
+   chapter is typed and nothing can be misspelt. The choice is remembered on the device. The chapter's topics already in
+   use show under it as buttons that put their Topic line in the box.
+2. **Get questions from a chatbot**: "Copy chatbot prompt" copies a prompt for that chapter, with three short steps on
+   how to use it. **The chatbot decides the topics**, as many as the chapter needs.
+3. **Paste or write the questions**: the box holds Topic lines (`Topic: Name`, above each topic's questions) and
+   questions. Lines with a problem are underlined in red, and the cursor on one says why.
+4. **Send for approval**: "Send the 12 ready questions" sends those that pass; the ones to fix stay in the box, under
+   their Topic lines. "Copy a prompt to fix them" asks the chatbot to fix them, and its answer goes back in the box.
 
 Beside the box, **"Your questions" is a column of its own that scrolls by itself** (it stays in view on a computer, and
-is capped in height on a phone): every question as it will be sent, marked ready (with the games it plays in) or with
-what to fix, one sentence per problem, each with a link to its line. "To fix" shows only those. Lines that aren't
-questions are listed first.
+is capped in height on a phone): every question as it will be sent, under a heading for its topic (one the send will
+add is marked "new topic"), marked ready (with the games it plays in) or with what to fix, one sentence per problem,
+each with a link to its line. "To fix" shows only those. Lines that aren't questions are listed first.
 
 **Why chatbots made mistakes, and what changed:**
 
-- **The chatbot no longer writes the chapter and topic lines.** They had to match the list exactly, and were the
-  commonest reason a whole reply was turned away. The prompt is now for one topic, and asks for question blocks only.
-  A Board, Chapter or Topic line a chatbot adds anyway is fine when it names what is chosen; one that names somewhere
-  else holds back the questions, so nothing goes under the wrong topic.
+- **Nothing has to be copied exactly any more.** Chatbots had to reproduce the Board, Class, Subject and Chapter lines
+  and number every topic exactly as the list did, and one slip turned a whole reply away. Now the chapter comes from
+  the dropdowns, and the chatbot writes only `Topic: Name` lines and questions. **A topic is found by its name** (case
+  and punctuation at the end don't matter); a name the chapter doesn't have yet is a new topic, written the standard
+  way and **numbered by the page** after the chapter's own. Where an admin has fixed a chapter's topics on Chapters, only
+  those are taken, and the prompt lists them. A Board or Chapter line a chatbot adds anyway is fine when it names the
+  chosen chapter; one that names another holds back the questions, so nothing goes to the wrong chapter.
 - **The checker reads what chatbots add around labels as they meant it**: "Answer:", "Wrong options:", "Difficulty:",
   "Q1.", bullets, numbers, bold, headings, code fences, several answers on one Also line, several Wrong lines. The
   words of a question or answer are still never changed.
-- **One clear rule set, said once** and used by the chatbot prompt, the fix prompt and the checker: Q, A, Fill and
-  Wrong always (3 to 5 wrong options separated by ";"), Also only for another right answer, Level if wanted; True/False
-  is only Q and A. Before, a missing Fill line was an amber warning that still stopped the send, a missing Wrong line
-  wasn't noticed, and ___ in a question changed which lines were needed. Now there is one level of problem, and the
-  page says exactly what to add.
+- **One clear rule set, said once** and used by the chatbot prompt, the fix prompt and the checker: every question
+  under a Topic line; Q, A, Fill and Wrong always (3 to 5 wrong options separated by ";"), Also only for another right
+  answer, Level if wanted; True/False is only Q and A. Before, a missing Fill line was an amber warning that still
+  stopped the send, a missing Wrong line wasn't noticed, and ___ in a question changed which lines were needed. Now
+  there is one level of problem, and the page says exactly what to add.
 - **Every problem is one plain sentence** on the line to fix, with what to change. Wrong options separated by commas,
   options listed as a), b), c), and a question written on one line each get their own message.
-- **At most 30 questions a send**, all for one topic (the database's own checks are unchanged).
+- **At most 30 questions in a topic and 80 in a send** (the database's own checks are unchanged).
 
-**The guide at the bottom ("How to write a good question") is rewritten for people**: one question taken apart line
-by line (what to write, whether it is needed, an example), a whole example, the eight usual mistakes each shown wrong
-and then right with why, the limits, and what to do when something needs fixing. Its numbers come from the code, and
+**The guide at the bottom ("How to write a good question") is rewritten for people**: the Topic line and each line of
+a question taken apart (what to write, whether it is needed, an example), a whole example with two topics, the nine
+usual mistakes each shown wrong and then right with why, the limits, and what to do when something needs fixing. Its numbers come from the code, and
 a test checks its example passes.
 
 **Every list is capped**, with "Load more", so nothing fills the page:
@@ -110,6 +113,12 @@ a test checks its example passes.
 **The team's log:** a "Logs" button on Team opens every change to the team, newest first, 20 at a time: who was
 added and as what, whose role changed from what to what, who was taken off, by whom and when. It starts with everyone
 on the team now.
+
+**Dummy mode uses the real list of chapters** (test builds only): its dropdowns offer the 564 chapters of the starting
+list, read from `install.sql` itself, under their real boards, classes, subjects and names, and its made-up questions
+sit under real chapters (ICSE 9 Physics "Heat and Energy", ICSE 9 Geography "Landforms of the Earth", ICSE 10 History &
+Civics "Revolt of 1857", ICSE 6 Mathematics "Basic Geometrical Ideas", CBSE 9 Science "The Fundamental Unit of Life",
+CBSE 10 Science "Carbon and Its Compounds"). The made-up list of a few classes-6-to-8 chapters is gone.
 
 ### After merging: the database (by hand, before the deploy)
 
@@ -160,7 +169,7 @@ that matters.
 | `src/components/games/QuestionList.tsx` | "Your questions": the scrolling column beside the box, each question ready or with what to fix, "All" and "To fix". |
 | `src/components/games/QuestionsBox.tsx` | The box, with the red underline on lines with a problem (taken out of `WriteQuestions.tsx`, one level of problem). |
 | `src/components/games/SentBack.tsx` | Questions sent back to you, 5 at a time, with "Fix it" (taken out of `WriteQuestions.tsx`). |
-| `src/lib/games/place.ts`, `place.test.ts` | The five dropdowns: what each offers from the list, where the questions go once all are chosen, a new topic's number and name, and the place of a sent-back question ("Fix it"). |
+| `src/lib/games/place.ts`, `place.test.ts` | The chapter dropdowns: what each offers from the list, the chapter once all are chosen, and the chapter of a sent-back question ("Fix it"). |
 | `src/lib/games/details.test.ts` | The board, class, subject, chapter and ID tests, moved out of `format.test.ts` unchanged. |
 | `src/lib/games/upgrade.test.ts` | Runs `install.sql` and then the upgrade on PGlite: the dry run, refusing without the schema or a second time, stopping when anything that exists would change (a grant, a replaced function, a new column, an unexpected function), who can call what, the log (start, add, role, remove, refused changes noted nowhere, paging), counts, waiting by batches, sent back by pages. |
 | `supabase/games/upgrade-1-team-log-and-pages.sql` | The upgrade (above). |
@@ -169,18 +178,18 @@ that matters.
 
 | File | Change |
 | --- | --- |
-| `src/components/games/WriteQuestions.tsx` | Rebuilt: the four steps, the dropdowns, the column beside the box, Send of the ready questions (the rest stay in the box), the fix prompt in step 4, the game preview behind "Show the games". The detail boxes that wrote lines into the text, the topic buttons, the chapter-picking dialog, the "Check" panel and the send dialog are gone. |
+| `src/components/games/WriteQuestions.tsx` | Rebuilt: the four steps, the chapter dropdowns with the topic buttons, the column beside the box, Send of the ready questions (the rest stay in the box), the fix prompt in step 4, the game preview behind "Show the games". The detail boxes that wrote lines into the text, the chapter-picking dialog, the "Check" panel and the send dialog are gone. |
 | `src/components/games/Guide.tsx` | Rewritten for people (above). |
 | `src/components/games/GamePreview.tsx` | No heading of its own (the page gives it one); plays the ready questions. |
 | `src/components/games/ApproveQuestions.tsx` | Each tab pages from the database; batches show 10 questions at a time; totals on the tabs; "Check for new questions" always there. |
 | `src/components/games/Team.tsx` | "Logs" (the team's log in a dialog, 20 at a time); the list 20 at a time. |
-| `src/lib/games/format.ts` | Rewritten checker (`read`): questions only, Fill and Wrong needed, labels read as chatbots write them, one level of problem, each with a sentence for people and an instruction for a chatbot; `checkPlace` for Board/Chapter/Topic lines; `toRows` puts questions under the chosen place. |
-| `src/lib/games/prompt.ts` | The prompt for one topic, asking for question blocks only; `RULES`, said once and used by both prompts; a shorter fix prompt. Bulk add's prompt unchanged. |
-| `src/lib/games/catalog.ts` | Only the list's rules now (`sameName`, `isOpen`, `newTopic`); checking typed chapter and topic lines is gone with them. |
+| `src/lib/games/format.ts` | Rewritten checker (`read`): Topic lines and questions, Fill and Wrong needed, labels read as chatbots write them, one level of problem, each with a sentence for people and an instruction for a chatbot; `checkTopics` finds each question's topic by name and numbers new ones; `checkPlace` for Board/Chapter lines; `toRows`; `leftAfterSend`. |
+| `src/lib/games/prompt.ts` | The prompt for one chapter: the chatbot divides it into topics itself, as many as it needs, keeping those in use (or uses the list's, where fixed), and writes Topic lines and question blocks only; `RULES`, said once and used by both prompts; a shorter fix prompt. Bulk add's prompt unchanged. |
+| `src/lib/games/catalog.ts` | Only the list's rules now (`sameName`, `isOpen`, the topic name limit); checking typed chapter and topic lines against the list is gone. |
 | `src/lib/games/details.ts` | The helpers for the old detail boxes are gone; boards, classes, subjects, IDs and `readMeta` stay. |
 | `src/lib/games/api.ts`, `rows.ts` | `loadWaiting`, `loadSentBack`, `hodCounts`, `loadTeamLog` (and `TeamChange`); approved questions 20 at a time; team changes through the logging functions. `loadForHod` and `approvedCount` are gone (the database functions behind them stay). |
-| `src/dummy/games-fake-api.ts` | The same, by the database's rules: the log (starting with the made-up team and a few changes), paging, counts. Its made-up texts are read with a small `rowsOf`. |
-| `src/lib/games/format.test.ts`, `prompt.test.ts`, `src/dummy/games-fake-api.test.ts` | Rewritten for the above. |
+| `src/dummy/games-fake-api.ts` | The same, by the database's rules: the log (starting with the made-up team and a few changes), paging, counts. Its list of chapters is the real starting list, read from `install.sql` (`startingList`, through Vite's `?raw`; test builds only), and its made-up questions moved under real chapters; they are read with a small `rowsOf`. |
+| `src/lib/games/format.test.ts`, `prompt.test.ts`, `src/dummy/games-fake-api.test.ts` | Rewritten for the above (the fake's tests on real chapters, fixing a chapter's topics through a Chapters save where a test needs fixed topics). |
 | `src/components/games/CLAUDE.md` | The working notes, brought up to date. |
 
 ### Deleted files
@@ -194,10 +203,10 @@ that matters.
 | Check | Result |
 | --- | --- |
 | `npx tsc -b`, `npx eslint .` | Clean: 0 errors; the games files add no warnings. |
-| `npm test` | All pass: 194 files, 2,859 tests; the games' 11 files have 182. |
-| Live-shaped build (`vite build` with `VITE_PREVIEW_TOOLS=false`) | Builds. No dummy code, made-up data or preview tools in it. The games pages are their own download (192 kB). |
+| `npm test` | All pass: 194 files, 2,865 tests; the games' 11 files have 188. |
+| Live-shaped build (`vite build` with `VITE_PREVIEW_TOOLS=false`) | Builds. No dummy code, made-up data, preview tools or install-script text in it. The games pages are their own download (196 kB). |
 | The upgrade on PGlite (Postgres 17) | As committed, a dry run that keeps nothing; refuses without the schema and a second time; stops on a changed grant, a replaced function, a new column or an unexpected function; the six functions do what is described, for the right people only. |
-| Browser, dummy mode, 1280 px and 390 px | No sideways scrolling and no page errors. Choosing with the dropdowns, a new topic for an open chapter (named, numbered, and chosen in the list once sent), pasting, the column beside the box, sending the ready questions with the rest left in the box, copying the prompt for the topic; Approve questions 3 batches at a time and Approved 20 then 40 of 69; a member sees no Approve link; the team's log. |
+| Browser, dummy mode, 1280 px and 390 px | No sideways scrolling and no page errors. The real boards (CBSE, ICSE, ISC) and subjects in the dropdowns; ICSE 9 Physics "Heat and Energy" with its three topics in use as buttons; a chatbot-style reply in its code block with an existing topic and a new one (numbered 4, marked new) and a question to fix; sending the ready ones (the new topic then joins the buttons, and only the question to fix stays, under its Topic line); the prompt for the chapter, listing the topics in use; Approve questions 3 batches at a time and Approved 20 then 40 of 69; a member sees no Approve link; the team's log. |
 
 **Not done here:** running real chatbots on the new prompt. The test that its example and a reply in the asked-for
 form pass the checker is in `prompt.test.ts`; trying it with ChatGPT, Gemini and Claude on a real chapter is worth doing

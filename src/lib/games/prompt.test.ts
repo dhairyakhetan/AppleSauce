@@ -1,30 +1,32 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_QUESTION, MIN_OPTIONS, read, type Where } from './format';
+import { checkTopics, MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS, read } from './format';
 import { readBulk } from './list-draft';
 import { bulkPrompt, chatbotPrompt, EXAMPLE_BLOCKS, fixPrompt, RULES } from './prompt';
-import { DIFFICULTIES } from './rows';
+import { DIFFICULTIES, type ListChapter } from './rows';
 
 /* The chatbot prompts and the checker must agree: a chatbot follows the prompt, and the checker reads what it writes.
-   The prompt is made for the one topic chosen on the page, and asks for question blocks only: no line of it has to be
-   copied exactly. The fix prompt carries each problem and the whole text, and asks for all of it again. */
+   The prompt is made for the one chapter chosen on the page; the chatbot divides it into topics itself (or uses the
+   list's, where the list fixes them), and writes Topic lines and question blocks only. The fix prompt carries each
+   problem and the whole text, and asks for all of it again. */
 
-const HEAT: Where = { chapter_id: 'CBSE07SCI04', board: 'CBSE', class: 7, subject: 'Science', chapter_no: 4, chapter: 'Heat', topic_no: 2, topic: 'Transfer of Heat' };
-const WHOLE: Where = { ...HEAT, topic_no: null, topic: '' };
-const prompt = chatbotPrompt(HEAT);
+const NEW: ListChapter = { chapter_id: 'ICSE09PHY06', board: 'ICSE', class: 9, subject: 'Physics', chapter_no: 6, name: 'Heat and Energy', topics: [] };
+const IN_USE: ListChapter = { ...NEW, open: true, topics: [{ topic_id: 'ICSE09PHY06T01', topic_no: 1, name: 'Transfer of Heat' }] };
+const FIXED: ListChapter = { ...IN_USE, open: false };
+const prompt = chatbotPrompt(NEW);
 
 describe('the chatbot prompt agrees with the checker', () => {
-  it('shows an example that the checker reads with no problems, using every part', () => {
+  it('shows an example that the checker reads with no problems, using every part and two topics', () => {
     const { drafts, issues } = read(EXAMPLE_BLOCKS);
     expect(issues).toEqual([]);
-    expect(drafts.length).toBe(3);
+    expect(checkTopics(drafts, NEW)).toMatchObject({ issues: [], topics: [{ topic_no: 1, isNew: true }, { topic_no: 1 }, { topic_no: 2, isNew: true }] });
     expect(drafts.some((d) => d.also.length && d.fill && d.wrong.length && d.level)).toBe(true);
     expect(drafts.some((d) => /^(true|false)$/i.test(d.answer))).toBe(true);
     expect(prompt).toContain(EXAMPLE_BLOCKS);
   });
 
-  it('names every label the checker reads', () => {
-    for (const label of ['Q:', 'A:', 'Also:', 'Fill:', 'Wrong:', 'Level:']) expect(prompt, label).toContain(`\n${label}`);
+  it('names every label the checker reads, the Topic line included', () => {
+    for (const label of ['Topic:', 'Q:', 'A:', 'Also:', 'Fill:', 'Wrong:', 'Level:']) expect(prompt, label).toContain(`\n${label}`);
   });
 
   it("states the checker's limits and levels", () => {
@@ -32,27 +34,36 @@ describe('the chatbot prompt agrees with the checker', () => {
     expect(RULES).toContain(`at most ${MAX_ANSWER_WORDS} words`);
     expect(RULES).toContain(`At most ${MAX_ALSO}, one per line`);
     expect(RULES).toContain(`${MIN_OPTIONS} wrong options (at most ${MAX_OPTIONS}) separated by ";"`);
-    expect(prompt).toContain(`never more than ${MAX_PER_SEND}`);
+    expect(prompt).toContain(`never more than ${MAX_PER_TOPIC} in a topic and never more than ${MAX_PER_SEND} in all`);
     expect(RULES).toContain(DIFFICULTIES.join(', ').replace(/, (\w+)$/, ' or $1'));
   });
 
   it("states the checker's rules about what a question and an answer may be", () => {
-    for (const rule of ['of the following', 'the above', 'figure', 'never contains its answer', 'has no ___', 'yes/no', 'True or false', 'No brackets', '"/"', 'units in the question', 'ordinary keys', 'exactly one ___', 'not commas', 'All of the above', 'No Also, Fill or Wrong lines']) {
+    for (const rule of ['of the following', 'the above', 'figure', 'never contains its answer', 'has no ___', 'yes/no', 'True or false', 'No brackets', '"/"', 'units in the question', 'ordinary keys', 'exactly one ___', 'not commas', 'All of the above', 'No Also, Fill or Wrong lines', 'Every question is under one']) {
       expect(RULES, rule).toContain(rule);
     }
   });
 
-  it('is for the chosen topic only, and asks for no Board, Chapter or Topic lines', () => {
-    expect(prompt).toContain('CBSE, class 7, Science\nChapter 4: Heat\nTopic: Transfer of Heat');
-    expect(prompt).toContain('Write only about this topic.');
-    expect(prompt).toContain('no Board, Chapter or Topic lines');
-    expect(chatbotPrompt(WHOLE)).toContain('The whole chapter (no single topic)');
-    expect(chatbotPrompt(WHOLE)).toContain('Write only about this chapter.');
+  it('is for the chosen chapter, and lets the chatbot decide how many topics', () => {
+    expect(prompt).toContain('ICSE, class 9, Physics\nChapter 6: Heat and Energy');
+    expect(prompt).toContain('Divide the questions into topics yourself: as many topics as the chapter needs, no more.');
+    expect(prompt).not.toMatch(/\b\d+ to \d+ topics\b/);
+    expect(prompt).toContain('no Board or Chapter lines');
   });
 
-  it('a reply written as asked, in its code block, reads with no problems', () => {
-    const reply = `\`\`\`\n${EXAMPLE_BLOCKS}\n\`\`\`\n\nI wrote these from general knowledge.`;
-    expect(read(reply.split('\n\n').slice(0, -1).join('\n\n')).issues).toEqual([]);
+  it('keeps the topics already in use, and for a chapter whose topics are fixed, uses only those', () => {
+    expect(chatbotPrompt(IN_USE)).toContain('These topics are already in use for this chapter. Use them');
+    expect(chatbotPrompt(IN_USE)).toContain('```\nTopic: Transfer of Heat\n```');
+    const fixed = chatbotPrompt(FIXED);
+    expect(fixed).toContain('Its topics are fixed.');
+    expect(fixed).not.toContain('Divide the questions into topics yourself');
+  });
+
+  it("a reply written as asked, in its code block, reads with no problems, and its new topics are numbered after the chapter's", () => {
+    const reply = `\`\`\`\nTopic: Transfer of Heat\n\nQ: Mode of heat transfer that needs no medium\nA: Radiation\nFill: Heat from the Sun reaches the Earth by ___.\nWrong: Conduction; Convection; Evaporation\nLevel: easy\n\nTopic: Specific Heat Capacity\n\nQ: Liquid used in car radiators because it can take in a lot of heat\nA: Water\nFill: Car radiators use ___ because it can take in a lot of heat.\nWrong: Mercury; Alcohol; Oil\nLevel: medium\n\`\`\``;
+    const { drafts, issues } = read(reply);
+    expect(issues).toEqual([]);
+    expect(checkTopics(drafts, IN_USE)).toEqual({ issues: [], topics: [{ topic_no: 1, name: 'Transfer of Heat', isNew: false }, { topic_no: 2, name: 'Specific Heat Capacity', isNew: true }] });
   });
 
   it('asks for one code block, has no long dashes, and ends with a place for the material', () => {

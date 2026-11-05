@@ -1,6 +1,8 @@
 import { APPROVED_PAGE, BATCH_MAX, SENT_BACK_PAGE, TEAM_LOG_PAGE, WAITING_BATCHES, type GamesApi, type SaveResult, type SendResult } from '@/lib/games/api';
 import { ALL_BOARDS, chapterId, checkBoard, checkClass, checkSubject, pad2, parseNumbered, readMeta, SUBJECTS, topicId } from '@/lib/games/details';
 import { read, toRows, type Where } from '@/lib/games/format';
+// the install script, for its starting list of chapters (test builds only: this whole file is compiled out of the live site)
+import INSTALL_SQL from '../../supabase/games/install.sql?raw';
 import { TOPIC_QUESTIONS_MAX, type AdminList, type Bank, type BankQuestion, type Batch, type ListChange, type ListChapter, type ListSave, type Person, type RoleCheck, type Row, type SavedChapter, type SentBack, type Status, type TeamChange } from '@/lib/games/rows';
 
 /* The games pages in dummy mode (D75): an in-memory stand-in for the `games` schema, with no sign-in. It keeps the
@@ -22,10 +24,10 @@ const ROHAN = { email: 'rohan.mehta@example.com', name: 'Rohan Mehta' };
 const PRIYA = { email: 'priya.das@example.com', name: 'Priya Das' };
 
 /** Approved: what "Try the games" plays with. Every question has each version the games use, as the prompt asks. */
-const APPROVED_HEAT = `Board: CBSE
-Class: 7
-Subject: Science
-Chapter 4: Heat
+const APPROVED_HEAT = `Board: ICSE
+Class: 9
+Subject: Physics
+Chapter 6: Heat and Energy
 
 Topic 1: Hot and Cold
 
@@ -153,9 +155,9 @@ A: True
 Level: medium`;
 
 const APPROVED_LANDFORMS = `Board: ICSE
-Class: 6
+Class: 9
 Subject: Geography
-Chapter 2: Landforms of the Earth
+Chapter 5: Landforms of the Earth
 
 Topic 1: Mountains
 
@@ -247,12 +249,12 @@ Q: Most of the world's people live on plains
 A: True
 Level: medium`;
 
-const APPROVED_TRADE = `Board: CBSE
-Class: 8
-Subject: History
-Chapter 2: From Trade to Territory
+const APPROVED_TRADE = `Board: ICSE
+Class: 10
+Subject: History & Civics
+Chapter 5: Revolt of 1857
 
-Topic 1: The East India Company Comes East
+Topic 1: The Company Comes to India
 
 Q: Year in which the East India Company received a charter from Queen Elizabeth I
 A: 1600
@@ -284,7 +286,7 @@ Q: Cotton, silk and spices were among the goods the Company bought in India
 A: True
 Level: easy
 
-Topic 2: From Trade to Wars
+Topic 2: From Trade to Power
 
 Q: Battle of 1757 in which Robert Clive defeated Sirajuddaula
 A: Battle of Plassey
@@ -326,7 +328,7 @@ Fill: In 1765 the Mughal emperor made the Company the Diwan of Bengal, with the 
 Wrong: Farman; Subsidy; Nizamat
 Level: hard
 
-Topic 3: Company Rule Expands
+Topic 3: Annexations Before the Revolt
 
 Q: Policy under which a kingdom passed to the Company if its ruler died without a male heir
 A: Doctrine of Lapse
@@ -365,7 +367,7 @@ Q: Rani Lakshmibai lost the kingdom of Jhansi under the Doctrine of Lapse
 A: True
 Level: medium`;
 
-const APPROVED_GEOMETRY = `Board: CBSE
+const APPROVED_GEOMETRY = `Board: ICSE
 Class: 6
 Subject: Mathematics
 Chapter 4: Basic Geometrical Ideas
@@ -551,9 +553,9 @@ A: True
 Level: easy`;
 
 const WAITING_FLAME = `Board: CBSE
-Class: 8
+Class: 10
 Subject: Science
-Chapter 6: Combustion and Flame
+Chapter 4: Carbon and Its Compounds
 
 Topic 1: Combustion
 
@@ -610,10 +612,10 @@ Wrong: Ignition temperature; Boiling point; Density
 Level: hard`;
 
 /** Sent back to you: what the notifications show. Both read well; what is wrong is the science, which only an HoD sees. */
-const SENT_BACK_HEAT = `Board: CBSE
-Class: 7
-Subject: Science
-Chapter 4: Heat
+const SENT_BACK_HEAT = `Board: ICSE
+Class: 9
+Subject: Physics
+Chapter 6: Heat and Energy
 
 Topic 2: Transfer of Heat
 
@@ -637,25 +639,24 @@ export const DUMMY_TEXTS = { APPROVED_HEAT, APPROVED_LANDFORMS, APPROVED_TRADE, 
 const NOTE_WRONG_WAY = 'Heat flows from a hotter object to a colder one, never the other way. Please rewrite the question.';
 const NOTE_LAND_BREEZE = 'A land breeze blows at night. During the day the breeze comes from the sea.';
 
-/** A chapter on the made-up list, with its topics numbered from 1. */
-function listed(board: string, cls: number, subject: string, no: number, name: string, topics: string[]): ListChapter {
-  const id = chapterId(checkBoard(board).code, cls, checkSubject(subject).code, no)!;
-  return { chapter_id: id, board, class: cls, subject, chapter_no: no, name, topics: topics.map((t, i) => ({ topic_id: topicId(id, i + 1)!, topic_no: i + 1, name: t })), open: !topics.length };
+/**
+ * The real starting list of chapters, read from the install script's rows (supabase/games/install.sql, near its end):
+ * the 564 chapters of the real boards, classes and subjects the team starts with, under their real names. As in the
+ * database after installing, none has topics yet, so every chapter is open: writers' topics are added as questions are
+ * sent (the made-up questions below add some). Read here, not copied, so dummy mode always shows the real list.
+ */
+export function startingList(sql: string): ListChapter[] {
+  const from = sql.indexOf('insert into games_install_list');
+  const rows = sql.slice(from, sql.indexOf('\n\n', from)).matchAll(/^\s*\('((?:[^']|'')*)', (\d+), '((?:[^']|'')*)', (\d+), '((?:[^']|'')*)'\)[,;]/gm);
+  const text = (v: string) => v.replace(/''/g, "'");
+  return [...rows].map(([, b, c, sub, no, name]) => {
+    const board = text(b);
+    const subject = text(sub);
+    const id = chapterId(checkBoard(board).code, Number(c), checkSubject(subject).code, Number(no))!;
+    return { chapter_id: id, board, class: Number(c), subject, chapter_no: Number(no), name: text(name), topics: [], open: true };
+  });
 }
-/** The made-up list of chapters and topics: the ones the made-up questions use, the formatter's example, one with no
- * questions yet, and one the list gives no topics (its questions may go under topics of their own). The real list comes
- * from the database. */
-export const DUMMY_LIST: ListChapter[] = [
-  listed('ICSE', 6, 'Geography', 2, 'Landforms of the Earth', ['Mountains', 'Plateaus and Plains']),
-  listed('CBSE', 6, 'Mathematics', 4, 'Basic Geometrical Ideas', ['Points, Lines and Rays', 'Polygons', 'Circles']),
-  listed('CBSE', 8, 'History', 2, 'From Trade to Territory', ['The East India Company Comes East', 'From Trade to Wars', 'Company Rule Expands']),
-  listed('CBSE', 7, 'Science', 4, 'Heat', ['Hot and Cold', 'Transfer of Heat', 'Sea and Land Breezes']),
-  listed('CBSE', 7, 'Science', 5, 'Acids, Bases and Salts', ['Acids and Bases', 'Indicators', 'Neutralisation']),
-  listed('CBSE', 8, 'Science', 6, 'Combustion and Flame', ['Combustion', 'Flame']),
-  listed('CBSE', 7, 'Science', 2, 'Nutrition in Animals', []),
-  listed('CBSE', 9, 'Science', 5, 'The Fundamental Unit of Life', ['The Cell', 'Cell Organelles']),
-  listed('CBSE', 10, 'Science', 1, 'Chemical Reactions and Equations', ['Chemical Equations', 'Types of Chemical Reactions', 'Effects of Oxidation in Everyday Life']),
-];
+export const DUMMY_LIST: ListChapter[] = startingList(INSTALL_SQL);
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 /** How the database compares two questions: case, extra spaces and punctuation at the end don't matter. */
@@ -687,8 +688,9 @@ export function rowsOf(text: string): Row[] {
     if (!ch) throw new Error(`A made-up text is for a chapter that isn't on the made-up list: ${JSON.stringify(at)}`);
     // the topic as written, on the list or not: the fake checks it as the database does
     const t = at.topic ? parseNumbered(at.topic, 'topic') : null;
-    const where: Where = { chapter_id: ch.chapter_id, board: ch.board, class: ch.class, subject: ch.subject, chapter_no: ch.chapter_no, chapter: ch.name, topic_no: t?.no ?? null, topic: t?.name ?? '' };
-    out.push(...toRows(read(body).drafts, where));
+    const where: Where = { chapter_id: ch.chapter_id, board: ch.board, class: ch.class, subject: ch.subject, chapter_no: ch.chapter_no, chapter: ch.name };
+    const { drafts } = read(body);
+    out.push(...toRows(drafts, where, drafts.map(() => (t && t.no !== null ? { topic_no: t.no, name: t.name, isNew: false } : null))));
   };
   for (const line of text.split('\n')) {
     const m = readMeta(line);
@@ -716,7 +718,7 @@ function seed(): State {
     batches: [],
     questions: [],
     catalog: structuredClone(DUMMY_LIST),
-    log: [{ at: hoursAgo(24 * 30), by: MODERATOR.name, action: 'add', detail: `Added ${DUMMY_LIST.length} chapters and ${DUMMY_LIST.reduce((n, c) => n + c.topics.length, 0)} topics.` }],
+    log: [{ at: hoursAgo(24 * 30), by: 'the install script', action: 'add', detail: `The starting list: added ${DUMMY_LIST.length} chapters.` }],
     teamLog: [],
   };
   // the team's log starts with everyone on the team, as they were added (as upgrade 1 starts it), then a few changes

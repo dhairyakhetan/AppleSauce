@@ -1,15 +1,26 @@
-import type { Draft, Issue } from '@/lib/games/format';
+import { Fragment } from 'react';
+import type { Draft, Issue, TopicOf } from '@/lib/games/format';
 import { cn } from '@/lib/utils';
 import { LINKISH, plural } from './helpers';
 
 /* "Your questions", beside the box on Write questions: every question as it will be sent, in its own scrolling column,
-   each marked ready (with the games it plays in) or with what to fix, one sentence per problem, each with a link to its
-   line. Lines that aren't questions are listed first. "To fix" shows only the questions that need something. */
+   under a heading for its topic (a topic sending adds is marked "new"), each marked ready (with the games it plays in)
+   or with what to fix, one sentence per problem, each with a link to its line. Lines that aren't questions are listed
+   first. "To fix" shows only the questions that need something. */
 
 export type ListFilter = 'all' | 'fix';
 
-export function QuestionList({ drafts, problems, blocked, other, games, fromExample, onGoTo, filter, setFilter, className }: {
+/** A question's topic heading: the topic it goes under, the Topic line as written while it can't be used, or none. */
+function headingOf(d: Draft, t: TopicOf | null): { key: string; text: string; isNew: boolean; bad: boolean } {
+  if (t) return { key: `t${t.topic_no}`, text: `Topic ${t.topic_no}: ${t.name}`, isNew: t.isNew, bad: false };
+  if (d.topic) return { key: `l${d.topic.line}`, text: `Topic: ${d.topic.value}`, isNew: false, bad: true };
+  return { key: 'none', text: 'No Topic line', isNew: false, bad: true };
+}
+
+export function QuestionList({ drafts, topics, problems, blocked, other, games, fromExample, onGoTo, filter, setFilter, className }: {
   drafts: Draft[];
+  /** Each question's topic (by its index), once the chapter is chosen; null while it can't be worked out. */
+  topics: (TopicOf | null)[];
   /** Each question's problems to show now (by its index), else none. */
   problems: Map<number, Issue[]>;
   /** The questions that can't be sent as they are (shown problems or not yet: one still being written). */
@@ -73,12 +84,23 @@ export function QuestionList({ drafts, problems, blocked, other, games, fromExam
           <p className="rounded-2xl bg-card px-4 py-10 text-center text-[14px] text-warm-secondary">Nothing to fix.</p>
         ) : (
           <ol className="flex flex-col gap-2">
-            {shown.map(({ d, i }) => {
+            {shown.map(({ d, i }, k) => {
               const xs = problems.get(i) ?? [];
               const bad = blocked.has(i);
               const plays = !bad ? games(d) : [];
+              const h = headingOf(d, topics[i] ?? null);
+              const prev = k > 0 ? headingOf(shown[k - 1].d, topics[shown[k - 1].i] ?? null) : null;
+              const inTopic = shown.filter((x) => headingOf(x.d, topics[x.i] ?? null).key === h.key).length;
               return (
-                <li key={`${d.line}\u0000${d.question}`} className={cn('flex gap-3 rounded-2xl bg-card p-3 sm:p-4', bad && 'ring-1 ring-destructive/40')}>
+                <Fragment key={`${d.line}\u0000${d.question}`}>
+                {prev?.key !== h.key && (
+                  <li className={cn('flex flex-wrap items-center gap-2 px-1 pt-2 text-[12px] font-bold uppercase tracking-[0.06em] first:pt-0', h.bad ? 'text-destructive' : 'text-warm-secondary')}>
+                    <span>{h.text}</span>
+                    <span className="font-semibold normal-case tracking-normal text-warm-meta">{plural(inTopic, 'question')}</span>
+                    {h.isNew && <span className="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] normal-case tracking-normal text-brand-deep">new topic</span>}
+                  </li>
+                )}
+                <li className={cn('flex gap-3 rounded-2xl bg-card p-3 sm:p-4', bad && 'ring-1 ring-destructive/40')}>
                   <span aria-hidden className={cn('mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold tabular-nums', bad ? 'bg-destructive/10 text-destructive' : 'bg-mint text-foreground')}>{i + 1}</span>
                   <div className="min-w-0 flex-1 text-[14px]">
                     <p className="break-words text-foreground">{d.question || <i className="text-warm-secondary">No question yet</i>}</p>
@@ -106,6 +128,7 @@ export function QuestionList({ drafts, problems, blocked, other, games, fromExam
                     )}
                   </div>
                 </li>
+                </Fragment>
               );
             })}
           </ol>

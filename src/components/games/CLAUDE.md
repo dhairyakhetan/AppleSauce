@@ -92,22 +92,30 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   chapter topics (`games.topics.from_list`), only those; where it gives none
   the chapter is open, and the first question sent under a new topic adds it
   (one number and one name per topic).
-- **Write questions is four steps, one topic per send** (`components/games/WriteQuestions.tsx`): 1. choose board,
-  class, subject, chapter and topic with dropdowns of the list (`lib/games/place.ts`; an open chapter also offers a
-  new topic, numbered after the others, and no topic), so nothing about the place is typed; 2. copy the chatbot prompt
-  for that topic; 3. paste or write the questions in the box (`QuestionsBox.tsx`), which holds questions only;
-  4. send. Beside the box, in its own scrolling column (`QuestionList.tsx`), every question shows ready (and the games
-  it plays in) or what to fix, each problem with a link to its line. Send sends the ready ones; the ones to fix stay
-  in the box, and "Copy a prompt to fix them" is one click. Board/Class/Subject/Chapter/Topic lines in the box are
-  allowed only when they name what is chosen (`checkPlace`); one naming somewhere else holds back every question.
-  At most 30 questions a send. The place chosen is remembered on the device (localStorage, a convenience).
+- **Write questions is four steps** (`components/games/WriteQuestions.tsx`): 1. choose board, class, subject and
+  chapter with dropdowns of the list (`lib/games/place.ts`), so nothing about the chapter is typed; 2. copy the chatbot
+  prompt for that chapter; 3. paste or write the questions in the box (`QuestionsBox.tsx`); 4. send. **Topics are not
+  chosen: the chatbot (or the writer) decides them**, as many as the chapter needs, with a `Topic: Name` line above each
+  topic's questions. The page finds a topic by its name and numbers new ones after the chapter's (`checkTopics` in
+  `format.ts`), so no number has to be right; a chapter whose topics the list fixes takes only those. The chapter's
+  topics already in use show as buttons that put their Topic line in the box. Beside the box, in its own scrolling
+  column (`QuestionList.tsx`), every question shows under its topic heading (a topic the send adds is marked "new"),
+  ready (and the games it plays in) or with what to fix, each problem linked to its line. Send sends the ready ones;
+  the ones to fix stay in the box with their Topic lines (`leftAfterSend`), and "Copy a prompt to fix them" is one
+  click. Board/Class/Subject/Chapter lines in the box are allowed only when they name the chosen chapter
+  (`checkPlace`); one naming another holds back every question. At most 30 questions in a topic and 80 in a send.
+  The chapter chosen is remembered on the device (localStorage, a convenience).
 - **Dummy mode:** `?dummy=1` on any `/games` page, or the preview toggle's
   "Games team" buttons, runs the real pages against
-  `dummy/games-fake-api.ts`, which keeps the database's rules (list included).
+  `dummy/games-fake-api.ts`, which keeps the database's rules. Its list of chapters is the real starting list, read
+  from `install.sql` itself (`startingList`; the 564 chapters of the real boards, classes and subjects, none with
+  topics yet), and its made-up questions sit under real chapters (Heat and Energy, Landforms of the Earth, Revolt of
+  1857, Basic Geometrical Ideas, The Fundamental Unit of Life, Carbon and Its Compounds), adding their topics as the
+  database would.
   Its banner switches between admin, HoD, member, not on the team, and signed
   in with a password.
 - **Files:** `lib/games/` (rows and exports, `format.ts` the checker,
-  `details.ts` boards, subjects and IDs, `catalog.ts` the list's rules, `place.ts` the dropdowns,
+  `details.ts` boards, subjects and IDs, `catalog.ts` the list's rules, `place.ts` the chapter dropdowns,
   `prompt.ts` what "Copy chatbot prompt" copies (and the Chapters page's
   Bulk add prompt), `engine/` the games: each has a
   maker and a separate checker, and a puzzle is only shown after its checker
@@ -115,7 +123,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   picker and player used full size by Try the games and small by the preview,
   the guide; `games.css` is only what utility classes can't say, in Shikshaq's
   colour variables).
-- **The format is one block per question:** `Q:`, `A:`, `Fill:` and `Wrong:` always (3 to 5 wrong options,
+- **The format is Topic lines and one block per question:** `Topic: Name` above each topic's questions; then `Q:`, `A:`, `Fill:` and `Wrong:` always (3 to 5 wrong options,
   separated by `;`), `Also:` only for another right answer, `Level:` if wanted; a True/False question is only `Q:` (a
   statement) and `A: True` or `A: False`. No `___` in `Q:`. `lib/games/format.ts` (`read`) checks it strictly: every
   problem is one sentence on the line to fix, saying what to change (`text`), with the same as an instruction for a
@@ -131,9 +139,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
-- **The chatbot prompt is made for the one topic chosen** (or the whole of an open chapter), and asks for question
-  blocks only, in one code block, with no Board, Chapter or Topic lines: the page knows the place, so no line has to be
-  copied exactly. Its rules (`RULES` in `prompt.ts`) are the checker's, said once, and the fix prompt uses the same.
+- **The chatbot prompt is made for the one chapter chosen.** It asks the chatbot to divide it into topics itself, as
+  many as the chapter needs (no number is set), keeping the topics already in use, or to use the list's topics where
+  the list fixes them; and for Topic lines and question blocks only, in one code block, with no Board or Chapter lines. Its rules (`RULES` in `prompt.ts`) are the checker's, said once, and the fix prompt uses the same.
   `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples drift from the checker, or if the guide's
   example has a problem. Change `prompt.ts`, `Guide.tsx` (the guide for people, at the bottom of Write questions) and
   `format.ts` together.

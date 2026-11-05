@@ -1,17 +1,17 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, Send } from 'lucide-react';
+import { Check, Copy, Plus, Send } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
 import { isOpen } from '@/lib/games/catalog';
 import { usableIn } from '@/lib/games/engine';
-import { blockOf, checkPlace, EXAMPLE, read, toRows, visibleIssues, type Draft, type Issue, type Where } from '@/lib/games/format';
+import { blockOf, checkPlace, checkTopics, EXAMPLE, leftAfterSend, read, toRows, visibleIssues, type Draft, type Issue, type Where } from '@/lib/games/format';
 import { NO_PLACE, options, placeOf, whereOf, type Place } from '@/lib/games/place';
 import { chatbotPrompt, fixPrompt } from '@/lib/games/prompt';
 import type { ListChapter, SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
-import { btn, copyText, FIELD, GAME_NAMES, LINKISH, offerUndo, plural } from './helpers';
+import { btn, chip, copyText, GAME_NAMES, LINKISH, offerUndo, plural } from './helpers';
 import { Picker } from './Picker';
 import { QuestionList, type ListFilter } from './QuestionList';
 import { QuestionsBox } from './QuestionsBox';
@@ -19,10 +19,12 @@ import { SentBackPanel, type Alerts } from './SentBack';
 import { ActionIcon } from './shared';
 import './games.css';
 
-/* Write questions, in four steps: choose where the questions go (board, class, subject, chapter, topic: dropdowns of
-   the list, so nothing is typed), get questions from a chatbot with a prompt made for that topic (or write them), paste
-   them into the box, and send. Beside the box, in a column of its own, every question shows as it will be sent: ready,
-   or what to fix. "Send" sends the ready ones; those that need fixing stay in the box, and a prompt to fix them is one
+/* Write questions, in four steps: choose the chapter (board, class, subject, chapter: dropdowns of the list, so nothing
+   is typed), get questions from a chatbot with a prompt made for that chapter (or write them), paste them into the box,
+   and send. The chatbot divides the chapter into topics itself, as many as it needs, with a "Topic: Name" line above
+   each topic's questions; the page numbers new topics, and a chapter whose topics the list fixes takes only those.
+   Beside the box, in a column of its own, every question shows under its topic as it will be sent: ready, or what to
+   fix. "Send" sends the ready ones; those that need fixing stay in the box, and a prompt to fix them is one
    click away. Questions sent back by an HoD show at the top, with why, and "Fix it" puts one back in the box. The
    example's questions are never sent while the example is loaded. */
 
@@ -35,29 +37,31 @@ const SECTION = 'flex flex-col gap-4 rounded-[24px] bg-muted p-4 sm:p-6';
 const EXAMPLE_QUESTIONS = new Set(read(EXAMPLE).drafts.map((d) => d.question.toLowerCase()));
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 /** Where the preview puts questions before anything is chosen. */
-const SOMEWHERE: Where = { chapter_id: 'DRAFT', board: '', class: 1, subject: '', chapter_no: 1, chapter: 'Your questions', topic_no: null, topic: '' };
+const SOMEWHERE: Where = { chapter_id: 'DRAFT', board: '', class: 1, subject: '', chapter_no: 1, chapter: 'Your questions' };
 
 /** The place chosen last time, kept on this device only (a convenience: it starts empty when it can't be read). */
 const KEEP = 'shikshaq:games:write-place';
 function keptPlace(): Place {
   try {
     const v = JSON.parse(localStorage.getItem(KEEP) ?? 'null');
-    return v && typeof v === 'object' ? { ...NO_PLACE, ...v, newName: '' } : NO_PLACE;
+    return v && typeof v === 'object' ? { board: String(v.board ?? ''), cls: String(v.cls ?? ''), subject: String(v.subject ?? ''), chapter: String(v.chapter ?? '') } : NO_PLACE;
   } catch {
     return NO_PLACE;
   }
 }
 
-/** Everything the page knows about the box: the questions, every problem, and which can be sent. */
-function analyse(raw: string, where: Where | null, example: boolean) {
+/** Everything the page knows about the box: the questions, their topics, every problem, and which can be sent. */
+function analyse(raw: string, where: Where | null, chapter: ListChapter | undefined, example: boolean) {
   const { drafts, headers, issues } = read(raw);
   const placeIssues = checkPlace(headers, where);
-  const all = placeIssues.length ? [...issues, ...placeIssues].sort((a, b) => a.line - b.line) : issues;
+  // the topics can only be worked out once the chapter is chosen
+  const t = chapter ? checkTopics(drafts, chapter) : { issues: [], topics: drafts.map(() => null) };
+  const all = [...issues, ...placeIssues, ...t.issues].sort((a, b) => a.line - b.line);
   const fromExample = (d: Draft) => example && EXAMPLE_QUESTIONS.has(d.question.toLowerCase());
   const blocked = new Set(all.flatMap((x) => (x.q === undefined ? [] : [x.q])));
-  // a line naming another chapter or topic holds back every question: they might be meant for somewhere else
-  const ready = where && !placeIssues.length ? drafts.filter((d, i) => !blocked.has(i) && !fromExample(d)) : [];
-  return { drafts, all, placeIssues, blocked, ready, fromExample };
+  // a line naming another chapter holds back every question: they might be meant for somewhere else
+  const readyAt = where && chapter && !placeIssues.length ? drafts.map((_, i) => i).filter((i) => !blocked.has(i) && !fromExample(drafts[i])) : [];
+  return { drafts, all, placeIssues, blocked, readyAt, topics: t.topics, fromExample };
 }
 
 function Step({ n, title, note, done, children, className }: { n: number; title: string; note?: string; done?: boolean; children: ReactNode; className?: string }) {
@@ -105,7 +109,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   const [place, setPlaceNow] = useState<Place>(keptPlace);
   const setPlace = (p: Place) => {
     setPlaceNow(p);
-    try { localStorage.setItem(KEEP, JSON.stringify({ ...p, newName: '' })); } catch { /* kept for this visit only */ }
+    try { localStorage.setItem(KEEP, JSON.stringify(p)); } catch { /* kept for this visit only */ }
   };
   /** "Try an example" was pressed and its text is still here: its questions aren't sent. */
   const [example, setExample] = useState(false);
@@ -126,11 +130,11 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
   const list = useMemo(() => catalog.list ?? [], [catalog.list]);
   const opts = useMemo(() => options(list, place), [list, place]);
-  const { where, todo, newNo } = useMemo(() => whereOf(list, place), [list, place]);
+  const { where, chapter: ch, todo } = useMemo(() => whereOf(list, place), [list, place]);
 
   const text = useDeferredValue(raw);
-  const a = useMemo(() => analyse(text, where, example), [text, where, example]);
-  const { drafts, all, placeIssues, blocked } = a;
+  const a = useMemo(() => analyse(text, where, ch, example), [text, where, ch, example]);
+  const { drafts, all, placeIssues, blocked, topics } = a;
   const shown = visibleIssues(all, typing, drafts);
   const problems = useMemo(() => {
     const m = new Map<number, Issue[]>();
@@ -138,7 +142,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     return m;
   }, [shown]);
   const other = shown.filter((x) => x.q === undefined);
-  const ready = a.ready.length;
+  const ready = a.readyAt.length;
   const toFix = drafts.filter((_, i) => blocked.has(i)).length;
   const strays = all.filter((x) => x.q === undefined).length;
   const examples = drafts.filter(a.fromExample).length;
@@ -182,24 +186,20 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     moveCaret(line);
   };
 
-  /** Sends the ready questions. They leave the box; what needs fixing stays, to fix and send next. */
+  /** Sends the ready questions. They leave the box (with Topic lines left with nothing under them); what needs fixing
+   * stays, to fix and send next. */
   const send = async () => {
-    if (!where) return;
-    const now = analyse(raw, where, example);
-    if (!now.ready.length) return;
+    if (!where || !ch) return;
+    const now = analyse(raw, where, ch, example);
+    if (!now.readyAt.length) return;
+    const these = now.readyAt.map((i) => now.drafts[i]);
     setSending(true);
     setSent(null);
     setSendError('');
     try {
-      const result = await api.sendBatch(toRows(now.ready, where));
+      const result = await api.sendBatch(toRows(these, where, now.readyAt.map((i) => now.topics[i])));
       setSent(result);
-      const drop = new Set<number>();
-      for (const d of now.ready) for (let n = d.line; n <= d.end; n++) drop.add(n);
-      const rest = raw.split('\n').filter((_, k) => !drop.has(k + 1)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
-      const left = read(rest);
-      setRaw(left.drafts.length || left.issues.length ? `${rest}\n` : '');
-      // a new topic now exists: it is chosen in the list from here on
-      if (place.topic === 'new' && where.topic_no !== null) setPlace({ ...opts.place, topic: `t${where.topic_no}`, newName: '' });
+      setRaw(leftAfterSend(raw, these));
       if (result.sent) { flash('send'); onSent(); }
     } catch (e) {
       setSendError((e as Error).message);
@@ -208,10 +208,11 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     }
   };
 
-  /** "Fix it" on a sent-back question: its chapter and topic are chosen, and it goes in the box (Undo brings the old text back). */
+  /** "Fix it" on a sent-back question: its chapter is chosen, and it goes in the box under its Topic line (Undo brings
+   * the old text back). */
   const fix = (q: SentBack) => {
     setPlace(placeOf(list, q));
-    replaceAll(`${blockOf(q)}\n`, 'Question loaded');
+    replaceAll(`${q.topic ? `Topic: ${q.topic}\n\n` : ''}${blockOf(q)}\n`, 'Question loaded');
     setSent(null);
     box.current?.scrollIntoView({ behavior: motion(), block: 'center' });
     box.current?.focus({ preventScroll: true });
@@ -227,8 +228,22 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   };
 
   const games = (d: Draft) => usableIn({ id: String(d.line), question: d.question, answer: d.answer, also: d.also, fill: d.fill, wrong: d.wrong }).map((t) => GAME_NAMES[t]);
-  const ch = opts.chapter;
   const pick = (patch: Partial<Place>) => setPlace({ ...opts.place, ...patch });
+  /** A topic button: its Topic line goes in the box above the line the cursor is on, with the cursor after it. */
+  const putTopic = (name: string) => {
+    const lines = raw.split('\n');
+    const at = raw.trim() ? Math.min(Math.max(caret - 1, 0), lines.length) : 0;
+    const next = raw.trim() ? [...lines.slice(0, at), `Topic: ${name}`, '', ...lines.slice(at)].join('\n') : `Topic: ${name}\n\n`;
+    setRaw(next);
+    const pos = next.split('\n').slice(0, at + 2).join('\n').length + 1;
+    requestAnimationFrame(() => {
+      const ta = box.current;
+      if (!ta) return;
+      ta.focus({ preventScroll: true });
+      ta.setSelectionRange(pos, pos);
+      moveCaret(at + 3);
+    });
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -236,7 +251,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
         <div className="flex min-w-0 flex-col gap-4">
-          <Step n={1} title="Choose where the questions go" done={!!where}>
+          <Step n={1} title="Choose the chapter" done={!!where}>
             {!catalog.list ? (
               catalog.error ? (
                 <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">
@@ -255,53 +270,53 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
                   </Field>
                   <Field id="p-class" label="Class">
                     <Picker id="p-class" look="field" label="Class" value={opts.place.cls} placeholder="Choose" disabled={!opts.classes.length}
-                      options={opts.classes.map((c) => ({ value: String(c), label: String(c) }))} onPick={(v) => pick({ cls: v, subject: '', chapter: '', topic: '', newName: '' })} />
+                      options={opts.classes.map((c) => ({ value: String(c), label: String(c) }))} onPick={(v) => pick({ cls: v, subject: '', chapter: '' })} />
                   </Field>
                   <Field id="p-subject" label="Subject" className="col-span-2 sm:col-span-1">
                     <Picker id="p-subject" look="field" label="Subject" value={opts.place.subject} placeholder="Choose" disabled={!opts.subjects.length}
-                      options={opts.subjects.map((s) => ({ value: s, label: s }))} onPick={(v) => pick({ subject: v, chapter: '', topic: '', newName: '' })} />
+                      options={opts.subjects.map((s) => ({ value: s, label: s }))} onPick={(v) => pick({ subject: v, chapter: '' })} />
                   </Field>
                   <Field id="p-chapter" label="Chapter" className="col-span-full">
                     <Picker id="p-chapter" look="field" label="Chapter" value={opts.place.chapter} placeholder="Choose" disabled={!opts.chapters.length}
-                      options={opts.chapters.map((c) => ({ value: c.chapter_id, label: `${c.chapter_no}: ${c.name}` }))} onPick={(v) => pick({ chapter: v, topic: '', newName: '' })} />
+                      options={opts.chapters.map((c) => ({ value: c.chapter_id, label: `${c.chapter_no}: ${c.name}` }))} onPick={(v) => pick({ chapter: v })} />
                   </Field>
-                  <Field id="p-topic" label="Topic" className="col-span-full">
-                    <Picker id="p-topic" look="field" label="Topic" value={opts.place.topic} placeholder="Choose" disabled={!ch}
-                      options={opts.topics} onPick={(v) => pick({ topic: v })} />
-                  </Field>
-                  {opts.place.topic === 'new' && ch && (
-                    <Field id="p-new" label="The new topic's name" className="col-span-full">
-                      <input id="p-new" type="text" autoComplete="off" value={place.newName} placeholder="e.g. Conduction" maxLength={130}
-                        className={cn(FIELD, 'h-11')} onChange={(e) => setPlaceNow({ ...opts.place, newName: e.target.value })} aria-describedby="p-new-note" />
-                      <span id="p-new-note" className="text-[12px] text-warm-secondary">
-                        {where ? `It becomes topic ${newNo}: ${where.topic}. Use the name the textbook gives this part of the chapter.` : todo}
-                      </span>
-                    </Field>
-                  )}
                 </div>
-                {ch && isOpen(ch) && opts.place.topic !== 'new' && (
-                  <p className="text-[13px] text-warm-secondary">This chapter's topics aren't fixed: choose one already in use, add a new one, or put the questions under no topic.</p>
-                )}
                 <p className={cn('rounded-2xl px-4 py-3 text-[14px]', where ? 'bg-mint text-foreground' : 'bg-card text-warm-secondary')} role="status" aria-live="polite">
-                  {where
-                    ? <>Questions go to <b>{where.board}, class {where.class}, {where.subject}</b>, chapter {where.chapter_no}: {where.chapter}, {where.topic_no === null ? 'with no topic' : <>topic <b>{where.topic}</b></>}.</>
-                    : todo}
+                  {where ? <>Questions go to <b>{where.board}, class {where.class}, {where.subject}</b>, chapter {where.chapter_no}: <b>{where.chapter}</b>.</> : todo}
                 </p>
+                {ch && (
+                  <div className="flex flex-col gap-2 text-[13px] text-warm-secondary">
+                    <p>
+                      {!isOpen(ch) ? <><b className="text-foreground">Its topics are fixed.</b> Each question goes under one of these Topic lines:</>
+                        : ch.topics.length ? <><b className="text-foreground">Topics already in use.</b> The chatbot keeps these, and adds as many new ones as the chapter needs:</>
+                        : <><b className="text-foreground">No topics yet.</b> The chatbot divides the chapter into topics itself, as many as it needs.</>}
+                    </p>
+                    {ch.topics.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {ch.topics.map((t) => (
+                          <button key={t.topic_id} type="button" className={chip('card')} title="Put this Topic line in the box, above the cursor" onClick={() => putTopic(t.name)}>
+                            <Plus aria-hidden /> Topic: {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </Step>
 
           <Step n={2} title="Get questions from a chatbot" note="Optional: you can also write them yourself in step 3.">
             <ol className="flex list-decimal flex-col gap-1 pl-5 text-[14px] text-warm-prose">
-              <li>Copy the prompt. It is made for the topic you chose.</li>
+              <li>Copy the prompt. It is made for the chapter you chose; the chatbot decides its topics.</li>
               <li>Paste it into ChatGPT, Gemini or Claude, and add your notes or the textbook pages under it.</li>
               <li>Copy its answer (the box of questions, with the Copy button on it) and paste it into step 3.</li>
             </ol>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <button type="button" className={btn('dark', 'w-fit')} disabled={!where} onClick={() => where && void copy('prompt', chatbotPrompt(where))}>
+              <button type="button" className={btn('dark', 'w-fit')} disabled={!where} onClick={() => ch && void copy('prompt', chatbotPrompt(ch))}>
                 <ActionIcon done={done === 'prompt'}><Copy /></ActionIcon>Copy chatbot prompt
               </button>
-              <span className="text-[13px] text-warm-secondary" aria-live="polite">{done === 'prompt' ? 'Copied.' : !where ? 'Choose the topic in step 1 first.' : ''}</span>
+              <span className="text-[13px] text-warm-secondary" aria-live="polite">{done === 'prompt' ? 'Copied.' : !where ? 'Choose the chapter in step 1 first.' : ''}</span>
             </div>
           </Step>
 
@@ -315,7 +330,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
           </Step>
         </div>
 
-        <QuestionList drafts={drafts} problems={problems} blocked={blocked} other={other} games={games} fromExample={a.fromExample} onGoTo={goTo}
+        <QuestionList drafts={drafts} topics={topics} problems={problems} blocked={blocked} other={other} games={games} fromExample={a.fromExample} onGoTo={goTo}
           filter={filter} setFilter={setFilter}
           className="max-h-[75vh] lg:sticky lg:top-[88px] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:max-h-[calc(100dvh-104px)]" />
 
@@ -327,11 +342,11 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
           )}
           {placeIssues.length > 0 && (
             <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">
-              <b>A line in the box names another chapter or topic,</b> so nothing is sent until it is fixed. Remove it (it is marked red), or choose the right topic in step 1.
+              <b>A line in the box names another chapter,</b> so nothing is sent until it is fixed. Remove it (it is marked red), or choose the right chapter in step 1.
             </p>
           )}
           <p className="text-[14px] text-foreground" aria-live="polite">
-            {!where ? 'Choose where the questions go in step 1 first.'
+            {!where ? 'Choose the chapter in step 1 first.'
               : !drafts.length ? 'Nothing to send yet.'
               : <><b>{ready}</b> ready to send{toFix > 0 && <>, <b className="text-destructive">{toFix}</b> to fix</>}{strays > 0 && <>, and {plural(strays, 'line')} that {strays === 1 ? "isn't a question" : "aren't questions"}</>}.</>}
           </p>
@@ -341,7 +356,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
               {sending ? 'Sending…' : !ready ? 'Send' : toFix || strays ? `Send the ${plural(ready, 'ready question')}` : `Send ${plural(ready, 'question')}`}
             </button>
             {(toFix > 0 || strays > 0) && (
-              <button type="button" className={btn('dark')} onClick={() => { const now = analyse(raw, where, example); void copy('fix', fixPrompt(raw, now.drafts, now.all)); }}>
+              <button type="button" className={btn('dark')} onClick={() => { const now = analyse(raw, where, ch, example); void copy('fix', fixPrompt(raw, now.drafts, now.all)); }}>
                 <ActionIcon done={done === 'fix'}><Copy /></ActionIcon>Copy a prompt to fix {toFix ? `the ${toFix}` : 'them'}
               </button>
             )}
@@ -373,7 +388,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
           </div>
           <button type="button" className={btn('quiet')} aria-expanded={preview} onClick={() => setPreview((p) => !p)}>{preview ? 'Hide the games' : 'Show the games'}</button>
         </div>
-        {preview && <GamePreview rows={toRows(drafts.filter((_, i) => !blocked.has(i)), where ?? SOMEWHERE)} />}
+        {preview && <GamePreview rows={toRows(drafts.filter((_, i) => !blocked.has(i)), where ?? SOMEWHERE, topics.filter((_, i) => !blocked.has(i)))} />}
       </section>
 
       <div className="mt-4"><Guide /></div>

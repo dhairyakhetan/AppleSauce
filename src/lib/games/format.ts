@@ -1,8 +1,9 @@
 /**
  * The Questions box on Write questions: reads it into questions, and checks each one.
  *
- * Where the questions go (board, class, subject, chapter and topic) is chosen with the dropdowns above the box, never
- * typed, so the box holds only questions, one block each:
+ * The chapter is chosen with the dropdowns above the box, never typed. The box holds Topic lines and questions: a line
+ * "Topic: Name" above each part of the chapter's questions (as many topics as the chapter needs, decided by whoever
+ * writes them, usually a chatbot; the page gives each new topic its number, `checkTopics`), and one block per question:
  *
  *   Q: the question                                   always
  *   A: the answer                                     always
@@ -15,8 +16,8 @@
  *
  * What a chatbot adds around the labels is read as it was meant: a bullet or number before a label, bold around it, a
  * code fence, a heading, a line of dashes, a label written out ("Answer:", "Wrong options:", "Difficulty:"), several
- * answers on one Also: line or several Wrong: lines. Board, Class, Subject, Chapter and Topic lines are allowed when they
- * name what is chosen above (the page checks them, `checkPlace`). Nothing in a question or answer is ever reworded:
+ * answers on one Also: line or several Wrong: lines. Board, Class, Subject and Chapter lines are allowed when they name
+ * the chapter chosen above (the page checks them, `checkPlace`). Nothing in a question or answer is ever reworded:
  * only extra spaces, and quotes or bold around a whole part, go.
  *
  * Every problem is one sentence on the line to fix, saying what to change (`text`, for people), with the same thing as
@@ -25,9 +26,9 @@
  */
 import { hasContent, sameAnswer } from './engine/answers';
 import { blanks, BLANK, isTrueFalse, shows } from './engine/shared';
-import { sameName } from './catalog';
-import { checkBoard, checkClass, checkSubject, parseNumbered, readMeta } from './details';
-import { DIFFICULTIES, type Difficulty, type Row } from './rows';
+import { isOpen, MAX_TOPIC_NAME, sameName } from './catalog';
+import { checkBoard, checkClass, checkSubject, parseNumbered, readMeta, tidy, titleCase } from './details';
+import { DIFFICULTIES, type Difficulty, type ListChapter, type Row } from './rows';
 
 export const MAX_QUESTION = 300;
 export const MAX_ANSWER = 100;
@@ -35,8 +36,9 @@ export const MAX_ANSWER_WORDS = 6;
 export const MAX_ALSO = 5;
 export const MIN_OPTIONS = 3;
 export const MAX_OPTIONS = 5;
-/** The most questions one send takes: one topic's worth. */
-export const MAX_PER_SEND = 30;
+/** The most questions in one topic, and in one send (one chapter's worth). */
+export const MAX_PER_TOPIC = 30;
+export const MAX_PER_SEND = 80;
 
 /** A question as written in the box. `line` is its Q: line, `end` its last line. */
 export interface Draft {
@@ -48,6 +50,8 @@ export interface Draft {
   level: Difficulty | null;
   line: number;
   end: number;
+  /** The Topic line above it, as written (none before the first). */
+  topic: { line: number; value: string } | null;
 }
 
 /**
@@ -56,14 +60,14 @@ export interface Draft {
  */
 export interface Issue { line: number; text: string; fix: string; q?: number; missing?: true }
 
-/** A Board, Class, Subject, Chapter or Topic line in the box. */
-export interface Header { key: 'board' | 'class' | 'subject' | 'chapter' | 'topic'; value: string; line: number }
+/** A Board, Class, Subject or Chapter line in the box. */
+export interface Header { key: 'board' | 'class' | 'subject' | 'chapter'; value: string; line: number }
 
-/** Where the questions go: what the dropdowns above the box chose. `topic_no` null: no topic (an open chapter only). */
-export interface Where {
-  chapter_id: string; board: string; class: number; subject: string; chapter_no: number; chapter: string;
-  topic_no: number | null; topic: string;
-}
+/** Where the questions go: the chapter the dropdowns above the box chose. */
+export interface Where { chapter_id: string; board: string; class: number; subject: string; chapter_no: number; chapter: string }
+
+/** The topic a question goes under: its number and name in the chapter, and whether sending it adds the topic. */
+export interface TopicOf { topic_no: number; name: string; isNew: boolean }
 
 type Key = 'q' | 'a' | 'also' | 'fill' | 'wrong' | 'level';
 const LABEL: Record<Key, string> = { q: 'Q:', a: 'A:', also: 'Also:', fill: 'Fill:', wrong: 'Wrong:', level: 'Level:' };
@@ -134,6 +138,7 @@ interface Block {
   fill?: { v: string; line: number };
   wrong?: { v: string[]; line: number; raw: string };
   level?: { v: string; line: number };
+  topic: Draft['topic'];
 }
 
 /** Reads the box: the questions, the Board/Class/Subject/Chapter/Topic lines, and every problem, in line order. */
@@ -145,6 +150,8 @@ export function read(raw: string): { drafts: Draft[]; headers: Header[]; issues:
   let block: Block | null = null;
   /** A blank line since the question's last line: a loose line after it is not part of that question. */
   let gap = false;
+  /** The Topic line the questions are under. */
+  let topic: Draft['topic'] = null;
 
   const finish = (b: Block) => {
     const q = drafts.length;
@@ -266,12 +273,12 @@ export function read(raw: string): { drafts: Draft[]; headers: Header[]; issues:
       if (first) err(b.line, `The same question is on line ${first}. Remove one of them.`, 'Remove this question: it is written twice.');
       else seen.set(key, b.line);
     }
-    if (q === MAX_PER_SEND) err(b.line, `At most ${MAX_PER_SEND} questions are sent at a time. This one and the ones after it go in the next send.`, `Send at most ${MAX_PER_SEND} questions at a time.`);
-    else if (q > MAX_PER_SEND) err(b.line, `More than ${MAX_PER_SEND} questions: this one goes in the next send.`, `Send at most ${MAX_PER_SEND} questions at a time.`);
+    if (q === MAX_PER_SEND) err(b.line, `At most ${MAX_PER_SEND} questions are sent at a time. This one and the ones after it go in the next send.`, `Write at most ${MAX_PER_SEND} questions in all.`);
+    else if (q > MAX_PER_SEND) err(b.line, `More than ${MAX_PER_SEND} questions: this one goes in the next send.`, `Write at most ${MAX_PER_SEND} questions in all.`);
 
     drafts.push({
       question: b.q, answer: a, also, fill: b.fill?.v ?? null, wrong: b.wrong?.v ?? [],
-      level: level && DIFFICULTIES.includes(level) ? level : null, line: b.line, end: b.end,
+      level: level && DIFFICULTIES.includes(level) ? level : null, line: b.line, end: b.end, topic: b.topic,
     });
   };
 
@@ -292,7 +299,7 @@ export function read(raw: string): { drafts: Draft[]; headers: Header[]; issues:
       gap = false;
       if (label.key === 'q') {
         close();
-        block = { line, end: line, q: label.value, also: [] };
+        block = { line, end: line, q: label.value, also: [], topic };
         return;
       }
       if (!block) return stray(line, `This ${LABEL[label.key]} line has no Q: line above it. Each question starts with Q:.`, 'Give it the Q: line it belongs to, or remove it.');
@@ -318,7 +325,11 @@ export function read(raw: string): { drafts: Draft[]; headers: Header[]; issues:
     const meta = readMeta(t);
     if (meta && meta.key !== 'difficulty') {
       close();
-      headers.push({ key: meta.key, value: meta.value.trim(), line });
+      if (meta.key === 'topic') topic = { line, value: meta.value.trim() };
+      else {
+        headers.push({ key: meta.key, value: meta.value.trim(), line });
+        if (meta.key === 'chapter') topic = null; // a Chapter line starts again with no topic
+      }
       return;
     }
     if (heading) return;
@@ -343,13 +354,13 @@ export function read(raw: string): { drafts: Draft[]; headers: Header[]; issues:
 const sameKey = (q: string) => q.trim().replace(/[\s?.!:;,।]+$/u, '').replace(/\s+/g, ' ').toLowerCase();
 
 /**
- * The Board, Class, Subject, Chapter and Topic lines against what is chosen above: a line that names something else is a
- * problem, as its questions would go somewhere the person didn't mean. A line that names the chosen one is fine, as is a
- * number left out or a name left out. A Topic line when "no topic" is chosen is a problem.
+ * The Board, Class, Subject and Chapter lines against the chapter chosen above: a line that names another is a problem,
+ * as its questions would go somewhere the person didn't mean. A line that names the chosen one is fine, as is a number
+ * or a name left out.
  */
 export function checkPlace(headers: Header[], w: Where | null): Issue[] {
   if (!w) return [];
-  const where = `${w.board} class ${w.class} ${w.subject}, chapter ${w.chapter_no}: ${w.chapter}${w.topic_no === null ? ', no topic' : `, topic: ${w.topic}`}`;
+  const where = `${w.board} class ${w.class} ${w.subject}, chapter ${w.chapter_no}: ${w.chapter}`;
   const out: Issue[] = [];
   for (const h of headers) {
     let other: boolean;
@@ -357,19 +368,87 @@ export function checkPlace(headers: Header[], w: Where | null): Issue[] {
     else if (h.key === 'class') other = checkClass(h.value).value !== w.class;
     else if (h.key === 'subject') other = checkSubject(h.value).name !== w.subject;
     else {
-      const { no, name } = parseNumbered(h.value, h.key);
-      const [wNo, wName] = h.key === 'chapter' ? [w.chapter_no, w.chapter] : [w.topic_no, w.topic];
-      other = h.key === 'topic' && w.topic_no === null ? true : name ? !sameName(name, wName) : no !== wNo;
+      const { no, name } = parseNumbered(h.value, 'chapter');
+      other = name ? !sameName(name, w.chapter) : no !== w.chapter_no;
     }
     if (other) {
       out.push({
         line: h.line,
-        text: `This line names somewhere else. These questions go to ${where}, as chosen above. Remove the line, or choose the right ${h.key} above.`,
-        fix: 'Remove this line: write only the questions.',
+        text: `This line names another chapter. These questions go to ${where}, as chosen above. Remove the line, or choose the right chapter above.`,
+        fix: 'Remove this line: write only Topic lines and questions.',
       });
     }
   }
   return out;
+}
+
+/**
+ * Each question's topic in the chosen chapter, from the Topic line above it, and the problems with Topic lines.
+ *
+ * A topic is found by its name (case, spaces and punctuation at the end don't matter): a number on the line is only read
+ * when there is no name. A name the chapter has is that topic, under the list's name. In a chapter whose topics the
+ * list leaves open, any other name is a new topic: written the standard way ("types of reactions" becomes "Types of
+ * Reactions") and numbered after the chapter's topics, in the order the names first come. In a chapter whose topics the
+ * list fixes, any other name is a problem. Every question needs a Topic line above it, and a topic takes at most
+ * `MAX_PER_TOPIC` questions.
+ */
+export function checkTopics(drafts: Draft[], ch: ListChapter): { issues: Issue[]; topics: (TopicOf | null)[] } {
+  const issues: Issue[] = [];
+  const open = isOpen(ch);
+  const listed = ch.topics.map((t) => `"Topic: ${t.name}"`).join(', ');
+  const fresh: TopicOf[] = [];
+  let next = Math.max(0, ...ch.topics.map((t) => t.topic_no)) + 1;
+  const byLine = new Map<number, TopicOf | null>();
+
+  const resolve = (line: number, value: string): TopicOf | null => {
+    const say = (text: string, fix: string) => { issues.push({ line, text, fix }); return null; };
+    const { no, name } = parseNumbered(value, 'topic');
+    if (!name) {
+      const t = no !== null ? ch.topics.find((x) => x.topic_no === no) : undefined;
+      if (t) return { topic_no: t.topic_no, name: t.name, isNew: false };
+      return say('Write the topic\'s name on its Topic line, such as "Topic: Conduction".', 'Write the topic\'s name after "Topic:".');
+    }
+    const known = ch.topics.find((t) => sameName(t.name, name));
+    if (known) return { topic_no: known.topic_no, name: known.name, isNew: false };
+    if (!open) {
+      return say(`"${name}" isn't one of this chapter's topics. Its topics are fixed: ${ch.topics.map((t) => t.name).join(', ')}. Use one of them.`,
+        `Change it to the one of these Topic lines its questions belong to: ${listed}.`);
+    }
+    const nice = titleCase(tidy(name));
+    const again = fresh.find((t) => sameName(t.name, nice));
+    if (again) return again;
+    if (nice.length > MAX_TOPIC_NAME) return say(`The topic's name is longer than ${MAX_TOPIC_NAME} characters. Make it shorter.`, `Shorten the topic's name to at most ${MAX_TOPIC_NAME} characters.`);
+    if (/[–—]/.test(nice)) return say('No long dashes in a topic\'s name: use a colon or a comma.', 'Replace the long dash in the topic\'s name with a colon or a comma.');
+    if (next > 99) return say('A chapter can have at most 99 topics.', 'Use fewer topics.');
+    const t = { topic_no: next++, name: nice, isNew: true };
+    fresh.push(t);
+    return t;
+  };
+
+  const counts = new Map<number, number>();
+  const topics = drafts.map((d, i) => {
+    if (!d.topic) {
+      issues.push({
+        line: d.line, q: i, missing: true,
+        text: open ? 'Put a Topic line above this question, such as "Topic: Conduction": the part of the chapter it is about.' : `Put a Topic line above this question: one of ${listed}.`,
+        fix: open ? 'Put it under a Topic line ("Topic: Name") for the part of the chapter it is about.' : `Put it under the one of these Topic lines it belongs to: ${listed}.`,
+      });
+      return null;
+    }
+    if (!byLine.has(d.topic.line)) byLine.set(d.topic.line, resolve(d.topic.line, d.topic.value));
+    const t = byLine.get(d.topic.line)!;
+    if (!t) {
+      issues.push({ line: d.line, q: i, text: `Its Topic line (line ${d.topic.line}) needs fixing first.`, fix: '' });
+      return null;
+    }
+    const n = (counts.get(t.topic_no) ?? 0) + 1;
+    counts.set(t.topic_no, n);
+    if (n > MAX_PER_TOPIC) {
+      issues.push({ line: d.line, q: i, text: `At most ${MAX_PER_TOPIC} questions in a topic, and "${t.name}" has more. Remove this one, or put it under another topic.`, fix: `Keep at most ${MAX_PER_TOPIC} questions under "Topic: ${t.name}".` });
+    }
+    return t;
+  });
+  return { issues: issues.sort((a, b) => a.line - b.line), topics };
 }
 
 /** The problems to show right now: not on the line being typed, and not what a question is still missing while the
@@ -383,14 +462,44 @@ export function visibleIssues(issues: Issue[], caret: number | null, drafts: Dra
 /** The lines with a problem, for the underline in the box. */
 export const problemLines = (issues: Issue[]) => new Set(issues.map((x) => x.line));
 
-/** The questions as rows for the database, under the chosen chapter and topic, numbered from 1 in the order written. */
-export function toRows(drafts: Draft[], w: Where): Row[] {
-  return drafts.map((d, i) => ({
-    chapter_id: w.chapter_id, topic_id: w.topic_no === null ? null : `${w.chapter_id}T${String(w.topic_no).padStart(2, '0')}`,
-    board: w.board, class: w.class, subject: w.subject, chapter_no: w.chapter_no, chapter: w.chapter, topic_no: w.topic_no, topic: w.topic_no === null ? '' : w.topic,
-    question_no: i + 1, question: d.question, answer: d.answer, also: d.also, fill: d.fill, wrong_options: d.wrong, difficulty: d.level,
-    line: d.line, end: d.end,
-  }));
+/** The questions as rows for the database, in the chosen chapter under their topics, numbered from 1 in the order written. */
+export function toRows(drafts: Draft[], w: Where, topics: (TopicOf | null)[]): Row[] {
+  return drafts.map((d, i) => {
+    const t = topics[i];
+    return {
+      chapter_id: w.chapter_id, topic_id: t ? `${w.chapter_id}T${String(t.topic_no).padStart(2, '0')}` : null,
+      board: w.board, class: w.class, subject: w.subject, chapter_no: w.chapter_no, chapter: w.chapter, topic_no: t?.topic_no ?? null, topic: t?.name ?? '',
+      question_no: i + 1, question: d.question, answer: d.answer, also: d.also, fill: d.fill, wrong_options: d.wrong, difficulty: d.level,
+      line: d.line, end: d.end,
+    };
+  });
+}
+
+/**
+ * The text left once these questions are sent: their lines go, and so do Topic, Board, Class, Subject and Chapter lines
+ * with no question left under them, and code fences. Everything else (questions to fix, lines that aren't questions)
+ * stays.
+ */
+export function leftAfterSend(raw: string, sent: Draft[]): string {
+  const drop = new Set<number>();
+  for (const d of sent) for (let n = d.line; n <= d.end; n++) drop.add(n);
+  // code fences and lines of dashes go too: they are never part of a question
+  const lines = raw.split(/\r?\n/).map((l, k) => (drop.has(k + 1) || /^\s*(```|~~~)|^\s*[-*_=]{3,}\s*$/.test(l) ? null : l)).filter((l): l is string => l !== null);
+  // a heading line stays only while a non-heading line comes after it, before the next heading of its kind or a wider one
+  const kind = (l: string) => { const m = readMeta(l); return m && m.key !== 'difficulty' ? m.key : null; };
+  const rank = { board: 0, class: 0, subject: 0, chapter: 1, topic: 2 } as const;
+  const keep = lines.map((l, k) => {
+    const mine = kind(l);
+    if (!mine) return true;
+    for (let j = k + 1; j < lines.length; j++) {
+      const other = kind(lines[j]);
+      if (other && (other === mine || rank[other] < rank[mine])) return false;
+      if (!other && lines[j].trim()) return true;
+    }
+    return false;
+  });
+  const rest = lines.filter((_, k) => keep[k]).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return rest ? `${rest}\n` : '';
 }
 
 type Written = Pick<Row, 'question' | 'answer' | 'difficulty'> & Partial<Pick<Row, 'also' | 'fill' | 'wrong_options'>>;
@@ -409,11 +518,15 @@ export function blockOf(r: Written): string {
 
 /** "Try an example": every part used, and two questions with mistakes to show how problems are marked. Its questions
  * are never sent while the example is loaded. */
-export const EXAMPLE = `Q: Law which says that mass can neither be created nor destroyed in a chemical reaction
+export const EXAMPLE = `Topic: Chemical Equations
+
+Q: Law which says that mass can neither be created nor destroyed in a chemical reaction
 A: Law of conservation of mass
 Fill: A chemical equation is balanced because of the ___.
 Wrong: Law of definite proportions; Law of multiple proportions; Avogadro's law
 Level: medium
+
+Topic: Types of Chemical Reactions
 
 Q: Gas given off when zinc reacts with dilute sulphuric acid
 A: Hydrogen

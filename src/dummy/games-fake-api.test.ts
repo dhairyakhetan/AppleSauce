@@ -12,14 +12,21 @@ import type { AdminChapter } from '@/lib/games/rows';
    the real pages will do. Its made-up questions are written the way the prompt asks, so they pass the checker. */
 
 const rows = (text: string) => rowsOf(text);
-const HEAT = `Board: CBSE
-Class: 7
-Subject: Science
-Chapter 4: Heat
+/** A real chapter on the starting list, where the made-up questions put three topics. */
+const HEAT = `Board: ICSE
+Class: 9
+Subject: Physics
+Chapter 6: Heat and Energy
 Topic 2: Transfer of Heat
 `;
+const PHY9 = { board: 'ICSE', class: 9, subject: 'Physics' };
 const q = (question: string, answer: string, more = '') => `\nQ: ${question}\nA: ${answer}\n${more}`;
 type Api = ReturnType<typeof createFakeGamesApi>;
+/** Fixes a chapter's topics on the list, as an admin does on the Chapters page. */
+async function fixTopics(api: Api, chapterId: string) {
+  const loaded = chaptersOf((await api.loadList()).chapters, PHY9);
+  await api.saveChapters(toSave(PHY9, loaded, setOpen(draftOf(loaded), chapterId, false)));
+}
 /** Every waiting question, page by page, as Approve questions loads them. */
 async function waitingAll(api: Api) {
   const out: Awaited<ReturnType<Api['loadWaiting']>>['questions'] = [];
@@ -31,12 +38,24 @@ async function waitingAll(api: Api) {
   }
 }
 
+describe('the list of chapters', () => {
+  it("is the real starting list from install.sql: every chapter, under its real board, class, subject and name, none with topics yet", () => {
+    expect(DUMMY_LIST).toHaveLength(564);
+    expect(new Set(DUMMY_LIST.map((c) => c.chapter_id)).size).toBe(564);
+    expect(new Set(DUMMY_LIST.map((c) => c.board))).toEqual(new Set(['CBSE', 'ICSE', 'ISC']));
+    expect(DUMMY_LIST.find((c) => c.chapter_id === 'ICSE09PHY06')).toMatchObject({ board: 'ICSE', class: 9, subject: 'Physics', chapter_no: 6, name: 'Heat and Energy', topics: [], open: true });
+    expect(DUMMY_LIST.some((c) => c.subject === 'History & Civics' && c.name === 'Revolt of 1857')).toBe(true);
+    expect(DUMMY_LIST.some((c) => c.name.includes("'"))).toBe(true); // "Earth's Structure": quotes read back as written
+  });
+});
+
 describe('the made-up questions', () => {
   it.each(Object.entries(DUMMY_TEXTS))('%s passes the checker and the list, and makes every game', (_name, text) => {
     expect(read(text).issues).toEqual([]);
     const rs = rowsOf(text);
     expect(rs).toHaveLength(read(text).drafts.length);
-    expect(rs.every((r) => DUMMY_LIST.some((c) => c.chapter_id === r.chapter_id && (r.topic_no === null || c.topics.some((t) => t.topic_no === r.topic_no && t.name === r.topic))))).toBe(true);
+    // each is under a real chapter, and a topic of its own (sending adds it, as on the real list)
+    expect(rs.every((r) => DUMMY_LIST.some((c) => c.chapter_id === r.chapter_id) && r.topic_no !== null && r.topic)).toBe(true);
     if (text.includes('Level: hard')) {
       const items = rs.map((r, i) => ({ id: String(i), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }));
       if (rs.length >= 8) for (const t of GAME_TYPES) expect(makeGame(t, items, 1), t).not.toBeNull();
@@ -54,8 +73,8 @@ describe('the dummy games database', () => {
     ]);
     expect(r).toMatchObject({ sent: 1, already: 2, sentBack: 0 });
     expect(r.batchIds).toHaveLength(1);
-    const waiting = (await waitingAll(api)).filter((x) => x.chapter_id === 'CBSE07SCI04');
-    expect(waiting.map((x) => x.id)).toEqual(['CBSE07SCI04T02Q010']); // 8 approved and 1 sent back before it
+    const waiting = (await waitingAll(api)).filter((x) => x.chapter_id === 'ICSE09PHY06');
+    expect(waiting.map((x) => x.id)).toEqual(['ICSE09PHY06T02Q010']); // 8 approved and 1 sent back before it
   });
 
   it("doesn't take back a sent-back question unchanged (other answers, fill-in and options included), and points to why", async () => {
@@ -75,38 +94,42 @@ describe('the dummy games database', () => {
     expect(sent).toMatchObject({ also: ['Thermal conduction'], fill: 'Heat moves through a solid by ___.' });
   });
 
-  it('refuses the whole send when a question is off the list of chapters and topics', async () => {
+  it('refuses the whole send when a question is off the list of chapters, or under a topic a fixed chapter lacks', async () => {
     const api = createFakeGamesApi(false);
     const before = (await waitingAll(api)).length;
-    const off = rows(`Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 9: Weather${q('Wind from the sea by day', 'Sea breeze')}`);
-    await expect(api.sendBatch([...rows(`${HEAT}${q('Heat flowing through a solid', 'Conduction')}`), ...off])).rejects.toThrow(/topic 9/i);
+    const good = rows(`${HEAT}${q('Heat flowing through a solid', 'Conduction')}`);
+    const elsewhere = { ...good[0], chapter_id: 'CBSE07SCI04', board: 'CBSE', class: 7, subject: 'Science', chapter_no: 4, chapter: 'Heat', topic_id: null, topic_no: null, topic: '' };
+    await expect(api.sendBatch([...good, elsewhere])).rejects.toThrow(/isn't on the list of chapters/);
+    await fixTopics(api, 'ICSE09PHY06');
+    const off = rows(`Board: ICSE\nClass: 9\nSubject: Physics\nChapter 6: Heat and Energy\nTopic 9: Weather${q('Wind from the sea by day', 'Sea breeze')}`);
+    await expect(api.sendBatch([...good, ...off])).rejects.toThrow(/topic 9/i);
     expect(await waitingAll(api)).toHaveLength(before);
-    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI04')?.topics.map((t) => t.topic_no)).toEqual([1, 2, 3]);
+    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'ICSE09PHY06')?.topics.map((t) => t.topic_no)).toEqual([1, 2, 3]);
   });
 
   it('lets a chapter the list gives no topics take topics of its own, as the database does', async () => {
     const api = createFakeGamesApi(false);
-    const NUTRITION = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 2: Nutrition in Animals\n';
+    const NUTRITION = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 5: Life Processes\n';
     const r = await api.sendBatch(rows(`${NUTRITION}Topic 1: Digestion in Humans${q('Organ where digestion ends', 'Small intestine')}\nTopic 2: Feeding in Amoeba${q('Finger-like parts Amoeba feeds with', 'Pseudopodia')}`));
     expect(r.sent).toBe(2);
-    const ch = (await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!;
+    const ch = (await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE10SCI05')!;
     expect([ch.open, ch.topics.map((t) => `${t.topic_no} ${t.name}`)]).toEqual([true, ['1 Digestion in Humans', '2 Feeding in Amoeba']]);
     // one number and one name each, and a refused send adds no topic
-    await expect(api.sendBatch(rows(`${NUTRITION}Topic 1: Teeth${q('Teeth that cut food', 'Incisors')}`))).rejects.toThrow('Topic 1 of chapter 2 is called "Digestion in Humans", not "Teeth".');
+    await expect(api.sendBatch(rows(`${NUTRITION}Topic 1: Teeth${q('Teeth that cut food', 'Incisors')}`))).rejects.toThrow('Topic 1 of chapter 5 is called "Digestion in Humans", not "Teeth".');
     await expect(api.sendBatch(rows(`${NUTRITION}Topic 3: Teeth${q('Teeth that cut food', 'Incisors')}\nTopic 4: Digestion in humans${q('Juice the liver makes', 'Bile')}`))).rejects.toThrow('already has "Digestion in Humans" as topic 1');
-    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!.topics).toHaveLength(2);
+    expect((await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE10SCI05')!.topics).toHaveLength(2);
   });
 
   it("saves a subject's chapters all at once by the database's rules: renames reach questions, numbers and deletes wait for none", async () => {
     const api = createFakeGamesApi(false);
-    const SCI7 = { board: 'CBSE', class: 7, subject: 'Science' };
+    const SCI7 = PHY9;
     const open = async () => {
       const loaded = chaptersOf((await api.loadList()).chapters, SCI7);
       return { loaded, d: draftOf(loaded) };
     };
     const save = (loaded: AdminChapter[], d: DraftChapter[]) => api.saveChapters(toSave(SCI7, loaded, d));
     let { loaded, d } = await open();
-    const heat = d.find((c) => c.name === 'Heat')!;
+    const heat = d.find((c) => c.name === 'Heat and Energy')!;
     expect(heat.questions).toBeGreaterThan(0);
     // what the page refuses, the database refuses too
     const sneaky = toSave(SCI7, loaded, d);
@@ -117,56 +140,56 @@ describe('the dummy games database', () => {
     // a rename, a new chapter, and fixed topics for a chapter that had none, in one save
     d = renameChapter(d, heat.key, 'Heat and Temperature');
     d = addChapter(d, 12, 'Motion and Time');
-    d = addTopic(d, 'CBSE07SCI02', 1, 'Digestion in Humans');
-    d = setOpen(d, 'CBSE07SCI02', false);
+    d = addTopic(d, 'ICSE09PHY08', 1, 'Echoes');
+    d = setOpen(d, 'ICSE09PHY08', false);
     expect(changeCount(d)).toBe(4);
     expect(await save(loaded, d)).toEqual({ changes: 4 });
-    expect([...(await waitingAll(api)), ...(await api.loadSentBack()).questions].filter((q) => q.chapter_id === 'CBSE07SCI04').every((q) => q.chapter === 'Heat and Temperature')).toBe(true);
-    const nutrition = (await api.loadCatalog()).find((c) => c.chapter_id === 'CBSE07SCI02')!;
-    expect([nutrition.open, nutrition.topics.map((t) => t.topic_id)]).toEqual([false, ['CBSE07SCI02T01']]);
+    expect([...(await waitingAll(api)), ...(await api.loadSentBack()).questions].filter((q) => q.chapter_id === 'ICSE09PHY06').every((q) => q.chapter === 'Heat and Temperature')).toBe(true);
+    const sound = (await api.loadCatalog()).find((c) => c.chapter_id === 'ICSE09PHY08')!;
+    expect([sound.open, sound.topics.map((t) => t.topic_id)]).toEqual([false, ['ICSE09PHY08T01']]);
     // saving from the list as it was before refuses, and keeps nothing
-    await expect(save(loaded, renameChapter(d, heat.key, 'Heat'))).rejects.toThrow(/changed after you opened them .*Nothing was saved/);
+    await expect(save(loaded, renameChapter(d, heat.key, 'Heat and Energy'))).rejects.toThrow(/changed after you opened them .*Nothing was saved/);
     // the new chapter has nothing sent: it moves, then goes
     ({ loaded, d } = await open());
-    d = renumberChapter(d, 'CBSE07SCI12', 11);
+    d = renumberChapter(d, 'ICSE09PHY12', 11);
     await save(loaded, d);
-    expect((await api.loadCatalog()).some((c) => c.chapter_id === 'CBSE07SCI11' && c.name === 'Motion and Time')).toBe(true);
+    expect((await api.loadCatalog()).some((c) => c.chapter_id === 'ICSE09PHY11' && c.name === 'Motion and Time')).toBe(true);
     ({ loaded, d } = await open());
-    await save(loaded, deleteChapter(d, 'CBSE07SCI11'));
+    await save(loaded, deleteChapter(d, 'ICSE09PHY11'));
     expect((await api.loadCatalog()).some((c) => c.name === 'Motion and Time')).toBe(false);
     expect((await api.loadList()).log.slice(0, 2).map((l) => l.detail)).toEqual([
-      'Chapter 11 (CBSE class 7 Science) "Motion and Time" deleted.', 'Chapter 12 (CBSE class 7 Science) "Motion and Time" is now chapter 11.',
+      'Chapter 11 (ICSE class 9 Physics) "Motion and Time" deleted.', 'Chapter 12 (ICSE class 9 Physics) "Motion and Time" is now chapter 11.',
     ]);
   });
 
   it('saves several subjects at once (Bulk add), or none of them, as the database does', async () => {
     const api = createFakeGamesApi(false);
     const list = (await api.loadList()).chapters;
-    const bulk = readBulk('Board: CBSE\nClass: 7\nSubject: Science\n6. Motion and Time\n- Speed\n\nBoard: ICSE\nClass: 9\nSubject: Physics\nForce', list);
+    const bulk = readBulk('Board: CBSE\nClass: 7\nSubject: Science\n6. Motion and Time\n- Speed\n\nBoard: ICSE\nClass: 9\nSubject: Physics\n11. Work and Power', list);
     expect(bulk.problems).toEqual([]);
     const saves = bulk.groups.map((g) => toSave(g.group, g.loaded, g.draft));
     await expect(api.saveChapters([saves[0], { ...saves[1], before: [{ chapter_id: 'ICSE09PHY01', chapter_no: 1, name: 'Old', open: true, topics: [] }] }])).rejects.toThrow(/changed after you opened them/);
     expect((await api.loadList()).chapters.length).toBe(list.length);
     expect(await api.saveChapters(saves)).toEqual({ changes: 3 });
-    expect((await api.loadCatalog()).filter((c) => ['CBSE07SCI06', 'ICSE09PHY01'].includes(c.chapter_id)).map((c) => [c.name, c.topics.length])).toEqual([['Motion and Time', 1], ['Force', 0]]);
+    expect((await api.loadCatalog()).filter((c) => ['CBSE07SCI06', 'ICSE09PHY11'].includes(c.chapter_id)).map((c) => [c.name, c.topics.length])).toEqual([['Motion and Time', 1], ['Work and Power', 0]]);
   });
 
   it("shows up to 20 of a topic's questions, in order, with how many it has", async () => {
     const api = createFakeGamesApi(false);
-    const r = await api.topicQuestions('CBSE07SCI04', 2);
+    const r = await api.topicQuestions('ICSE09PHY06', 2);
     expect(r.total).toBeGreaterThan(0);
     expect(r.questions.map((x) => x.question_id)).toEqual([...r.questions.map((x) => x.question_id)].sort());
-    expect(r.questions[0]).toEqual({ question_id: 'CBSE07SCI04T02Q001', question: expect.any(String), answer: expect.any(String), status: 'approved' });
-    expect((await api.topicQuestions('CBSE07SCI04', 77)).total).toBe(0);
+    expect(r.questions[0]).toEqual({ question_id: 'ICSE09PHY06T02Q001', question: expect.any(String), answer: expect.any(String), status: 'approved' });
+    expect((await api.topicQuestions('ICSE09PHY06', 77)).total).toBe(0);
   });
 
   it('keeps the list for admins only', async () => {
     const api = createFakeGamesApi(false);
-    const loaded = chaptersOf((await api.loadList()).chapters, { board: 'CBSE', class: 7, subject: 'Science' });
+    const loaded = chaptersOf((await api.loadList()).chapters, PHY9);
     api.setRole('hod');
     await expect(api.loadList()).rejects.toThrow(/Only an admin/);
-    await expect(api.saveChapters(toSave({ board: 'CBSE', class: 7, subject: 'Science' }, loaded, draftOf(loaded)))).rejects.toThrow(/Only an admin/);
-    await expect(api.topicQuestions('CBSE07SCI04', 2)).rejects.toThrow(/Only an admin/);
+    await expect(api.saveChapters(toSave(PHY9, loaded, draftOf(loaded)))).rejects.toThrow(/Only an admin/);
+    await expect(api.topicQuestions('ICSE09PHY06', 2)).rejects.toThrow(/Only an admin/);
   });
 
   it('lets only HoDs and admins approve, and only admins manage the team', async () => {

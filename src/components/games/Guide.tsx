@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
-import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_QUESTION, MIN_OPTIONS } from '@/lib/games/format';
+import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_SEND, MAX_PER_TOPIC, MAX_QUESTION, MIN_OPTIONS } from '@/lib/games/format';
 import { cn } from '@/lib/utils';
 import './games.css';
 
-/* "How to write a good question", at the bottom of Write questions: for people, not chatbots. One question taken apart
-   line by line, a whole example, the usual mistakes each shown wrong and then right with why, and the limits. The same
+/* "How to write a good question", at the bottom of Write questions: for people, not chatbots. The Topic line and one
+   question taken apart line by line, a whole example, the usual mistakes each shown wrong and then right with why, and the limits. The same
    rules the checker applies and the chatbot prompt states (src/lib/games/prompt.ts); the numbers come from the code, and
    prompt.test.ts checks that the example reads with no problems. */
 
@@ -23,6 +23,7 @@ function Card({ title, children, className }: { title: string; children: ReactNo
 
 /** The lines of a question: the label, what to write, when it is needed, and an example. */
 const LINES: { label: string; what: ReactNode; when: string; eg: string }[] = [
+  { label: 'Topic:', what: <>Above each topic's questions: the part of the chapter they are about, by its name. A chatbot decides how many topics; the page numbers them.</>, when: 'Above each topic', eg: 'Transfer of Heat' },
   { label: 'Q:', what: <>The question, or a clue. It asks about <b>one fact</b> with <b>one right answer</b>, and makes sense on its own.</>, when: 'Always', eg: 'Gas that green plants take in to make their food' },
   { label: 'A:', what: <>The answer, <b>exactly as a student would type it</b>: a word, a name or a short phrase. Up to {MAX_ANSWER_WORDS} words.</>, when: 'Always', eg: 'Carbon dioxide' },
   { label: 'Fill:', what: <>The same fact as a sentence, with <C>___</C> (three underscores) where the answer goes.</>, when: 'Always *', eg: 'Green plants take in ___ to make their food.' },
@@ -41,6 +42,7 @@ const MISTAKES: { bad: string; good: string; why: string }[] = [
   { bad: 'Wrong: All of the above; None of these; Both a and b', good: 'Wrong: Oxygen; Nitrogen; Hydrogen', why: 'The choices are shuffled, so these make no sense. Write real wrong answers.' },
   { bad: 'Fill: Plants take in carbon dioxide from the air.', good: 'Fill: Plants take in ___ from the air.', why: 'The ___ marks the gap a student fills in.' },
   { bad: 'Q: Is the Sun a star?\nA: Yes', good: 'Q: The Sun is a star\nA: True', why: 'Yes or No can\'t be an answer: write a statement, and True or False.' },
+  { bad: 'Topic 1: MCQs', good: 'Topic: Transfer of Heat', why: 'A topic is a part of the chapter, named as the textbook names it: not a kind of question. No number needed.' },
 ];
 
 export function Guide() {
@@ -48,12 +50,13 @@ export function Guide() {
     <section id="guide" tabIndex={-1} aria-labelledby="guide-h" className="scroll-mt-24 outline-none">
       <h2 id="guide-h" className="text-lg font-bold text-foreground">How to write a good question</h2>
       <p className="mb-4 mt-1 max-w-prose text-[14px] text-warm-prose">
-        Each question is a short block of lines, and every line starts with a label. Leave a blank line between questions. A chatbot
-        given the prompt from step 2 writes them this way; this is what to check, or to follow when you write your own.
+        The questions are grouped under Topic lines, and each question is a short block of lines, every line starting with a label.
+        Leave a blank line between questions. A chatbot given the prompt from step 2 writes them this way; this is what to check, or
+        to follow when you write your own.
       </p>
 
       <div className="grid grid-cols-1 gap-3 text-[14px] leading-relaxed text-warm-prose lg:grid-cols-5">
-        <Card title="One question, line by line" className="lg:col-span-3">
+        <Card title="Each line, and what to write" className="lg:col-span-3">
           <dl className="flex flex-col divide-y divide-border">
             {LINES.map((l) => (
               <div key={l.label} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
@@ -69,22 +72,25 @@ export function Guide() {
         </Card>
 
         <Card title="A whole example" className="lg:col-span-2">
-          <p>Two questions and a True or False one, as the box takes them:</p>
-          <pre data-testid="guide-sample" className="whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Q: Gas that green plants take in to make their food
+          <p>Two topics, as the box takes them:</p>
+          <pre data-testid="guide-sample" className="whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Topic: Photosynthesis
+
+Q: Gas that green plants take in to make their food
 A: Carbon dioxide
 Also: CO2
 Fill: Green plants take in ___ to make their food.
 Wrong: Oxygen; Nitrogen; Hydrogen
 Level: easy
 
-Q: Number of sides of a hexagon
-A: 6
-Also: Six
-Fill: A hexagon has ___ sides.
-Wrong: 5; 7; 8
+Topic: Transpiration
+
+Q: Tiny pores on leaves through which water vapour escapes
+A: Stomata
+Fill: Water vapour escapes from leaves through tiny pores called ___.
+Wrong: Xylem; Phloem; Root hairs
 Level: easy
 
-Q: Rusting of iron is a chemical change
+Q: Transpiration helps pull water up from the roots
 A: True`}</pre>
         </Card>
 
@@ -108,7 +114,8 @@ A: True`}</pre>
             <li>Wrong answers: {MIN_OPTIONS} to {MAX_OPTIONS}.</li>
             <li>Also lines: up to {MAX_ALSO}.</li>
             <li>A question: up to {MAX_QUESTION} characters, on one line.</li>
-            <li>One send: up to {MAX_PER_SEND} questions, all for one topic.</li>
+            <li>A topic: up to {MAX_PER_TOPIC} questions.</li>
+            <li>One send: up to {MAX_PER_SEND} questions, all from one chapter.</li>
           </ul>
         </Card>
 
