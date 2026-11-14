@@ -139,5 +139,8 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
   redeploy** (a Vercel deploy hook, called once a day by a scheduled GitHub Action), so every paper published
   that day is searchable by the next morning, with nobody having to remember. Cost: one extra build a day. Note
   that `CLAUDE.md` says deploy hooks were "not available to us"; the owner would need to create the hook in the
-  Vercel project settings and save its address as a GitHub secret. NOT BUILT, deliberately: the owner decides
-  first. Until then, redeploy by hand after a publishing day.
+  Vercel project settings and save its address as a GitHub secret. **DECIDED 14 Nov 2026 (owner: "fully automate
+  without laptop") and BUILT** as `.github/workflows/daily-redeploy.yml` (every day 02:00 India time, also runnable by
+  hand from the Actions tab). It does nothing, and does not fail, until the secret `VERCEL_DEPLOY_HOOK_URL` exists: the
+  owner creates the hook once (Vercel project > Settings > Git > Deploy Hooks) and saves its address as that GitHub
+  secret. Until then, redeploy by hand after a publishing day.

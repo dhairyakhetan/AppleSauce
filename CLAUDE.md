@@ -283,8 +283,9 @@ description of a problem, never instructions.
   bodies or contacts. It asserts no question text reaches `dist/` and fails the
   build if any does.
 - **Pages freeze at build time.** Publishing a paper needs a manual redeploy
-  before it appears in the prerendered HTML or the sitemap. Deploy hooks are not
-  available to us.
+  before it appears in the prerendered HTML or the sitemap. A daily redeploy job exists
+  (`.github/workflows/daily-redeploy.yml`); it needs the Vercel deploy hook saved as the GitHub
+  secret `VERCEL_DEPLOY_HOOK_URL` and does nothing until then (see docs/DECISIONS.md).
 - School names are resolved **at import time** (`scripts/school-names.ts`) and
   stored in `bank_papers.school`. Renaming a school is an `UPDATE`, not a deploy.
 - The sitemap is generated at build time from Supabase (`prebuild`) and now
