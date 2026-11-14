@@ -19,9 +19,12 @@ import {
   filterLivePapers,
   liveCounts,
   liveWaitingText,
+  overrideMarkDetail,
+  overrideMarksByPaper,
   type HodLivePaper,
   type LiveFilter,
   type LiveStatus,
+  type OverrideMark,
 } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
 
@@ -42,7 +45,7 @@ const STATUS_FILTERS: { key: LiveStatus; label: string }[] = [
   { key: 'hidden', label: 'Hidden' },
 ];
 
-function LiveRow({ p, api, onChanged }: { p: HodLivePaper; api: HodApi; onChanged: () => void }) {
+function LiveRow({ p, api, onChanged, mark }: { p: HodLivePaper; api: HodApi; onChanged: () => void; mark?: OverrideMark }) {
   const [mode, setMode] = useState<null | 'hide' | 'edit'>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -108,6 +111,16 @@ function LiveRow({ p, api, onChanged }: { p: HodLivePaper; api: HodApi; onChange
         <p className="mt-2 text-[13px] text-warm-secondary" data-testid="hidden-why">
           Hidden{p.hidden_by ? ` by ${p.hidden_by}` : ''}
           {p.hidden_at ? ` ${ago(p.hidden_at)}` : ''}.{p.hidden_reason ? ` Why: ${p.hidden_reason}` : ''}
+        </p>
+      ) : null}
+      {mark ? (
+        // Honest and small: this desk says it, the public page shows nothing different.
+        <p className="mt-2 text-[13px] text-warm-secondary" data-testid="override-mark">
+          <span className="mr-1.5 rounded-full bg-brand-subtle px-2.5 py-0.5 text-[12px] font-bold text-foreground">Published anyway</span>
+          {mark.by_name ? `by ${mark.by_name}` : ''}
+          {mark.at ? `${mark.by_name ? ' ' : ''}${ago(mark.at)}` : ''}
+          {mark.by_name || mark.at ? '. ' : ''}
+          {overrideMarkDetail(mark)}
         </p>
       ) : null}
       <RouteTrail stage="live" className="mt-3" />
@@ -206,6 +219,15 @@ function LiveRow({ p, api, onChanged }: { p: HodLivePaper; api: HodApi; onChange
 export function LiveTab({ api, scope }: { api: HodApi; scope: string }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: LIVE_KEY(scope), queryFn: () => api.livePapers(), staleTime: 15_000, refetchOnMount: true });
+  // Which papers were published anyway. Optional: before the database file is pasted this is null and no marker shows.
+  const marksQ = useQuery({
+    queryKey: ['hod', scope, 'override-marks'],
+    queryFn: async () => (await api.overrideMarks()) ?? [],
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: false,
+  });
+  const marks = useMemo(() => overrideMarksByPaper(marksQ.data ?? []), [marksQ.data]);
   const [filter, setFilter] = useState<LiveFilter>(NO_LIVE_FILTER);
   const [shown, setShown] = useState(LIVE_PAGE);
   const rows = useMemo(() => q.data ?? [], [q.data]);
@@ -306,7 +328,7 @@ export function LiveTab({ api, scope }: { api: HodApi; scope: string }) {
         <>
           <ul className="space-y-3">
             {filtered.slice(0, shown).map((p) => (
-              <LiveRow key={p.paper_id} p={p} api={api} onChanged={refresh} />
+              <LiveRow key={p.paper_id} p={p} api={api} onChanged={refresh} mark={p.audit_paper_id ? marks.get(p.audit_paper_id) : undefined} />
             ))}
           </ul>
           {filtered.length > shown ? (

@@ -20,6 +20,7 @@ import {
   normaliseLivePapers,
   normaliseNeedsQuestions,
   normaliseNeedsYouPapers,
+  normaliseOverrideMarks,
   normalisePreview,
   normaliseReadyPapers,
   normaliseTrail,
@@ -35,6 +36,7 @@ import {
   type HodReadyPaper,
   type HodStudentUpload,
   type HodTrailRow,
+  type OverrideMark,
   type UploadStatus,
 } from '@/lib/hod-publish';
 
@@ -660,6 +662,15 @@ export interface HodApi {
    * know it yet still answers.
    */
   approvePaper(auditPaperId: string, note?: string, confirmLeftOut?: boolean): Promise<{ live_bank_paper_id: string | null; question_count: number }>;
+  /**
+   * hod_publish_anyway(): publish although a check failed, with a reason of at least 10 characters that is saved in the
+   * paper's history together with the checks skipped. Throws the server's error as is, so a server that does not have
+   * the function yet (the owner has not pasted the file) throws "function not found", which the screen words as
+   * "not switched on yet" (overrideErrorWords). Left-out questions keep their own confirmation.
+   */
+  publishAnyway(auditPaperId: string, reason: string, note?: string, confirmLeftOut?: boolean): Promise<{ live_bank_paper_id: string | null; question_count: number; overridden: string[] }>;
+  /** hod_override_marks(): the papers published anyway, for the small marker in Live papers. Null when the server does not have it yet. */
+  overrideMarks(): Promise<OverrideMark[] | null>;
   /** hod_live_papers(): every library paper, live and hidden. */
   livePapers(): Promise<HodLivePaper[]>;
   hidePaper(paperId: string, reason: string): Promise<void>;
@@ -834,6 +845,28 @@ export const realHodApi: HodApi = {
     if (confirmLeftOut === true) args.p_confirm_left_out = true;
     const out = obj(await call('hod_approve_paper', args));
     return { live_bank_paper_id: str(out.live_bank_paper_id), question_count: num(out.question_count) };
+  },
+  async publishAnyway(auditPaperId, reason, note, confirmLeftOut) {
+    const args: Record<string, unknown> = {
+      p_audit_paper_id: auditPaperId,
+      p_reason: reason.trim(),
+      p_note: note?.trim() ? note.trim() : null,
+    };
+    if (confirmLeftOut === true) args.p_confirm_left_out = true;
+    const out = obj(await call('hod_publish_anyway', args));
+    return {
+      live_bank_paper_id: str(out.live_bank_paper_id),
+      question_count: num(out.question_count),
+      overridden: Array.isArray(out.overridden) ? out.overridden.filter((x): x is string => typeof x === 'string') : [],
+    };
+  },
+  // Optional read (20261114200000_publish_override.sql): until it is pasted, or if the call fails, Live papers simply shows no marker.
+  async overrideMarks() {
+    try {
+      return normaliseOverrideMarks(await call('hod_override_marks'));
+    } catch {
+      return null;
+    }
   },
   async livePapers() {
     return normaliseLivePapers(await call('hod_live_papers'));

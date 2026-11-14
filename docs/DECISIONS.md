@@ -133,6 +133,13 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
 
 ## Owner decisions owed (found in the 13 Nov 2026 fault hunt)
 
+- **"Publish anyway": an HOD or admin may publish a paper whose checks failed, by ticking a box and typing why (14 Nov
+  2026).** Owner: "allow me to ignore and pass as an override"; "still build it". The reason (at least 10 characters),
+  who did it and which checks were skipped go into the paper's history (History tab). A small "Published anyway" marker
+  shows in Live papers; the public page shows nothing different. Still hard stops: nothing passed yet, no school, class,
+  subject or board, a live Maths copy; questions left out still need their own confirmation. BUILT, waiting for the
+  owner to paste `PASTE_IN_SUPABASE_SQL_EDITOR_PUBLISH_OVERRIDE_20261114.sql`; until then the button says it is not
+  switched on yet and changes nothing. The normal Publish button never skips a check.
 - **A paper that goes live has no page of its own for search engines, and is not in the sitemap, until the site is
   redeployed.** The pages and the sitemap are made at build time. The app itself shows the new paper at once (the
   Latest papers shelf reads it live), so students are fine; only search engines wait. **Recommendation: a daily

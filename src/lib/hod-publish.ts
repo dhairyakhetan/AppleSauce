@@ -14,6 +14,7 @@
 import { normaliseOptions, type ReviewOption } from '@/lib/admin-approval-shape';
 import { marksTextInvalid } from '@/lib/hod-desk';
 import { isSlowError, SLOW_WORDS } from '@/lib/checker-timeout';
+import { isNotSwitchedOn } from '@/lib/paper-asks';
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 const num = (v: unknown): number => {
@@ -640,6 +641,124 @@ export function normalisePreview(raw: unknown): HodPreview {
  */
 export function canPublishNow(checks: HodCheck[], leftOut: number, confirmedLeftOut: boolean, waiting: boolean): boolean {
   return waiting && allChecksPass(checks) && (leftOut <= 0 || confirmedLeftOut);
+}
+
+// ------------------------------------------------------------ Publish anyway (owner, 14 Nov 2026)
+
+/* "allow me to ignore and pass as an override". When a check fails, an HOD or admin may still publish by ticking a box
+   and typing why. The reason and the checks skipped are saved in the paper's history by the database function
+   hod_publish_anyway (supabase/migrations/20261114200000_publish_override.sql, pasted by the owner). Until it is pasted
+   the call fails with "function not found" and the screen says it is not switched on yet; nothing is changed. */
+
+/** The shortest reason that is accepted (the database enforces the same number). */
+export const OVERRIDE_MIN_REASON = 10;
+export const OVERRIDE_MAX_REASON = 500;
+
+export const OVERRIDE_TICK_TEXT = 'I know this paper has a problem. I want to publish it anyway.';
+export const OVERRIDE_REASON_LABEL = "Why are you publishing with this problem? This is saved in the paper's history.";
+
+/** The line shown when the database file has not been pasted yet. Nothing was published or changed. */
+export const OVERRIDE_NOT_ON_WORDS =
+  'Publish anyway is not switched on yet. Nothing was published and nothing was changed. The owner needs to paste one database file first.';
+
+/** Null when the reason is good enough; otherwise what is still needed, in plain words. */
+export function overrideReasonProblem(reason: string): string | null {
+  const n = reason.trim().length;
+  if (n === 0) return `Write why, in at least ${OVERRIDE_MIN_REASON} characters.`;
+  if (n < OVERRIDE_MIN_REASON) {
+    const more = OVERRIDE_MIN_REASON - n;
+    return `${more} more ${more === 1 ? 'character' : 'characters'} needed.`;
+  }
+  if (n > OVERRIDE_MAX_REASON) return `That is too long (${OVERRIDE_MAX_REASON} characters at most).`;
+  return null;
+}
+
+/** Offered only when the paper is waiting and at least one check failed. A paper that passes uses the normal Publish. */
+export function overrideOffered(checks: HodCheck[], waiting: boolean): boolean {
+  return waiting && failedChecks(checks).length > 0;
+}
+
+/**
+ * Publish anyway is enabled when the box is ticked, the reason is long enough, and any questions left out are
+ * confirmed (that rule is the same as for a normal publish).
+ */
+export function canPublishAnywayNow(opts: {
+  checks: HodCheck[];
+  waiting: boolean;
+  ticked: boolean;
+  reason: string;
+  leftOut: number;
+  confirmedLeftOut: boolean;
+}): boolean {
+  return (
+    overrideOffered(opts.checks, opts.waiting) &&
+    opts.ticked &&
+    overrideReasonProblem(opts.reason) === null &&
+    (opts.leftOut <= 0 || opts.confirmedLeftOut)
+  );
+}
+
+/** Why the Publish anyway button is still off, in plain words. Empty when it is on. */
+export function overrideWhyOff(opts: { ticked: boolean; reason: string; leftOut: number; confirmedLeftOut: boolean }): string {
+  if (!opts.ticked) return 'Tick the box to say you know about the problem.';
+  const problem = overrideReasonProblem(opts.reason);
+  if (problem) return problem;
+  if (opts.leftOut > 0 && !opts.confirmedLeftOut) return 'Tick the box about the questions left out too.';
+  return '';
+}
+
+/** The problems the check list found, as one sentence for the confirm box. */
+export function overrideProblemsText(failed: Pick<HodCheck, 'label'>[]): string {
+  const labels = failed.map((c) => c.label.replace(/\.$/, ''));
+  if (labels.length === 0) return '';
+  if (labels.length === 1) return `The check that failed: ${labels[0]}.`;
+  return `The checks that failed: ${labels.join('; ')}.`;
+}
+
+/** What to show when Publish anyway did not go through. Not switched on is said plainly; everything else is the server's words. */
+export function overrideErrorWords(err: unknown): string {
+  if (isNotSwitchedOn(err)) return OVERRIDE_NOT_ON_WORDS;
+  return `Not published. The paper is still waiting for you. ${errorWords(err)}`;
+}
+
+/** One paper that was published anyway: the small marker in Live papers and the line under it. */
+export interface OverrideMark {
+  audit_paper_id: string;
+  live_bank_paper_id: string | null;
+  at: string | null;
+  by_name: string | null;
+  reason: string;
+  skipped: string[];
+}
+
+export function normaliseOverrideMarks(raw: unknown): OverrideMark[] {
+  const out: OverrideMark[] = [];
+  for (const x of asRows(raw)) {
+    const r = obj(x);
+    const id = str(r.audit_paper_id);
+    if (!id) continue;
+    out.push({
+      audit_paper_id: id,
+      live_bank_paper_id: str(r.live_bank_paper_id),
+      at: str(r.at),
+      by_name: str(r.by_name),
+      reason: str(r.reason) ?? '',
+      skipped: strList(r.skipped),
+    });
+  }
+  return out;
+}
+
+export function overrideMarksByPaper(rows: OverrideMark[]): Map<string, OverrideMark> {
+  return new Map(rows.map((m) => [m.audit_paper_id, m]));
+}
+
+/** "Published anyway. Skipped: Pictures are in place. Why: ..." (the who and when are added by the screen). */
+export function overrideMarkDetail(m: Pick<OverrideMark, 'reason' | 'skipped'>): string {
+  const parts: string[] = [];
+  if (m.skipped.length > 0) parts.push(`Checks skipped: ${m.skipped.join('; ')}.`);
+  if (m.reason.trim() !== '') parts.push(`Why: ${m.reason.trim()}`);
+  return parts.join(' ');
 }
 
 /** The words next to the tick box. */

@@ -11,8 +11,8 @@
  * server's sentence; hiding needs a reason; rejecting an upload needs a note.
  */
 
-import type { AiTrustOverall, AssignmentExplanation, HodCheck, HodDeskCounts, HodLivePaper, HodNeedsQuestion, HodNeedsYouPaper, HodPreview, HodReadyPaper, HodStudentUpload, HodTrailRow, PreviewHeader, PreviewQuestion, TrailStage, UploadStatus } from '@/lib/hod-publish';
-import { CHECKS, allChecksPass, fieldProblem, PUBLISH_FIELDS, LIVE_FIELDS, normaliseChecks } from '@/lib/hod-publish';
+import type { AiTrustOverall, AssignmentExplanation, HodCheck, HodDeskCounts, HodLivePaper, HodNeedsQuestion, HodNeedsYouPaper, HodPreview, HodReadyPaper, HodStudentUpload, HodTrailRow, OverrideMark, PreviewHeader, PreviewQuestion, TrailStage, UploadStatus } from '@/lib/hod-publish';
+import { CHECKS, OVERRIDE_MAX_REASON, OVERRIDE_MIN_REASON, allChecksPass, fieldProblem, PUBLISH_FIELDS, LIVE_FIELDS, normaliseChecks } from '@/lib/hod-publish';
 import { dummyPageDataUrl, dummyPictureDataUrl } from '@/dummy/checker-fixtures';
 import type { StagePictureItem } from '@/lib/stage-pictures';
 
@@ -384,6 +384,8 @@ export interface GoLiveFake {
     paperPreview(id: string): Promise<HodPreview>;
     updatePublishMeta(id: string, field: string, value: string): Promise<void>;
     approvePaper(id: string, note?: string, confirmLeftOut?: boolean): Promise<{ live_bank_paper_id: string | null; question_count: number }>;
+    publishAnyway(id: string, reason: string, note?: string, confirmLeftOut?: boolean): Promise<{ live_bank_paper_id: string | null; question_count: number; overridden: string[] }>;
+    overrideMarks(): Promise<OverrideMark[] | null>;
     livePapers(): Promise<HodLivePaper[]>;
     hidePaper(id: string, reason: string): Promise<void>;
     restorePaper(id: string): Promise<void>;
@@ -404,12 +406,14 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
   let papers: FP[] = [];
   let live: HodLivePaper[] = [];
   let uploads: HodStudentUpload[] = [];
+  let marks: OverrideMark[] = [];
   let metaSeq = 0;
 
   function seed() {
     papers = seedPapers();
     live = LIVE_SEED.map((x) => ({ ...x }));
     uploads = uploadsSeed();
+    marks = [];
     metaSeq = 0;
   }
   seed();
@@ -745,34 +749,50 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
           { details: `left_out:${aside}`, hint: 'left_out' },
         );
       }
-      p.approval = 'approved';
-      p.live_id = `live-${100 + live.length}`;
-      const passed = real(p).filter((x) => x.state === 'passed');
-      live.unshift({
-        paper_id: p.live_id,
-        title: p.title,
-        subject: p.header.subject,
-        cls: p.header.cls,
-        school: p.header.school,
-        board: p.header.board,
-        year: p.header.year,
-        exam: p.header.exam,
-        marks: p.header.marks,
-        question_count: passed.length,
-        allowed_time_minutes: p.header.allowed_time_minutes,
-        is_published: true,
-        hidden_reason: null,
-        hidden_at: null,
-        hidden_by: null,
-        audit_paper_id: p.id,
-        from_pipeline: true,
-        waiting_students: 0,
-        waiting_you: 0,
-        general_instructions: p.header.general_instructions,
-        incomplete_note: p.header.incomplete_note,
-      });
-      record(`approve ${id} ${note ?? ''}`);
-      return { live_bank_paper_id: p.live_id, question_count: passed.length };
+      return publishNow(p, note, 'approve');
+    },
+    // Same rules as hod_publish_anyway: a reason of at least 10 characters; a failed check does not stop it, but a paper with
+    // nothing passed or no school, class, subject and board still does; left-out questions still need the confirmation.
+    async publishAnyway(id, reason, note, confirmLeftOut) {
+      const why = reason.trim();
+      if (why.length < OVERRIDE_MIN_REASON) throw pgError('Say why you are publishing with this problem (at least 10 characters).');
+      if (why.length > OVERRIDE_MAX_REASON) throw pgError('That reason is too long (500 characters at most).');
+      const p = find(id);
+      if (p.approval !== 'awaiting') throw pgError('This paper is not waiting to go live.', '55000');
+      const failed = checksOf(p).filter((c) => !c.ok);
+      if (real(p).filter((x) => x.state === 'passed').length === 0) {
+        throw pgError('Publish anyway cannot skip this: no question is passed yet, so there would be nothing to show.', '55000');
+      }
+      const missing = (['school', 'cls', 'subject', 'board'] as const).filter((k) => !p.header[k]).map((k) => (k === 'cls' ? 'class' : k));
+      if (missing.length > 0) {
+        throw pgError(`Publish anyway cannot skip this: the live paper needs a school, class, subject and board. Missing: ${missing.join(', ')}.`, '55000');
+      }
+      const aside = real(p).filter((x) => x.state === 'set_aside').length;
+      if (aside > 0 && confirmLeftOut !== true) {
+        throw Object.assign(
+          pgError(
+            aside === 1 ? '1 question is left out of this paper. Confirm to publish it without it.' : `${aside} questions are left out of this paper. Confirm to publish it without them.`,
+            'P0001',
+          ),
+          { details: `left_out:${aside}`, hint: 'left_out' },
+        );
+      }
+      const out = publishNow(p, note, 'approve anyway');
+      if (failed.length > 0) {
+        marks.push({
+          audit_paper_id: p.id,
+          live_bank_paper_id: out.live_bank_paper_id,
+          at: new Date().toISOString(),
+          by_name: 'You',
+          reason: why,
+          skipped: failed.map((c) => c.label),
+        });
+        record(`override ${id} ${why}`);
+      }
+      return { ...out, overridden: failed.map((c) => c.key) };
+    },
+    async overrideMarks() {
+      return marks.map((m) => ({ ...m, skipped: [...m.skipped] }));
     },
     async livePapers() {
       return live.map((l) => ({ ...l }));
@@ -883,6 +903,38 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
       record(`staged ${questionId}`);
     },
   };
+
+  /** The publish itself, shared by the normal button and Publish anyway: the paper goes live with its passed questions. */
+  function publishNow(p: FP, note: string | undefined, label: string): { live_bank_paper_id: string | null; question_count: number } {
+    p.approval = 'approved';
+    p.live_id = `live-${100 + live.length}`;
+    const passed = real(p).filter((x) => x.state === 'passed');
+    live.unshift({
+      paper_id: p.live_id,
+      title: p.title,
+      subject: p.header.subject,
+      cls: p.header.cls,
+      school: p.header.school,
+      board: p.header.board,
+      year: p.header.year,
+      exam: p.header.exam,
+      marks: p.header.marks,
+      question_count: passed.length,
+      allowed_time_minutes: p.header.allowed_time_minutes,
+      is_published: true,
+      hidden_reason: null,
+      hidden_at: null,
+      hidden_by: null,
+      audit_paper_id: p.id,
+      from_pipeline: true,
+      waiting_students: 0,
+      waiting_you: 0,
+      general_instructions: p.header.general_instructions,
+      incomplete_note: p.header.incomplete_note,
+    });
+    record(`${label} ${p.id} ${note ?? ''}`);
+    return { live_bank_paper_id: p.live_id, question_count: passed.length };
+  }
 
   return { api, reset: seed };
 }

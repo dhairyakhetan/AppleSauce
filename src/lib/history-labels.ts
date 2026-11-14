@@ -399,6 +399,7 @@ export const ACTION_LABELS: Record<string, (c: Ctx) => string> = {
   revoke_checker: () => 'removed checker access',
   hod_send_back: (c) => `sent ${c.q} back to the checkers`,
   hod_set_aside: (c) => `set ${c.q} aside`,
+  hod_publish_override: () => 'published a paper even though a check had failed, and said why',
   hod_assign_paper: () => 'gave a paper to a checker',
   hod_unassign: () => 'took a paper back from a checker',
   hod_request_approve: () => 'approved a request to fix or change something, so it goes on to Claude',

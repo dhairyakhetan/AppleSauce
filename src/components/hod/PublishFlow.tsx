@@ -16,8 +16,12 @@ import { useConfirm } from '@/components/ui/use-confirm';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import type { HodApi } from '@/lib/hod-api';
 import {
+  OVERRIDE_MAX_REASON,
+  OVERRIDE_REASON_LABEL,
+  OVERRIDE_TICK_TEXT,
   PUBLISH_FIELDS,
   allChecksPass,
+  canPublishAnywayNow,
   canPublishNow,
   leftOutConfirmText,
   checkFixHint,
@@ -28,6 +32,10 @@ import {
   junkNumbersText,
   leftOutText,
   marksMismatch,
+  overrideErrorWords,
+  overrideOffered,
+  overrideProblemsText,
+  overrideWhyOff,
   type HodPreview,
   type PublishField,
 } from '@/lib/hod-publish';
@@ -42,7 +50,10 @@ import { cn } from '@/lib/utils';
         instructions; each field saves on its own and says Saved.
      4. Publish: enabled only when all four checks pass. When the server refuses
         it, its own sentence is shown as written.
-   Nothing here works around a failed check. */
+   When a check fails, "Publish anyway" sits under the red list (owner, 14 Nov 2026:
+   "allow me to ignore and pass as an override"): tick a box, type why (10 characters
+   or more), and the reason and the checks skipped are saved in the paper's history.
+   It is a separate, deliberate button; the normal Publish never skips a check. */
 
 export const PREVIEW_KEY = (scope: string, paperId: string) => ['hod', scope, 'preview', paperId] as const;
 
@@ -116,6 +127,82 @@ function CheckList({ preview, go, paperId }: { preview: HodPreview; go: (s: Step
   );
 }
 
+/** The "Publish anyway" box under the red list. Shown only while a check fails; the page owns the state and the call. */
+export function PublishAnywayBox({
+  ticked,
+  reason,
+  error,
+  busy,
+  canOverride,
+  whyOff,
+  onTick,
+  onReason,
+  onPublish,
+}: {
+  ticked: boolean;
+  reason: string;
+  error: string | null;
+  busy: boolean;
+  canOverride: boolean;
+  whyOff: string;
+  onTick: (v: boolean) => void;
+  onReason: (v: string) => void;
+  onPublish: () => void;
+}) {
+  return (
+    <div className="mt-3 rounded-[18px] bg-muted shadow-card p-4" data-testid="publish-anyway">
+      <p className="text-[14px] font-bold text-foreground">Or publish anyway</p>
+      <p className="mt-0.5 text-[13px] text-warm-secondary">
+        Fixing the problem is better. If it cannot wait, you can put the paper on the site as it is. Visitors will not see anything different.
+      </p>
+      <label className="mt-3 flex items-start gap-3 text-[14px] font-semibold text-foreground" data-testid="publish-anyway-tick">
+        <input
+          type="checkbox"
+          checked={ticked}
+          disabled={busy}
+          onChange={(ev) => onTick(ev.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-[hsl(var(--brand))]"
+        />
+        <span>{OVERRIDE_TICK_TEXT}</span>
+      </label>
+      {ticked ? (
+        <label className="mt-3 flex flex-col gap-1 text-[13px] font-semibold text-foreground">
+          {OVERRIDE_REASON_LABEL}
+          <textarea
+            value={reason}
+            onChange={(ev) => onReason(ev.target.value)}
+            rows={3}
+            maxLength={OVERRIDE_MAX_REASON}
+            disabled={busy}
+            aria-describedby="publish-anyway-help"
+            data-testid="publish-anyway-reason"
+            className="w-full rounded-xl bg-card p-3 text-[16px] font-normal outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          />
+        </label>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mt-3 rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-destructive" data-testid="publish-anyway-error">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          className={cn(actionToneClass('dark'), 'min-w-[160px]')}
+          disabled={!canOverride}
+          aria-describedby="publish-anyway-help"
+          onClick={onPublish}
+        >
+          {busy ? 'Publishing...' : 'Publish anyway'}
+        </button>
+        <p id="publish-anyway-help" className="text-[13px] text-warm-secondary" data-testid="publish-anyway-help">
+          {canOverride ? "Your name and reason go in the paper's history." : whyOff}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: string; paperId: string }) {
   const qc = useQueryClient();
   const { confirm, confirmDialog } = useConfirm();
@@ -124,7 +211,10 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
   const [busy, setBusy] = useState(false);
   const [confirmedLeftOut, setConfirmedLeftOut] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [published, setPublished] = useState<{ liveId: string | null; questions: number } | null>(null);
+  const [published, setPublished] = useState<{ liveId: string | null; questions: number; anyway?: boolean } | null>(null);
+  const [overrideTicked, setOverrideTicked] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideError, setOverrideError] = useState<string | null>(null);
   const stepRefs = useId();
 
   const q = useQuery({
@@ -185,6 +275,11 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
       <div>
         <div className="rounded-[18px] bg-mint p-5" role="status" data-testid="publish-success">
           <h2 className="text-[20px] font-extrabold text-foreground">Published</h2>
+          {published.anyway ? (
+            <p className="mt-1 text-[14px] font-semibold text-foreground" data-testid="publish-anyway-done">
+              Published anyway. Your reason is saved in the paper's history.
+            </p>
+          ) : null}
           <p className="mt-1 text-[14px] text-foreground">
             {published.questions > 0 ? `${published.questions} ${published.questions === 1 ? 'question' : 'questions'} are live.` : 'The paper is live.'} Public pages and the
             sitemap pick it up after the next site update.
@@ -228,6 +323,9 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
   const pass = allChecksPass(data.checks);
   const leftOutCount = data.counts.set_aside;
   const canPublish = canPublishNow(data.checks, leftOutCount, confirmedLeftOut, waiting) && !busy;
+  const offerOverride = overrideOffered(data.checks, waiting);
+  const canOverride =
+    canPublishAnywayNow({ checks: data.checks, waiting, ticked: overrideTicked, reason: overrideReason, leftOut: leftOutCount, confirmedLeftOut }) && !busy;
   const alreadyLive = paper.kind === 'retro' || paper.is_live;
   const failed = failedChecks(data.checks);
   const leftOut = leftOutText(data.counts.set_aside);
@@ -256,6 +354,32 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
     } catch (err) {
       // The server's sentence, as written: it names every check that failed.
       setPublishError(`Not published. The paper is still waiting for you. ${errorWords(err)}`);
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publishAnyway() {
+    if (!canOverride) return;
+    const ok = await confirm({
+      title: 'Publish this paper with a problem?',
+      description: `${overrideProblemsText(failed)} ${data.counts.passed} ${data.counts.passed === 1 ? 'question goes' : 'questions go'} live for visitors. Your reason is saved in the paper's history with your name. You can hide the paper afterwards from Live papers.`,
+      confirmLabel: 'Publish anyway',
+      cancelLabel: 'Not yet',
+    });
+    if (!ok) return;
+    setBusy(true);
+    setOverrideError(null);
+    setPublishError(null);
+    try {
+      const out = await api.publishAnyway(paperId, overrideReason.trim(), note, leftOutCount > 0 ? confirmedLeftOut : undefined);
+      toast.success('Paper published. Your reason is saved in its history.');
+      setPublished({ liveId: out.live_bank_paper_id, questions: out.question_count, anyway: out.overridden.length > 0 });
+      refresh();
+    } catch (err) {
+      // Not switched on yet is said plainly, and nothing was changed; any other refusal is the server's own sentence.
+      setOverrideError(overrideErrorWords(err));
       refresh();
     } finally {
       setBusy(false);
@@ -426,6 +550,20 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
                   Go to the checks
                 </button>
               </div>
+            ) : null}
+
+            {offerOverride ? (
+              <PublishAnywayBox
+                ticked={overrideTicked}
+                reason={overrideReason}
+                error={overrideError}
+                busy={busy}
+                canOverride={canOverride}
+                whyOff={overrideWhyOff({ ticked: overrideTicked, reason: overrideReason, leftOut: leftOutCount, confirmedLeftOut })}
+                onTick={setOverrideTicked}
+                onReason={setOverrideReason}
+                onPublish={() => void publishAnyway()}
+              />
             ) : null}
 
             {leftOutCount > 0 ? (
