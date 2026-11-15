@@ -49,6 +49,50 @@ export function marksShownInText(marks: number | null | undefined, text: string 
   return new RegExp(`\\[\\s*${marks}\\s*\\]`).test(text ?? '');
 }
 
+/** 150 -> "2 hours 30 minutes"; 45 -> "45 minutes"; 60 -> "1 hour". Null when the
+ *  paper recorded no usable time, so the header prints no "Time allowed" at all
+ *  rather than a made-up one. Same words as the HOD publish preview. */
+export function formatPaperTime(minutes: number | null | undefined): string | null {
+  if (minutes === null || minutes === undefined || !Number.isFinite(minutes) || minutes <= 0) return null;
+  const h = Math.floor(minutes / 60);
+  const rest = Math.round(minutes % 60);
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} ${h === 1 ? 'hour' : 'hours'}`);
+  if (rest > 0) parts.push(`${rest} ${rest === 1 ? 'minute' : 'minutes'}`);
+  return parts.join(' ');
+}
+
+/** Whether an option's own text already starts with its printed letter or
+ *  number ("a. Dominion status", "(c) 1947", "B) Delhi", "(ii) ..."). Most
+ *  options do. When one does, the printed paper look needs no marker of ours;
+ *  when one does not, a small dot stands in so the choices still read as a
+ *  list. Only decides the marker: the option text itself is never touched. */
+export function optionHasOwnLabel(text: string | null | undefined): boolean {
+  return /^\s*(\(\s*[A-Za-z0-9]{1,4}\s*\)|[A-Za-z0-9]{1,3}\s*[.)])(\s|$)/.test(text ?? '');
+}
+
+/** How far a printed sub-part sits in from its parent: 20px a level, three
+ *  levels at most, nothing for a top-level question. */
+export function partIndent(depth: number): { marginLeft: string } | undefined {
+  return depth > 0 ? { marginLeft: `${Math.min(depth, 3) * 20}px` } : undefined;
+}
+
+/** The two heading lines under the school name on the printed header:
+ *  "Pre-board Examination 2023-24" (exam and year, whichever exist) and
+ *  "Class X · Maths · ICSE". A fact the paper does not have is left out. */
+export function paperHeaderLines(p: {
+  exam: string | null | undefined;
+  year: string | number | null | undefined;
+  cls: string | null | undefined;
+  subject: string;
+  board: string | null | undefined;
+}): { headline: string; sub: string } {
+  const year = p.year === null || p.year === undefined ? '' : String(p.year).trim();
+  const headline = [p.exam?.trim(), year].filter(Boolean).join(' ');
+  const sub = [p.cls ? `Class ${p.cls}` : null, p.subject, p.board?.trim()].filter(Boolean).join(' · ');
+  return { headline, sub };
+}
+
 /* ---------------------------------------------------------------------------
    Pipeline fields, round two: suggested_time_minutes, section_label,
    alternative_group/alternative_label, parent_question_id (sub-parts).

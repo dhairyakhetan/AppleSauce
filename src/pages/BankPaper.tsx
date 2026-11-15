@@ -22,15 +22,19 @@ import NotFound from '@/pages/NotFound';
 import { buildPaperSeo } from '@/lib/paper-seo';
 
 import {
-  resolveDisplayNumber, showPaperExtras, showIncompleteNote, showQuestionInstructions,
+  resolveDisplayNumber, showQuestionInstructions,
   marksShownInText as marksInText, showSuggestedTime, sectionHeadings, alternativeRuns,
-  alternativeFollowerIds, subPartsOf, topLevelIds,
+  alternativeFollowerIds, subPartsOf, topLevelIds, formatPaperTime, paperHeaderLines,
 } from '@/lib/bank-paper-display';
 import { displayBodyWithoutDuplicateNumber } from '@/lib/checker-body';
 import { qtypeLabel } from '@/lib/qtype-label';
 import { questionMatchesSearch, searchableCount } from '@/lib/bank-question-search';
 import { DebugId } from '@/components/DebugId';
 import { HeldQuestionCard } from '@/components/papers/held-question-card';
+import {
+  PaperSurface, PaperHeader, SectionTitle, OrDivider,
+  QuestionRow, OptionList, QuestionMeta,
+} from '@/components/papers/printed-paper';
 
 /** The teachers route for a bank paper's subject, or the filtered browse
  *  when that subject has no page of its own. Never an invented slug. */
@@ -199,7 +203,7 @@ function FigureImage({ src, alt, dims }: { src: string; alt: string; dims?: [num
   const [bad, setBad] = useState(false);
   if (bad) {
     return (
-      <p role="status" className="rounded-[12px] bg-card px-3 py-2 text-[13px] text-warm-secondary">
+      <p role="status" className="rounded-[6px] bg-muted px-3 py-2 font-sans text-[13px] text-warm-secondary">
         The diagram for this question did not load. Reload the page to try again.
       </p>
     );
@@ -212,7 +216,7 @@ function FigureImage({ src, alt, dims }: { src: string; alt: string; dims?: [num
       loading="lazy"
       decoding="async"
       onError={() => setBad(true)}
-      className="max-h-[300px] w-auto max-w-full rounded-[12px] bg-card p-2 shadow-border"
+      className="max-h-[300px] w-auto max-w-full rounded-[6px] bg-white p-1.5 shadow-border"
     />
   );
 }
@@ -545,186 +549,143 @@ export default function BankPaper() {
        repeat of the same number (owner: "the number lives in the number
        box only") without a second, possibly different, resolution. */
     const shownNumber = resolveDisplayNumber(row.dn, displayNumbers.get(row.i), row.n);
+    const qLabel = questionNames.get(row.i) ?? '';
+    const reportName = reportFor === row.i
+      ? `Close report for question ${qLabel}`.trim()
+      : `Report a problem with question ${qLabel}`.trim();
     return (
-    <li
-      key={row.i}
-      id={`q-${row.i}`}
-      /* D77: a sub-part ("5(a)") nests under its parent with an indent and a
-         rule down its left edge, the same visual language paper-edit.tsx
-         already uses for the checker's own nesting. depth is 0 for every
-         top-level question, so this never changes today's layout for a
-         paper with no parent_question_id at all. */
-      style={depth > 0 ? { marginLeft: `${Math.min(depth, 3) * 16}px` } : undefined}
-      className={`min-w-0 animate-card-blur-in rounded-[18px] bg-muted p-[16px] motion-reduce:animate-none${
-        depth > 0 ? ' border-l-2 border-border pl-3' : ''
-      }`}
-    >
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        {(() => {
-          const shown = shownNumber;
-          return shown ? (
-            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-blue px-1.5 text-[12px] font-extrabold tabular-nums text-white">
-              {shown}
-            </span>
-          ) : null;
-        })()}
-        {row.m !== null && !marksShownInText(row) && (
-          <span className="rounded-full bg-card px-2 py-0.5 text-[12px] font-bold tabular-nums text-foreground shadow-border">
-            {row.m} {row.m === 1 ? 'mark' : 'marks'}
-          </span>
-        )}
-        {qtypeLabel(row.ty) && (
-          <span className="rounded-full bg-card px-2 py-0.5 text-[12px] font-semibold text-warm-secondary shadow-border">
-            {qtypeLabel(row.ty)}
-          </span>
-        )}
-        {row.c && (
-          <span className="rounded-full bg-brand-blue-subtle px-2 py-0.5 text-[12px] font-semibold text-brand-blue-deep">
-            {row.c}
-          </span>
-        )}
-        {/* D77: how long the pipeline suggests spending on THIS question --
-            distinct from the paper's own allowed-time header. Most questions
-            carry none, so this is gated the same way the marks pill is. */}
-        {showSuggestedTime(row.stm) && (
-          <span className="rounded-full bg-card px-2 py-0.5 text-[12px] font-semibold tabular-nums text-warm-secondary shadow-border">
-            {row.stm} min
-          </span>
-        )}
-        {/* D77: the printed label for this row's own place in an OR-group
-            ("Either", a repeated question number) -- the "OR" divider between
-            cards (below) is presentation; this is the paper's own word. */}
-        {row.al && (
-          <span className="rounded-full bg-brand-subtle px-2 py-0.5 text-[12px] font-semibold text-brand-deep">
-            {row.al}
-          </span>
-        )}
-        <DebugId label="question" value={row.i} />
+      /* D77: a sub-part ("5(a)") nests under its parent with an indent, one
+         step per level (depth is 0 for every top-level question, so a paper
+         with no parent_question_id at all keeps a flat list). The row is
+         drawn as the printed paper draws it: number in the left margin, marks
+         in brackets on the right (printed-paper.tsx). */
+      <QuestionRow
+        key={row.i}
+        id={row.i}
+        depth={depth}
+        number={shownNumber}
+        /* Many papers print their own "[3]" inside the words; then ours
+           stands down so the number never shows twice. */
+        marks={row.m !== null && !marksShownInText(row) ? row.m : null}
+        aside={
+          /* Report, a quiet flag under the marks rather than a full-width
+             "Something wrong here?" button under every question. Icon only
+             until it is needed; the label and the field appear on tap.
 
-        {/* Report, as one more chip on this line rather than a full-width
-            "Something wrong here?" button under every question. Icon only
-            until it is needed; the label and the field appear on tap.
-
-            The name carries the question's own number. A 186-question paper
-            put 186 buttons in the accessibility tree reading the identical
-            string, so a screen reader's element list was 186 indistinguishable
-            rows and there was no way to tell which one you were on. `title`
-            tracks aria-label rather than staying fixed, which had given the
-            expanded chip two different names at once. */}
-        {(() => {
-          const qLabel = questionNames.get(row.i) ?? '';
-          const name = reportFor === row.i
-            ? `Close report for question ${qLabel}`.trim()
-            : `Report a problem with question ${qLabel}`.trim();
-          return (
+             The name carries the question's own number. A 186-question paper
+             put 186 buttons in the accessibility tree reading the identical
+             string, so a screen reader's element list was 186 indistinguishable
+             rows and there was no way to tell which one you were on. `title`
+             tracks aria-label rather than staying fixed, which had given the
+             expanded chip two different names at once. */
           <button
             type="button"
             id={`report-chip-${row.i}`}
             onClick={() => setReportFor((cur) => (cur === row.i ? '' : row.i))}
             aria-expanded={reportFor === row.i}
-            aria-label={name}
-            title={name}
+            aria-label={reportName}
+            title={reportName}
             /* min-h-11/min-w-11 keeps the real tap target at the 44px
-               floor while the painted chip stays chip-sized, the same
-               trick ui/chip.tsx uses. */
-            className={`relative ml-auto inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full px-2 text-[12px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+               floor while the painted flag stays small, the same trick
+               ui/chip.tsx uses. */
+            className={`relative inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full px-2 font-sans text-[12px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
               reportFor === row.i
                 ? 'bg-brand-subtle text-brand-deep'
-                : 'text-warm-label hover:bg-card hover:text-foreground'
+                : 'text-warm-label hover:bg-muted hover:text-foreground'
             }`}
           >
             <Flag className="h-3.5 w-3.5" aria-hidden="true" />
             <FadeLabel show={reportFor === row.i}>Report</FadeLabel>
           </button>
-          );
-        })()}
-      </div>
-
-      {/* D66: question-level instructions ("Answer any three of the
-          following"), printed above the question stem itself, as the source
-          paper prints them. Distinct from the paper-level ones in the header
-          above. */}
-      {showQuestionInstructions(row.instr) && (
-        <MathText
-          text={row.instr as string}
-          className="mb-1.5 text-[13px] italic leading-[1.5] text-warm-secondary"
+        }
+        /* After the stem and its options, not before them: the DOM order is
+           the question, then the form you would use to describe a problem
+           with it. */
+        below={
+          reportFor === row.i ? (
+            <QuestionReport
+              questionId={row.i}
+              paperId={paper?.id ?? ''}
+              onDone={() => {
+                setReportFor('');
+                /* Focus goes back to the flag that opened this. Without it the
+                   whole form unmounts under the focused button and focus falls to
+                   <body>, dropping a keyboard reader at the top of a 186-question
+                   document. */
+                window.requestAnimationFrame(() => {
+                  document.getElementById(`report-chip-${row.i}`)?.focus();
+                });
+              }}
+            />
+          ) : null
+        }
+      >
+        {/* The small helper line: chapter, kind, suggested time and the paper's
+            own label for this row's place in an OR-group ("Either", a repeated
+            question number). The "OR" divider between rows is presentation;
+            this label is the paper's own word. */}
+        <QuestionMeta
+          parts={[
+            row.c,
+            qtypeLabel(row.ty),
+            showSuggestedTime(row.stm) ? `${row.stm} min` : null,
+            row.al,
+          ]}
         />
-      )}
+        <DebugId label="question" value={row.i} />
 
-      <MathText
-        text={displayBodyWithoutDuplicateNumber(row.t, shownNumber)}
-        className="text-[15px] leading-[1.6] text-foreground"
-      />
-
-      {/* An MCQ without its choices is unanswerable, and 4,176 of them
-          arrived with the History & Civics and Economics banks. The column
-          has always been read into BankQuestion.o — nothing ever rendered
-          it, which went unnoticed while the bank was maths-only.
-
-          Deliberately NOT re-lettered. 81% of these options already carry
-          their own label from the paper ("a. Dominion status", "(c) 1947"),
-          so adding a/b/c/d here would print "a. a. Dominion status"; the
-          remaining 19% have no label in the source, and inventing one would
-          be writing paper data the paper does not have. The marker below is
-          a dot — presentation, not a claim about how the paper numbered
-          its choices. Text renders verbatim through MathText, same as the
-          question stem. */}
-      {row.o && row.o.length > 0 && (
-        <ul className="mt-2 flex flex-col gap-1">
-          {row.o.map((opt, i) => (
-            <li key={`${row.i}-opt-${i}`} className="flex gap-2">
-              <span aria-hidden="true" className="mt-[9px] h-1 w-1 flex-none rounded-full bg-warm-label" />
-              <MathText text={opt} className="text-[14px] leading-[1.55] text-warm-prose" />
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* After the stem and its options, not before them. It used to render
-          directly under the meta line, so the DOM order was: chips, report
-          form, "Send report", then the question you were being asked to
-          describe a problem with. */}
-      {reportFor === row.i && (
-        <QuestionReport
-          questionId={row.i}
-          paperId={paper?.id ?? ''}
-          onDone={() => {
-            setReportFor('');
-            /* Focus goes back to the chip that opened this. Without it the
-               whole form unmounts under the focused button and focus falls to
-               <body>, dropping a keyboard reader at the top of a 186-question
-               document. */
-            window.requestAnimationFrame(() => {
-              document.getElementById(`report-chip-${row.i}`)?.focus();
-            });
-          }}
-        />
-      )}
-
-      {row.f && (
-        <figure className="mt-2.5">
-          {/* width/height carry the intrinsic size so the browser reserves a
-              correctly shaped box before the bytes arrive. Without them a
-              figure-heavy paper shifts its text continuously as images load
-              while the reader is scrolling through it, which is worse than a
-              single shift at load. The CSS below still decides the rendered
-              size; these only supply the aspect ratio.
-              Generated by scripts/generate-figure-dimensions.ts, which reads
-              the WebP headers directly rather than adding a native image
-              dependency to a build whose logs we cannot read.
-              Served from the paper-figures Storage bucket, not the deployed
-              bundle -- see supabase/migrations/20260925130000_paper_figures_bucket.sql.
-              getPublicUrl does no network call, just URL construction, so
-              this costs nothing extra per card. */}
-          <FigureImage
-            src={supabase.storage.from('paper-figures').getPublicUrl(row.f).data.publicUrl}
-            alt={`Figure for question ${resolveDisplayNumber(row.dn, displayNumbers.get(row.i), row.n) ?? ''}`}
-            dims={figureDims?.[row.f]}
+        {/* D66: question-level instructions ("Answer any three of the
+            following"), printed above the question stem itself, as the source
+            paper prints them. Distinct from the paper-level ones in the header
+            above. */}
+        {showQuestionInstructions(row.instr) && (
+          <MathText
+            text={row.instr as string}
+            className="mb-1.5 text-[14px] italic leading-[1.55] text-warm-secondary"
           />
-        </figure>
-      )}
+        )}
 
-    </li>
+        <MathText
+          text={displayBodyWithoutDuplicateNumber(row.t, shownNumber)}
+          className="text-[15px] leading-[1.6] text-foreground"
+        />
+
+        {/* An MCQ without its choices is unanswerable, and 4,176 of them
+            arrived with the History & Civics and Economics banks.
+
+            Deliberately NOT re-lettered. 81% of these options already carry
+            their own label from the paper ("a. Dominion status", "(c) 1947"),
+            so adding a/b/c/d here would print "a. a. Dominion status"; the
+            remaining 19% have no label in the source, and inventing one would
+            be writing paper data the paper does not have. OptionList adds a
+            dot only to an option with no label of its own: presentation, not
+            a claim about how the paper numbered its choices. Text renders
+            verbatim through MathText, same as the question stem. */}
+        {row.o && row.o.length > 0 && <OptionList keyPrefix={row.i} options={row.o} />}
+
+        {row.f && (
+          <figure className="mt-2.5">
+            {/* width/height carry the intrinsic size so the browser reserves a
+                correctly shaped box before the bytes arrive. Without them a
+                figure-heavy paper shifts its text continuously as images load
+                while the reader is scrolling through it, which is worse than a
+                single shift at load. The CSS in FigureImage still decides the
+                rendered size; these only supply the aspect ratio.
+                Generated by scripts/generate-figure-dimensions.ts, which reads
+                the WebP headers directly rather than adding a native image
+                dependency to a build whose logs we cannot read.
+                Served from the paper-figures Storage bucket, not the deployed
+                bundle -- see supabase/migrations/20260925130000_paper_figures_bucket.sql.
+                getPublicUrl does no network call, just URL construction, so
+                this costs nothing extra per card. */}
+            <FigureImage
+              src={supabase.storage.from('paper-figures').getPublicUrl(row.f).data.publicUrl}
+              alt={`Figure for question ${shownNumber ?? ''}`}
+              dims={figureDims?.[row.f]}
+            />
+          </figure>
+        )}
+      </QuestionRow>
     );
   };
 
@@ -857,15 +818,20 @@ export default function BankPaper() {
           </>
         )}
 
-        {/* RD-004 document surface: the questions are the sheet, lifted off the
-            dark ground. It runs the full length of the paper rather than
-            scrolling inside itself, so the page keeps one scrollbar. */}
-        <div className="mt-4 rounded-xl bg-card p-4 shadow-[0_18px_40px_rgba(0,0,0,.45)] sm:p-6">
+        {/* RD-004 document surface, now drawn as the printed sheet itself
+            (printed-paper.tsx): a cream page lifted off the dark ground, as
+            wide as a sheet of paper and centred. It runs the full length of
+            the paper rather than scrolling inside itself, so the page keeps
+            one scrollbar. */}
+        <PaperSurface>
           {loading && (
-            <div className="grid gap-3" aria-busy="true">
+            /* The final layout in outline: a header, then rows with a number
+               in the margin, so the sheet settles into place without a jump. */
+            <div className="grid gap-5" aria-busy="true">
               <p role="status" className="sr-only">Loading the paper</p>
+              <div className="mx-auto h-[88px] w-full max-w-md animate-shimmer rounded-[6px] bg-muted bg-[length:200%_100%]" />
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-[104px] animate-shimmer rounded-[18px] bg-muted bg-[length:200%_100%]" />
+                <div key={i} className="h-[72px] animate-shimmer rounded-[6px] bg-muted bg-[length:200%_100%]" />
               ))}
             </div>
           )}
@@ -897,63 +863,25 @@ export default function BankPaper() {
             </div>
           )}
 
-          {/* Formal exam-header block, per your reference photo — centred
-              school/course line, bold title, total marks and an "answer all
-              questions" instruction, like the top of an actual printed
-              paper, instead of the questions just starting cold. */}
+          {/* The top of the printed paper: school, exam and year, class and
+              subject, then time allowed and maximum marks, then the general
+              instructions. Each is drawn only when the paper recorded it
+              (D66), so a fact is never invented to fill a line. */}
           {paper && !paper.needsReview && (
-            /* Owner's ask: a small settle moment at "first paper read" --
-               the header and the question list below both mount once, the
-               moment loading finishes, so a one-shot entrance here reads as
-               the paper arriving rather than as decoration on every render
-               (CRAFT §2: delight at success, not on every element). */
-            <div className="mb-5 animate-card-blur-in border-b border-border pb-4 text-center motion-reduce:animate-none">
-              {sourceName !== null && (
-                <p className="text-[13px] italic text-muted-foreground">{sourceName}</p>
-              )}
-              <h2 className="mt-1 font-display text-[20px] font-extrabold tracking-[-0.02em] text-foreground sm:text-[23px]">
-                {/* Middle dot, not an em dash -- CLAUDE.md bans em/en dashes in
-                   site copy; · is this codebase's own standing separator
-                   convention (used throughout the badge line right below). */}
-                Class {paper.cls} {displaySubject} {paper.exam ? `· ${paper.exam}` : ''}
-              </h2>
-              {hasYear(paper.year) && (
-                <p className="mt-0.5 text-[13px] tabular-nums text-muted-foreground">{paper.year}</p>
-              )}
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13px] font-semibold tabular-nums text-foreground">
-                <span>{paper.questionCount} question{paper.questionCount === 1 ? '' : 's'}</span>
-                {paper.marks > 0 && <span>Total: {paper.marks} marks</span>}
-              </div>
-              <p className="mt-2 text-[13px] uppercase tracking-[0.04em] text-muted-foreground">
-                Answer all questions
-              </p>
-              {/* D66: allowed time and the paper's own general instructions,
-                  when recorded -- most papers have neither, so both are
-                  gated on presence rather than always taking up the header. */}
-              {showPaperExtras(paper.allowedTimeMinutes, paper.generalInstructions) && (
-                <div className="mt-3 flex flex-col items-center gap-1">
-                  {paper.allowedTimeMinutes && (
-                    <p className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-                      <Clock size={14} strokeWidth={2.2} aria-hidden="true" />
-                      {paper.allowedTimeMinutes} minutes allowed
-                    </p>
-                  )}
-                  {paper.generalInstructions && (
-                    <MathText
-                      text={paper.generalInstructions}
-                      className="max-w-[48ch] text-[13px] leading-[1.5] text-warm-prose"
-                    />
-                  )}
-                </div>
-              )}
-              {/* D66: a small, honest note when the source paper itself was
-                  incomplete -- never a claim about the questions' quality. */}
-              {showIncompleteNote(paper.incompleteNote) && (
-                <p className="mt-2 text-[12px] italic leading-[1.5] text-muted-foreground">
-                  {paper.incompleteNote}
-                </p>
-              )}
-            </div>
+            <PaperHeader
+              source={sourceName}
+              {...paperHeaderLines({
+                exam: paper.exam,
+                year: hasYear(paper.year) ? paper.year : null,
+                cls: paper.cls,
+                subject: displaySubject,
+                board: paper.board,
+              })}
+              time={formatPaperTime(paper.allowedTimeMinutes)}
+              marks={paper.marks > 0 ? paper.marks : null}
+              generalInstructions={paper.generalInstructions}
+              incompleteNote={paper.incompleteNote}
+            />
           )}
 
           {paper && !paper.needsReview && visible.length > 0 && (
@@ -961,32 +889,20 @@ export default function BankPaper() {
                "Save as PDF" render the page without the questions, so printing
                is not a way around the gate. Selection is off here and nowhere
                else on the page -- see paperLockClass. */
-            <ol data-paper-locked data-protected className={`grid grid-cols-1 gap-3 stagger-children ${paperLockClass}`}>
+            <ol data-paper-locked data-protected aria-label="Questions" className={`mt-2 grid grid-cols-1 gap-1 stagger-children ${paperLockClass}`}>
               {renderNodes.map((node) => {
                 if (node.kind === 'heading') {
                   /* D77: a printed section heading ("Section A"), shown once
                      above the first question of a run that carries it -- never
                      repeated per row, never shown for a paper with no
                      section_label at all. */
-                  return (
-                    <li key={node.key} className="mt-1 px-0.5 first:mt-0">
-                      <h3 className="text-[12px] font-bold uppercase tracking-[0.06em] text-warm-label">
-                        {node.label}
-                      </h3>
-                    </li>
-                  );
+                  return <SectionTitle key={node.key} label={node.label} />;
                 }
                 if (node.kind === 'or') {
                   /* D77: the divider between OR-alternatives -- presentation
                      only, so it is hidden from assistive tech; the alt-group
-                     label chip on each card (above) carries the actual words. */
-                  return (
-                    <li key={node.key} aria-hidden="true" className="flex items-center gap-2 py-0.5">
-                      <span className="h-px flex-1 bg-border" />
-                      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-warm-label">OR</span>
-                      <span className="h-px flex-1 bg-border" />
-                    </li>
-                  );
+                     label on each question (above) carries the actual words. */
+                  return <OrDivider key={node.key} />;
                 }
                 return questionCard(node.row, node.depth);
               })}
@@ -1004,7 +920,7 @@ export default function BankPaper() {
               Hidden while filtering: "182 more questions" under a chapter
               search reads as a claim about the search, not about the paper. */}
           {paper && !paper.needsReview && withheld > 0 && !filtering && (
-            <div className="mt-3 rounded-[18px] bg-brand-blue-subtle px-4 py-5 text-center">
+            <div className="mt-4 rounded-[12px] border-t-2 border-dashed border-border bg-brand-blue-subtle px-4 py-5 text-center font-sans">
               <p className="text-[17px] font-extrabold tracking-[-0.03em] text-foreground">
                 {withheld} more {withheld === 1 ? 'question' : 'questions'} in this paper
               </p>
@@ -1027,13 +943,13 @@ export default function BankPaper() {
             /* A signed-out reader is searching the preview questions, not the paper,
                so "nothing matches" would be a false negative on a paper that
                does contain the word. Say which haystack was actually searched. */
-            <p className="text-[15px] text-warm-prose">
+            <p className="font-sans text-[15px] text-warm-prose">
               {withheld > 0
                 ? `No match in the ${searchableCount(questions)} free questions. The other ${withheld} are behind a free account.`
                 : 'Nothing in this paper matches that.'}
             </p>
           )}
-        </div>
+        </PaperSurface>
 
         {paper && !paper.needsReview && (
           <div className="mt-4 rounded-[24px] bg-brand p-[18px]">

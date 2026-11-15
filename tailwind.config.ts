@@ -63,6 +63,10 @@ export default {
            copy stays on `font-sans` (Geist) always — never use this for body
            text or long-form copy. */
         display: ['Archivo', 'system-ui', '-apple-system', 'sans-serif'],
+        /* The printed-paper look (the sheet on /past-papers/:id). A real serif
+           from the system, so nothing is downloaded: `serif` above is Archivo,
+           a grotesk, and cannot give a paper its print feel. */
+        paper: ['Georgia', 'Cambria', '"Times New Roman"', '"Noto Serif"', 'serif'],
       },
       colors: {
         /* One keyboard-focus colour for every control (index.css --focus-ring). */
