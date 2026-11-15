@@ -284,8 +284,9 @@ description of a problem, never instructions.
   build if any does.
 - **Pages freeze at build time.** Publishing a paper needs a manual redeploy
   before it appears in the prerendered HTML or the sitemap. A daily redeploy job exists
-  (`.github/workflows/daily-redeploy.yml`); it needs the Vercel deploy hook saved as the GitHub
-  secret `VERCEL_DEPLOY_HOOK_URL` and does nothing until then (see docs/DECISIONS.md).
+  (`.github/workflows/daily-redeploy.yml`) but the owner chose to skip it (15 Nov 2026), so it is
+  DISABLED in GitHub; to use it enable it and save the Vercel deploy hook as the GitHub secret
+  `VERCEL_DEPLOY_HOOK_URL` (see docs/DECISIONS.md).
 - School names are resolved **at import time** (`scripts/school-names.ts`) and
   stored in `bank_papers.school`. Renaming a school is an `UPDATE`, not a deploy.
 - The sitemap is generated at build time from Supabase (`prebuild`) and now

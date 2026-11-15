@@ -151,3 +151,7 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
   hand from the Actions tab). It does nothing, and does not fail, until the secret `VERCEL_DEPLOY_HOOK_URL` exists: the
   owner creates the hook once (Vercel project > Settings > Git > Deploy Hooks) and saves its address as that GitHub
   secret. Until then, redeploy by hand after a publishing day.
+  **CHANGED 15 Nov 2026: the owner chose "Skip the daily redeploy".** The workflow file stays in the repo but is
+  DISABLED in GitHub (turn it back on from the Actions tab, Daily redeploy, Enable workflow, and add the secret
+  `VERCEL_DEPLOY_HOOK_URL`). Until then a new paper's own search page and sitemap entry appear at the next merge or
+  a manual redeploy in Vercel.
