@@ -683,7 +683,9 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
       const out: HodAiRedoItem[] = [];
       for (const p of papers) {
         for (const x of real(p)) {
-          if (x.ai_redo_state !== 'approved' && x.ai_redo_state !== 'redone') continue;
+          if (x.ai_redo_state !== 'requested' && x.ai_redo_state !== 'approved' && x.ai_redo_state !== 'redone') continue;
+          const at = x.escalated_at ?? '2026-11-19T08:00:00Z';
+          const step = (action: string, who: string | null, note: string | null) => ({ at, action, who, note, before: null, after: null, undone: false });
           out.push({
             id: x.id,
             paper_id: p.id,
@@ -701,6 +703,11 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
             decided_by_name: null,
             decided_at: null,
             set_aside: x.state === 'set_aside',
+            trail: [
+              step('checker_ask_ai_redo', x.escalated_by_name, x.ai_redo_reason),
+              ...(x.ai_redo_state !== 'requested' ? [step('hod_ai_redo_approve', 'An HOD', x.ai_redo_reason)] : []),
+              ...(x.ai_redo_state === 'redone' ? [step('ai_redo_done', 'The AI', null)] : []),
+            ],
           });
         }
       }

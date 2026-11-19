@@ -16,6 +16,8 @@ export type HodChange =
   | 'assignments'
   /** Pass, send back, leave out, reopen or edit a question that was sent to the HOD. */
   | 'needs-you'
+  /** Say yes or no to a student's "send back to the AI" request, from the Send to AI tab. */
+  | 'ai-redo'
   /** Approve a paper, edit its details or pictures on the approval sheet. */
   | 'publish'
   /** Hide, restore or edit a paper that is live. */
@@ -47,6 +49,12 @@ export function hodRefreshPlan(scope: string, change: HodChange): HodRefreshPlan
       return {
         now: [k('needs-you'), k('ready'), k('trail'), k('counts'), k('timeline')],
         later: [k('assignments'), k('unassigned'), k('preview'), k('live'), k('ai-redo')],
+      };
+    case 'ai-redo':
+      // A yes or no changes the Send to AI list (on screen) and the question's mark in Needs you; the counts move too.
+      return {
+        now: [k('ai-redo'), k('counts')],
+        later: [k('needs-you'), k('trail'), k('timeline')],
       };
     case 'publish':
       return {

@@ -399,7 +399,47 @@ export function normaliseNeedsQuestions(raw: unknown): HodNeedsQuestion[] {
     .sort((a, b) => a.ord - b.ord);
 }
 
-/** One line of the "Send to AI" tab (hod_ai_redo_list, 20261119100000): a question an HOD approved for the AI to redo, or one the AI has redone. */
+/** One step in a question's story on the "Send to AI" tab (hod_ai_redo_list, 20261119200000): a line of its history log since the student asked. */
+export interface HodAiRedoStep {
+  at: string;
+  /** The raw action word, turned into plain words by `aiRedoStepWords`. */
+  action: string;
+  who: string | null;
+  note: string | null;
+  /** Only when the step changed the question's words: what it said before and after, as stored. */
+  before: string | null;
+  after: string | null;
+  /** The step was taken back afterwards. */
+  undone: boolean;
+}
+
+/** Plain words for a history action on the "Send to AI" tab. The AI's own steps are named so they read as part of the flow once they exist. */
+export function aiRedoStepWords(action: string): string {
+  switch (action) {
+    case 'checker_ask_ai_redo':
+      return 'A student asked for the AI to redo it';
+    case 'hod_ai_redo_approve':
+      return 'An HOD agreed: it needs AI review';
+    case 'hod_ai_redo_decline':
+      return 'An HOD said no: it stays with the HOD';
+    case 'ai_redo_read':
+      return 'The AI read it again';
+    case 'ai_redo_edit':
+    case 'ai_redo_done':
+      return 'The AI redid it';
+    case 'hod_send_back':
+      return 'Sent back to the students to check';
+    case 'checker_fix':
+    case 'admin_edit_bank_question':
+      return 'The words were edited';
+    case 'checker_pass':
+      return 'Marked as right';
+    default:
+      return action.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  }
+}
+
+/** One line of the "Send to AI" tab (hod_ai_redo_list, 20261119200000): a question a student asked to send back, one an HOD approved for the AI to redo, or one the AI has redone. */
 export interface HodAiRedoItem {
   id: string;
   paper_id: string;
@@ -410,8 +450,8 @@ export interface HodAiRedoItem {
   /** The question exactly as stored; shown as written. */
   body: string;
   marks: number | null;
-  /** 'approved' waits for the AI, 'redone' has been redone. */
-  state: 'approved' | 'redone';
+  /** 'requested' waits for the HOD's yes or no, 'approved' waits for the AI, 'redone' has been redone. */
+  state: 'requested' | 'approved' | 'redone';
   /** The student's reason. */
   reason: string | null;
   /** What the HOD typed when approving, if anything. */
@@ -422,6 +462,28 @@ export interface HodAiRedoItem {
   decided_at: string | null;
   /** The question was set aside so the paper could go live. */
   set_aside: boolean;
+  /** Everything that happened to it since the student asked, oldest first. */
+  trail: HodAiRedoStep[];
+}
+
+function normaliseAiRedoTrail(raw: unknown): HodAiRedoStep[] {
+  const out: HodAiRedoStep[] = [];
+  for (const x of asRows(raw)) {
+    const r = obj(x);
+    const at = str(r.at);
+    const action = str(r.action);
+    if (!at || !action) continue;
+    out.push({
+      at,
+      action,
+      who: str(r.who),
+      note: str(r.note),
+      before: typeof r.before === 'string' ? r.before : null,
+      after: typeof r.after === 'string' ? r.after : null,
+      undone: r.undone === true,
+    });
+  }
+  return out.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 }
 
 export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
@@ -430,7 +492,7 @@ export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
     const r = obj(x);
     const id = str(r.id);
     const paper = str(r.paper_id);
-    const state = r.ai_redo_state === 'approved' || r.ai_redo_state === 'redone' ? r.ai_redo_state : null;
+    const state = r.ai_redo_state === 'requested' || r.ai_redo_state === 'approved' || r.ai_redo_state === 'redone' ? r.ai_redo_state : null;
     if (!id || !paper || !state) continue;
     out.push({
       id,
@@ -449,6 +511,7 @@ export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
       decided_by_name: str(r.decided_by_name),
       decided_at: str(r.decided_at),
       set_aside: r.question_state === 'set_aside',
+      trail: normaliseAiRedoTrail(r.trail),
     });
   }
   return out;
