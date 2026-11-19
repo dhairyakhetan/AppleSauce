@@ -252,9 +252,11 @@ function QuestionCard({
             >
               {busy ? 'Saving...' : 'Pass'}
             </button>
-            <button type="button" className={actionToneClass('dark')} disabled={busy} onClick={() => { setSaved(null); setPanel('fix'); }}>
-              Fix
-            </button>
+            {q.live_bank_question_id ? null : (
+              <button type="button" className={actionToneClass('dark')} disabled={busy} onClick={() => { setSaved(null); setPanel('fix'); }}>
+                Fix
+              </button>
+            )}
             {canSendBack(q) ? (
               <button type="button" className={cn(actionToneClass('brand'), 'h-[46.5px]')} disabled={busy} onClick={() => setPanel('back')}>
                 Send back to students
@@ -291,6 +293,11 @@ function QuestionCard({
           </>
         )}
       </div>
+      {panel === null && q.live_bank_question_id ? (
+        <p className="mt-2 text-[12px] text-warm-meta" data-testid="live-question-note">
+          This question is already on the live site, so only an admin can change its words. You can pass it, send it back to the students, or leave it out.
+        </p>
+      ) : null}
       {panel === null && !q.body.trim() ? (
         <p className="mt-2 text-[12px] text-warm-meta">Pass is off because this question has no text. Fix it to add the words, or leave it out.</p>
       ) : null}

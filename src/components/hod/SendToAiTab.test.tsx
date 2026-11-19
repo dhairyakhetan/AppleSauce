@@ -57,23 +57,26 @@ describe('the Send to AI tab', () => {
     expect(html).not.toContain('ai-redo-frozen-note');
   });
 
-  it('shows a request on a frozen live Maths copy with a note, in its own group, and offers no yes, no or Open paper', () => {
+  it('treats a request on a live Maths copy like any other: Yes, No and Open paper, with a Live Maths copy chip', () => {
     const html = draw([{ ...base, id: 'q2', live_copy: true }]);
-    expect(html).toContain('On frozen live Maths copies (cannot be decided here)');
-    expect(html).toContain('ai-redo-frozen-note');
-    expect(html).toContain('Live Maths copy, frozen');
+    expect(html).toContain('Waiting for your yes or no');
+    expect(html).toContain('Live Maths copy');
     expect(html).toContain('Asha said: Two questions are joined');
+    expect(html).toContain('Yes, it needs AI review');
+    expect(html).toContain('No, keep it with the HOD');
+    expect(html).toContain('Open paper');
     expect(html).toContain('See the whole story');
-    expect(html).not.toContain('Yes, it needs AI review');
-    expect(html).not.toContain('No, keep it with the HOD');
-    expect(html).not.toContain('Open paper');
-    expect(html).not.toContain('Waiting for your yes or no');
+    expect(html).not.toContain('frozen');
+    expect(html).not.toContain('cannot be decided here');
   });
 
-  it('counts a frozen request on its own and not as waiting for the HOD', () => {
+  it('counts a live Maths copy request as waiting for the HOD, like the others', () => {
     const html = draw([base, { ...base, id: 'q2', live_copy: true }]);
-    expect(html).toContain('1 question is waiting for your yes or no.');
-    expect(html).toContain('1 is on frozen live Maths copies.');
+    expect(html).toContain('2 questions are waiting for your yes or no.');
+  });
+
+  it('does not say Live Maths copy on an ordinary paper', () => {
+    expect(draw([base])).not.toContain('Live Maths copy');
   });
 
   it('keeps an agreed question on the list with no buttons', () => {

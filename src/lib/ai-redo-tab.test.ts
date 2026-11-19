@@ -210,11 +210,10 @@ describe('the screen', () => {
     expect(tab).toContain('data-testid="ai-redo-stages"');
   });
 
-  it('gives a frozen live Maths copy a note and its own group, with no yes, no or Open paper', () => {
-    expect(tab).toContain('data-testid="ai-redo-frozen-note"');
-    expect(tab).toContain("item.state === 'requested' && !item.live_copy");
-    expect(tab).toContain('{item.live_copy ? null : (');
-    expect(tab).toContain('On frozen live Maths copies (cannot be decided here)');
+  it('treats a live Maths copy like any other paper: no frozen note, no separate group, no hidden buttons', () => {
+    expect(tab).not.toContain('frozen');
+    expect(tab).not.toContain('!item.live_copy');
+    expect(tab).toContain("item.live_copy ? 'Live Maths copy' : null");
   });
 
   it('sends nothing to the AI and uses no em or en dashes', () => {

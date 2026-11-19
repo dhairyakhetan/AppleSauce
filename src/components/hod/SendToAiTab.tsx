@@ -96,7 +96,8 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
   const chips = [
     `Question ${label}`,
     item.marks != null ? `${item.marks} ${item.marks === 1 ? 'mark' : 'marks'}` : null,
-    item.live_copy ? 'Live Maths copy, frozen' : item.state === 'requested' ? 'Waiting for an HOD' : item.state === 'approved' ? 'Waiting for the AI' : 'Redone by the AI',
+    item.state === 'requested' ? 'Waiting for an HOD' : item.state === 'approved' ? 'Waiting for the AI' : 'Redone by the AI',
+    item.live_copy ? 'Live Maths copy' : null,
     item.set_aside ? 'Set aside so the paper can go live' : null,
   ].filter((x): x is string => Boolean(x));
 
@@ -122,11 +123,9 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
     <li className="rounded-[18px] bg-muted p-4 shadow-card" data-testid="ai-redo-item" id={`q-${item.id}`}>
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-[15px] font-bold text-foreground">{item.paper_title}</p>
-        {item.live_copy ? null : (
-          <Link to={deskLink('needs-you', item.paper_id)} className={cn(quietButton, 'h-[40px] px-4 text-[13px]')} aria-label={`Open ${item.paper_title}`}>
-            Open paper
-          </Link>
-        )}
+        <Link to={deskLink('needs-you', item.paper_id)} className={cn(quietButton, 'h-[40px] px-4 text-[13px]')} aria-label={`Open ${item.paper_title}`}>
+          Open paper
+        </Link>
       </div>
       <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="About this question">
         {chips.map((c) => (
@@ -143,14 +142,7 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
         {item.body ? <MathText text={item.body} className="line-clamp-4 text-[14px] leading-relaxed text-foreground" /> : <p className="text-[14px] text-warm-secondary">This question has no words.</p>}
       </div>
 
-      {item.live_copy ? (
-        <p className="mb-2 rounded-xl bg-card px-3 py-2 text-[13px] text-warm-secondary" data-testid="ai-redo-frozen-note">
-          This question is on a live Maths copy. Those papers are frozen and are not on the HOD desk, so there is no yes or no to give here and the paper cannot be opened
-          from here. A student asked for it, so it is listed so that nothing is lost.
-        </p>
-      ) : null}
-
-      {item.state === 'requested' && !item.live_copy ? (
+      {item.state === 'requested' ? (
         <div className="mb-2">
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={cn(actionToneClass('brand'), 'h-[46.5px]')} disabled={busy} onClick={() => void decide(true)}>
@@ -185,7 +177,7 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
       </button>
       {open ? (
         <div id={storyId} className="mt-3" data-testid="ai-redo-story">
-          {item.live_copy ? null : <Stages state={item.state} />}
+          <Stages state={item.state} />
           {item.trail.length === 0 ? (
             <p className="text-[13px] text-warm-secondary">Nothing has been written down for this question yet.</p>
           ) : (
@@ -195,7 +187,7 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
               ))}
             </ol>
           )}
-          {item.state !== 'redone' && !item.live_copy ? (
+          {item.state !== 'redone' ? (
             <p className="mt-2 text-[12px] text-warm-meta">
               {item.state === 'requested' ? 'Next: an HOD says yes or no.' : 'Next: the AI reads it again against the saved paper and redoes it. Its steps will appear here.'}
             </p>
@@ -228,16 +220,13 @@ export function SendToAiTab({ api, scope }: { api: HodApi; scope: string }) {
   if (q.isLoading) return <ListSkeleton rows={3} label="Loading the questions for the AI" />;
   if (q.isError || !q.data) return <LoadError what="The list of questions for the AI" onRetry={() => void q.refetch()} />;
 
-  // Questions on a frozen live Maths copy cannot be decided here, so they sit in their own group and are not counted as waiting.
-  const frozen = q.data.filter((x) => x.live_copy);
-  const asked = q.data.filter((x) => !x.live_copy && x.state === 'requested');
-  const waiting = q.data.filter((x) => !x.live_copy && x.state === 'approved');
-  const redone = q.data.filter((x) => !x.live_copy && x.state === 'redone');
+  const asked = q.data.filter((x) => x.state === 'requested');
+  const waiting = q.data.filter((x) => x.state === 'approved');
+  const redone = q.data.filter((x) => x.state === 'redone');
 
   const parts = [
     asked.length ? `${asked.length} ${asked.length === 1 ? 'question is' : 'questions are'} waiting for your yes or no.` : null,
     waiting.length ? `${waiting.length} ${waiting.length === 1 ? 'question is' : 'questions are'} waiting for the AI to read ${waiting.length === 1 ? 'it' : 'them'} again.` : null,
-    frozen.length ? `${frozen.length} ${frozen.length === 1 ? 'is' : 'are'} on frozen live Maths copies.` : null,
   ].filter((x): x is string => Boolean(x));
 
   return (
@@ -253,7 +242,6 @@ export function SendToAiTab({ api, scope }: { api: HodApi; scope: string }) {
           <Group title="Waiting for your yes or no" items={asked} api={api} scope={scope} />
           <Group title="Agreed, waiting for the AI" items={waiting} api={api} scope={scope} />
           <Group title="Already redone by the AI" items={redone} api={api} scope={scope} />
-          <Group title="On frozen live Maths copies (cannot be decided here)" items={frozen} api={api} scope={scope} />
         </>
       )}
     </div>
