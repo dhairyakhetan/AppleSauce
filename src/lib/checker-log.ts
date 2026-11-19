@@ -107,6 +107,7 @@ export function categoryOf(action: string): CountKey {
     case 'check_flag':
     case 'check_escalate':
     case 'checker_ask_help':
+    case 'checker_ask_ai_redo':
     case 'ai_flagged':
     case 'ai_escalate':
       return 'flagged';

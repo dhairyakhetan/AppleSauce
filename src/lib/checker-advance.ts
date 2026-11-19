@@ -105,6 +105,7 @@ export function verdictWasSaved(entry: { kind: VerdictKind; payload: VerdictPayl
       return true;
     }
     case 'ask_help':
+    case 'ask_ai_redo':
       return row.state === 'with_hod';
     case 'skip':
       return false;

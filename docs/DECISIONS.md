@@ -155,3 +155,17 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
   DISABLED in GitHub (turn it back on from the Actions tab, Daily redeploy, Enable workflow, and add the secret
   `VERCEL_DEPLOY_HOOK_URL`). Until then a new paper's own search page and sitemap entry appear at the next merge or
   a manual redeploy in Vercel.
+- **A student can ask for a question to be sent back to the AI, but only an HOD can say yes (18 Nov 2026, owner).** In the
+  student's "Ask for help" sheet there is a second button, "Send back to the AI", and it needs a reason (5 characters or
+  more). Nothing goes to the AI at that moment. The question leaves the student and waits in the HOD's Needs you tab,
+  marked "wants the AI to read this again" with the student's reason. The HOD answers **Yes, it needs AI review** or
+  **No, keep it with me**. A yes only sets a mark ("needs AI review", reason kept, who and when kept); it never changes
+  the question's words. A no clears the mark and leaves the question with the HOD. While the mark is there the question
+  stays in the HOD's pile, so the HOD can still **set it aside and Publish anyway** if the paper should go live without
+  it (owner's choice). When the owner later asks for an audit, Claude reads the marked questions and their reasons,
+  re-reads each one against the saved PDF by paper ID, and the redone question goes **straight back to the HOD** to
+  check, not to a student. Built as columns `ai_redo_*` on the questions table (not a new `review_bucket` value, so the
+  allowed values of that column are unchanged), functions `checker_ask_for_ai_redo` and `hod_ai_redo_decide`, and the
+  verdict word `ask_ai_redo` in `verifier_verdict_and_next`. Migration `20261118100000_ai_redo_requests.sql`: the owner
+  pastes it before the pull request is merged, or the new student button shows an error. The audit-and-redo tool itself
+  lives in the Papers folder and is not built yet.

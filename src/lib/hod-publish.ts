@@ -334,6 +334,9 @@ export interface HodNeedsQuestion {
   live_bank_question_id: string | null;
   ai_decision: string | null;
   ai_review_reason: string | null;
+  /** A student asked for the AI to redo this question (20261118100000): 'requested' waits for the HOD, 'approved' means "needs AI review", 'redone' means the AI has redone it. null for an ordinary help request. */
+  ai_redo_state: AiRedoState | null;
+  ai_redo_reason: string | null;
   page: number | null;
   page_path: string | null;
   snippet_path: string | null;
@@ -341,6 +344,12 @@ export interface HodNeedsQuestion {
   escalated_by_name: string | null;
   escalated_at: string | null;
   reason: string | null;
+}
+
+export type AiRedoState = 'requested' | 'approved' | 'redone';
+
+function aiRedoState(v: unknown): AiRedoState | null {
+  return v === 'requested' || v === 'approved' || v === 'redone' ? v : null;
 }
 
 export function normaliseNeedsQuestion(raw: unknown): HodNeedsQuestion | null {
@@ -371,6 +380,8 @@ export function normaliseNeedsQuestion(raw: unknown): HodNeedsQuestion | null {
     live_bank_question_id: str(r.live_bank_question_id),
     ai_decision: str(r.ai_decision),
     ai_review_reason: str(r.ai_review_reason),
+    ai_redo_state: aiRedoState(r.ai_redo_state),
+    ai_redo_reason: str(r.ai_redo_reason),
     page: numOrNull(r.page) || null,
     page_path: str(r.page_path),
     snippet_path: str(r.snippet_path),
@@ -389,9 +400,24 @@ export function normaliseNeedsQuestions(raw: unknown): HodNeedsQuestion[] {
 }
 
 /** "Sent up by a student" for the escalated pile, "Flagged by the computer" for the other. */
-export function whyItNeedsYou(q: Pick<HodNeedsQuestion, 'review_bucket' | 'escalated_by_name' | 'reason' | 'ai_review_reason'>): string {
+export function whyItNeedsYou(
+  q: Pick<HodNeedsQuestion, 'review_bucket' | 'escalated_by_name' | 'reason' | 'ai_review_reason'> &
+    Partial<Pick<HodNeedsQuestion, 'ai_redo_state' | 'ai_redo_reason'>>,
+): string {
   if (q.review_bucket === 'escalated') {
     const who = q.escalated_by_name ?? 'A student';
+    const why = q.ai_redo_reason ?? q.reason;
+    if (q.ai_redo_state === 'requested') {
+      return why
+        ? `${who} wants the AI to read this question again: ${why}`
+        : `${who} wants the AI to read this question again and gave no reason.`;
+    }
+    if (q.ai_redo_state === 'approved') {
+      return why ? `Marked "needs AI review". ${who} said: ${why}` : 'Marked "needs AI review".';
+    }
+    if (q.ai_redo_state === 'redone') {
+      return 'The AI has read this question again. Please check the new version.';
+    }
     return q.reason ? `${who} asked you: ${q.reason}` : `${who} sent this up and gave no reason.`;
   }
   return q.ai_review_reason ?? 'The computer could not settle this one, so it came to you.';

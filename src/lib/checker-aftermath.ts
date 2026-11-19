@@ -109,7 +109,13 @@ export const KEPT_WORDS_NOTE =
 /* ------------------------------------------- Answered in another tab */
 
 /** The actions that mean "this question has left my hands" (the review log's names). A split keeps the question, so it is not here. */
-const ANSWER_ACTIONS = new Set(['checker_pass', 'checker_fix', 'checker_printed_typo', 'checker_ask_help']);
+const ANSWER_ACTIONS = new Set([
+  'checker_pass',
+  'checker_fix',
+  'checker_printed_typo',
+  'checker_ask_help',
+  'checker_ask_ai_redo',
+]);
 
 /**
  * True when an activity event may mean the SAME person answered the question

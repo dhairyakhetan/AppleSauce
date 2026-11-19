@@ -91,11 +91,33 @@ function QuestionCard({
     setNote('');
   }
 
+  // A student's "send back to the AI": yes marks it "needs AI review" (the reason stays), no keeps it with the HOD as an
+  // ordinary help request. The card stays in the list either way, so there is no Undo line (that would reopen it).
+  function decideAiRedo(approve: boolean) {
+    void run(async () => {
+      await api.aiRedoDecide(q.id, approve, '');
+      toast.success(
+        approve
+          ? `Question ${label} is marked: needs AI review.`
+          : `Question ${label} stays with you as an ordinary help request.`,
+      );
+      onChanged();
+    });
+  }
+
   const chips = [
     q.display_number ? `Question ${q.display_number}` : null,
     q.marks != null ? `${q.marks} ${q.marks === 1 ? 'mark' : 'marks'}` : null,
     q.page ? `Page ${q.page}` : null,
-    q.review_bucket === 'escalated' ? 'Sent up by a student' : 'The computer could not settle it',
+    q.ai_redo_state === 'requested'
+      ? 'A student asks for the AI to redo it'
+      : q.ai_redo_state === 'approved'
+        ? 'Needs AI review'
+        : q.ai_redo_state === 'redone'
+          ? 'Redone by the AI'
+          : q.review_bucket === 'escalated'
+            ? 'Sent up by a student'
+            : 'The computer could not settle it',
   ].filter((x): x is string => Boolean(x));
 
   return (
@@ -194,6 +216,28 @@ function QuestionCard({
       {error && panel !== 'fix' ? (
         <p role="alert" className="mt-2 text-[13px] text-destructive">
           {error}
+        </p>
+      ) : null}
+
+      {panel === null && q.ai_redo_state === 'requested' ? (
+        <div className="mt-3 rounded-2xl bg-brand-subtle px-4 py-3" data-testid="ai-redo-decision">
+          <p className="mb-2 text-[14px] font-semibold text-foreground">
+            Send this question back to the AI? Nothing goes to the AI unless you say yes. If you say yes it is marked "needs AI review"
+            and the reason is kept.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={cn(actionToneClass('brand'), 'h-[46.5px]')} disabled={busy} onClick={() => decideAiRedo(true)}>
+              {busy ? 'Saving...' : 'Yes, it needs AI review'}
+            </button>
+            <button type="button" className={actionToneClass('dark')} disabled={busy} onClick={() => decideAiRedo(false)}>
+              No, keep it with me
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {panel === null && q.ai_redo_state === 'approved' ? (
+        <p className="mt-3 rounded-2xl bg-card px-4 py-3 text-[13px] text-warm-secondary" data-testid="ai-redo-waiting">
+          Waiting for the AI to read this again. You can still set it aside if you want to publish the paper without it.
         </p>
       ) : null}
 

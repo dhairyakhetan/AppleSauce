@@ -32,7 +32,7 @@ import { checkerErrorAdvice } from '@/lib/checker-errors';
 import { CHECKER_REQUEST_TIMEOUT_MS, withTimeout } from '@/lib/checker-timeout';
 import type { VerdictAndNext } from '@/lib/checker-verdict-next';
 
-export type VerdictKind = 'pass' | 'fix' | 'skip' | 'ask_help';
+export type VerdictKind = 'pass' | 'fix' | 'skip' | 'ask_help' | 'ask_ai_redo';
 
 /** Everything a verdict needs to be sent again later, as plain JSON. */
 export interface VerdictPayload {
@@ -171,7 +171,7 @@ function parse(raw: string | null): OutboxEntry[] {
         typeof (e as OutboxEntry).id === 'string' &&
         typeof (e as OutboxEntry).questionId === 'string' &&
         typeof (e as OutboxEntry).paperId === 'string' &&
-        ['pass', 'fix', 'skip', 'ask_help'].includes((e as OutboxEntry).kind),
+        ['pass', 'fix', 'skip', 'ask_help', 'ask_ai_redo'].includes((e as OutboxEntry).kind),
     );
   } catch {
     return [];
@@ -408,7 +408,12 @@ export async function sendVerdict(
       patch: p.patch,
       printedTypo: p.printedTypo,
       typoNote: p.typoNote,
-      reason: e.kind === 'ask_help' ? p.reason ?? 'Not sure how to fix this' : undefined,
+      reason:
+        e.kind === 'ask_help'
+          ? p.reason ?? 'Not sure how to fix this'
+          : e.kind === 'ask_ai_redo'
+            ? p.reason ?? ''
+            : undefined,
       includeSkipped: p.includeSkipped,
     });
   try {

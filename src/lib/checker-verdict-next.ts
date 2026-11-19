@@ -13,7 +13,7 @@ import type { ContextRow } from '@/lib/checker-context';
 import type { CheckerQuestion } from '@/lib/checker-api';
 import { checkerSaveRoute, TYPO_NEEDS_VERSION } from '@/lib/checker-save';
 
-export type VerdictAction = 'pass' | 'fix' | 'skip' | 'ask_help';
+export type VerdictAction = 'pass' | 'fix' | 'skip' | 'ask_help' | 'ask_ai_redo';
 
 export interface VerdictAndNextInput {
   action: VerdictAction;
@@ -28,7 +28,7 @@ export interface VerdictAndNextInput {
   /** fix: the printed paper itself has a typo and the checker corrected it. */
   printedTypo?: boolean;
   typoNote?: string | null;
-  /** ask_help: why. */
+  /** ask_help and ask_ai_redo: why. ask_ai_redo needs one (the server refuses under 5 characters). */
   reason?: string | null;
   /** Also serve the questions the checker skipped (the "go through skipped" mode). */
   includeSkipped?: boolean;
@@ -51,7 +51,7 @@ export interface VerdictAndNext {
   next_paper_id: string | null;
 }
 
-const ACTIONS: readonly VerdictAction[] = ['pass', 'fix', 'skip', 'ask_help'];
+const ACTIONS: readonly VerdictAction[] = ['pass', 'fix', 'skip', 'ask_help', 'ask_ai_redo'];
 
 /**
  * The RPC parameters for verifier_verdict_and_next. Throws (before any network

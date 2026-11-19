@@ -124,6 +124,9 @@ const HELP_REASONS = [
   'The picture is of a different question',
 ];
 
+/** The server refuses a "send back to the AI" with fewer characters than this (checker_ask_for_ai_redo). */
+const MIN_AI_REDO_REASON = 5;
+
 export function VerifyScreen({
   api,
   scope,
@@ -943,6 +946,18 @@ export function VerifyScreen({
   function doAskForHelp(reason: string) {
     if (!question || submitting) return;
     submitVerdict('ask_help', { reason: reason.trim() || 'Not sure how to fix this' }, 'Sent to your HOD.', includeSkipped, () => setHelpOpen(false));
+  }
+
+  // "Send back to the AI": for a question that is badly wrong. It does NOT go to the AI at once: it goes to the
+  // HOD, who says yes or no. A reason is required (the server refuses under 5 characters), so ask before sending.
+  function doAskForAiRedo(reason: string) {
+    if (!question || submitting) return;
+    const why = reason.trim();
+    if (why.length < MIN_AI_REDO_REASON) {
+      setError('Say what is wrong with it first. A few words is enough.');
+      return;
+    }
+    submitVerdict('ask_ai_redo', { reason: why }, 'Sent to your HOD. If they agree, the AI will look at it again.', includeSkipped, () => setHelpOpen(false));
   }
 
   // Skip is always available, also on the last question left. A skipped
@@ -2268,12 +2283,21 @@ export function VerifyScreen({
             className="w-full rounded-xl bg-muted p-3 text-[16px] outline-none focus-visible:ring-2 focus-visible:ring-focus"
           />
           {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <ActionButton tone="brand" onClick={() => doAskForHelp(helpReason)} disabled={submitting}>
               {submitting ? 'Sending...' : 'Send to the HOD'}
             </ActionButton>
             <ActionButton tone="muted" onClick={() => setHelpOpen(false)} disabled={submitting}>
               Cancel
+            </ActionButton>
+          </div>
+          <div className="mt-4 border-t border-border pt-3">
+            <p className="mb-2 text-[13px] text-warm-secondary">
+              Is it so wrong that the computer should read it again? Say what is wrong above, then press this. Your HOD decides
+              first, so nothing is sent to the computer until they agree.
+            </p>
+            <ActionButton tone="muted" onClick={() => doAskForAiRedo(helpReason)} disabled={submitting}>
+              Send back to the AI
             </ActionButton>
           </div>
         </Modal>

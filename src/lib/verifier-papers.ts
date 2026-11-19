@@ -87,7 +87,7 @@ export function normaliseMyPapers(raw: unknown): MyPaper[] {
 export function papersAfterVerdict(
   rows: MyPaper[] | undefined,
   paperId: string,
-  kind: 'pass' | 'fix' | 'skip' | 'ask_help',
+  kind: 'pass' | 'fix' | 'skip' | 'ask_help' | 'ask_ai_redo',
 ): MyPaper[] | undefined {
   if (!rows) return rows;
   return rows.map((p) => {
@@ -95,7 +95,7 @@ export function papersAfterVerdict(
     if (kind === 'skip') return { ...p, skipped: Math.min(p.skipped + 1, p.remaining) };
     const remaining = Math.max(0, p.remaining - 1);
     const next = { ...p, remaining, skipped: Math.min(p.skipped, remaining) };
-    if (kind === 'ask_help') return { ...next, with_hod: p.with_hod + 1 };
+    if (kind === 'ask_help' || kind === 'ask_ai_redo') return { ...next, with_hod: p.with_hod + 1 };
     return { ...next, done: p.done + 1, paper_passed: p.paper_passed + 1 };
   });
 }

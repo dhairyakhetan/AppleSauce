@@ -622,6 +622,8 @@ export interface HodApi {
   history(filter: { actor?: string | null; role?: string | null; before?: string | null; limit?: number }): Promise<HistoryRow[]>;
   /** hod_send_back(): a question a student sent up goes back to the students. */
   sendBack(questionId: string, note: string): Promise<void>;
+  /** hod_ai_redo_decide() (20261118100000): yes marks the question "needs AI review" (the reason stays); no keeps it with the HOD as an ordinary help request. */
+  aiRedoDecide(questionId: string, approve: boolean, note: string): Promise<void>;
   pictureUrl(path: string): Promise<string | null>;
   /** The stored diagram(s) of one question and of the shared stem above it (verifier_question_diagrams lets an HOD in). Never throws: empty when there is none. */
   questionDiagrams(questionId: string): Promise<QuestionDiagram[]>;
@@ -788,6 +790,9 @@ export const realHodApi: HodApi = {
   },
   async sendBack(questionId, note) {
     await call('hod_send_back', { p_question_id: questionId, p_note: note });
+  },
+  async aiRedoDecide(questionId, approve, note) {
+    await call('hod_ai_redo_decide', { p_question_id: questionId, p_approve: approve, p_note: note || null });
   },
   pictureUrl: checkerPictureUrl,
   questionDiagrams: verifierQuestionDiagrams,

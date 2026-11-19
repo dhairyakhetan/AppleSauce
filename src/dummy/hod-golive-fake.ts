@@ -51,6 +51,8 @@ interface FQ {
   escalated_at: string | null;
   reason: string | null;
   ai_review_reason: string | null;
+  ai_redo_state: 'requested' | 'approved' | 'redone' | null;
+  ai_redo_reason: string | null;
 }
 
 interface FP {
@@ -120,6 +122,8 @@ const q = (over: Partial<FQ> & Pick<FQ, 'ord' | 'body'>): FQ => ({
   escalated_at: null,
   reason: null,
   ai_review_reason: null,
+  ai_redo_state: null,
+  ai_redo_reason: null,
   ...over,
 });
 
@@ -184,7 +188,10 @@ function seedPapers(): FP[] {
         pile: 'escalated',
         escalated_by_name: 'Nikhil K',
         escalated_at: minutesAgo(70),
-        reason: 'There is no question here',
+        reason: 'Two questions are joined and the second is cut off',
+        // A student asked for the AI to read this one again; the HOD has not answered yet (the Yes / No card shows).
+        ai_redo_state: 'requested',
+        ai_redo_reason: 'Two questions are joined and the second is cut off',
       }),
     ],
   };
@@ -379,6 +386,7 @@ export interface GoLiveFake {
     setQuestionState(id: string, state: 'pass' | 'set_aside' | 'reopen', note?: string): Promise<string>;
     editQuestion(id: string, version: number, changes: Record<string, unknown>, note?: string): Promise<number>;
     sendBack(id: string, note: string): Promise<void>;
+    aiRedoDecide(id: string, approve: boolean, note: string): Promise<void>;
     readyPapers(): Promise<HodReadyPaper[]>;
     unqueuedCount(): Promise<number>;
     paperPreview(id: string): Promise<HodPreview>;
@@ -516,6 +524,8 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
     live_bank_question_id: null,
     ai_decision: null,
     ai_review_reason: x.ai_review_reason,
+    ai_redo_state: x.ai_redo_state,
+    ai_redo_reason: x.ai_redo_reason,
     page: x.page,
     page_path: x.page_path,
     snippet_path: x.snippet_path,
@@ -652,7 +662,21 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
       if (x.pile !== 'escalated') throw pgError('This question was not sent up by a student.', '55000');
       x.pile = 'students';
       x.escalated_by_name = null;
+      x.ai_redo_state = null;
+      x.ai_redo_reason = null;
       record(`send back ${id} ${note}`);
+    },
+    async aiRedoDecide(id, approve, note) {
+      const { q: x } = findQ(id);
+      if (x.pile !== 'escalated') throw pgError('This question is not waiting for the HOD', '22023');
+      if (x.ai_redo_state !== 'requested') throw pgError('No AI redo request is waiting on this question', '22023');
+      if (approve) {
+        x.ai_redo_state = 'approved';
+      } else {
+        x.ai_redo_state = null;
+        x.ai_redo_reason = null;
+      }
+      record(`${approve ? 'ai redo yes' : 'ai redo no'} ${id} ${note}`);
     },
     async readyPapers() {
       return papers
