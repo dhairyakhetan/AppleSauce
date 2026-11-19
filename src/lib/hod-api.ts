@@ -19,6 +19,7 @@ import {
   normaliseExplanation,
   normaliseLivePapers,
   normaliseNeedsQuestions,
+  normaliseAiRedoList,
   normaliseNeedsYouPapers,
   normaliseOverrideMarks,
   normalisePreview,
@@ -31,6 +32,7 @@ import {
   type HodDeskCounts,
   type HodLivePaper,
   type HodNeedsQuestion,
+  type HodAiRedoItem,
   type HodNeedsYouPaper,
   type HodPreview,
   type HodReadyPaper,
@@ -624,6 +626,8 @@ export interface HodApi {
   sendBack(questionId: string, note: string): Promise<void>;
   /** hod_ai_redo_decide() (20261118100000): yes marks the question "needs AI review" (the reason stays); no keeps it with the HOD as an ordinary help request. */
   aiRedoDecide(questionId: string, approve: boolean, note: string): Promise<void>;
+  /** hod_ai_redo_list() (20261119100000): every question approved for the AI to redo (and those already redone), across papers. */
+  aiRedoList(): Promise<HodAiRedoItem[]>;
   pictureUrl(path: string): Promise<string | null>;
   /** The stored diagram(s) of one question and of the shared stem above it (verifier_question_diagrams lets an HOD in). Never throws: empty when there is none. */
   questionDiagrams(questionId: string): Promise<QuestionDiagram[]>;
@@ -793,6 +797,9 @@ export const realHodApi: HodApi = {
   },
   async aiRedoDecide(questionId, approve, note) {
     await call('hod_ai_redo_decide', { p_question_id: questionId, p_approve: approve, p_note: note || null });
+  },
+  async aiRedoList() {
+    return normaliseAiRedoList(await call('hod_ai_redo_list'));
   },
   pictureUrl: checkerPictureUrl,
   questionDiagrams: verifierQuestionDiagrams,

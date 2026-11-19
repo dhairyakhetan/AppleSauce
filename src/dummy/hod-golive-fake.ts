@@ -11,7 +11,7 @@
  * server's sentence; hiding needs a reason; rejecting an upload needs a note.
  */
 
-import type { AiTrustOverall, AssignmentExplanation, HodCheck, HodDeskCounts, HodLivePaper, HodNeedsQuestion, HodNeedsYouPaper, HodPreview, HodReadyPaper, HodStudentUpload, HodTrailRow, OverrideMark, PreviewHeader, PreviewQuestion, TrailStage, UploadStatus } from '@/lib/hod-publish';
+import type { AiTrustOverall, AssignmentExplanation, HodAiRedoItem, HodCheck, HodDeskCounts, HodLivePaper, HodNeedsQuestion, HodNeedsYouPaper, HodPreview, HodReadyPaper, HodStudentUpload, HodTrailRow, OverrideMark, PreviewHeader, PreviewQuestion, TrailStage, UploadStatus } from '@/lib/hod-publish';
 import { CHECKS, OVERRIDE_MAX_REASON, OVERRIDE_MIN_REASON, allChecksPass, fieldProblem, PUBLISH_FIELDS, LIVE_FIELDS, normaliseChecks } from '@/lib/hod-publish';
 import { dummyPageDataUrl, dummyPictureDataUrl } from '@/dummy/checker-fixtures';
 import type { StagePictureItem } from '@/lib/stage-pictures';
@@ -387,6 +387,7 @@ export interface GoLiveFake {
     editQuestion(id: string, version: number, changes: Record<string, unknown>, note?: string): Promise<number>;
     sendBack(id: string, note: string): Promise<void>;
     aiRedoDecide(id: string, approve: boolean, note: string): Promise<void>;
+    aiRedoList(): Promise<HodAiRedoItem[]>;
     readyPapers(): Promise<HodReadyPaper[]>;
     unqueuedCount(): Promise<number>;
     paperPreview(id: string): Promise<HodPreview>;
@@ -677,6 +678,33 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
         x.ai_redo_reason = null;
       }
       record(`${approve ? 'ai redo yes' : 'ai redo no'} ${id} ${note}`);
+    },
+    async aiRedoList() {
+      const out: HodAiRedoItem[] = [];
+      for (const p of papers) {
+        for (const x of real(p)) {
+          if (x.ai_redo_state !== 'approved' && x.ai_redo_state !== 'redone') continue;
+          out.push({
+            id: x.id,
+            paper_id: p.id,
+            paper_title: p.title,
+            ord: x.ord,
+            display_number: x.display_number,
+            number_path: x.display_number,
+            body: x.body,
+            marks: x.marks,
+            state: x.ai_redo_state,
+            reason: x.ai_redo_reason,
+            note: null,
+            asked_by_name: x.escalated_by_name,
+            asked_at: x.escalated_at,
+            decided_by_name: null,
+            decided_at: null,
+            set_aside: x.state === 'set_aside',
+          });
+        }
+      }
+      return out;
     },
     async readyPapers() {
       return papers

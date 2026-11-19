@@ -16,6 +16,7 @@ import { LiveTab } from '@/components/hod/LiveTab';
 import { NeedsYouTab } from '@/components/hod/NeedsYouTab';
 import { ReadyTab } from '@/components/hod/ReadyTab';
 import { RequestsTab } from '@/components/hod/RequestsTab';
+import { SendToAiTab } from '@/components/hod/SendToAiTab';
 import { UploadsTab } from '@/components/hod/UploadsTab';
 import { VerifiersTab } from '@/components/hod/VerifiersTab';
 import { TeacherReviewersTab } from '@/components/hod/TeacherReviewersTab';
@@ -84,6 +85,7 @@ export interface HodTabDef {
 
 export const TABS: HodTabDef[] = [
   { key: 'needs-you', label: 'Needs you', hint: 'Questions only you can settle: pass, fix, send back to students or set aside.', Component: NeedsYouTab },
+  { key: 'send-to-ai', label: 'Send to AI', hint: 'Questions you agreed the AI should read again, with the reason a student gave.', Component: SendToAiTab },
   { key: 'ready', label: 'Ready to go live', hint: 'Papers with every question settled. Read one, run the four checks and publish it.', Component: ReadyTab },
   { key: 'uploads', label: 'Uploads', hint: 'Papers students sent in. Approve or reject them.', Component: UploadsTab },
   { key: 'requests', label: 'Requests', hint: 'Problems and changes people have asked for. Say yes or no to what checkers send in, or send your own.', Component: RequestsTab },

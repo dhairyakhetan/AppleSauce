@@ -9,6 +9,7 @@ import { requestsBadgeLabel } from '@/lib/fix-requests';
 
 export const TAB_KEYS = [
   'needs-you',
+  'send-to-ai',
   'ready',
   'uploads',
   'requests',

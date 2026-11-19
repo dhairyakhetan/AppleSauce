@@ -399,6 +399,61 @@ export function normaliseNeedsQuestions(raw: unknown): HodNeedsQuestion[] {
     .sort((a, b) => a.ord - b.ord);
 }
 
+/** One line of the "Send to AI" tab (hod_ai_redo_list, 20261119100000): a question an HOD approved for the AI to redo, or one the AI has redone. */
+export interface HodAiRedoItem {
+  id: string;
+  paper_id: string;
+  paper_title: string;
+  ord: number;
+  display_number: string | null;
+  number_path: string | null;
+  /** The question exactly as stored; shown as written. */
+  body: string;
+  marks: number | null;
+  /** 'approved' waits for the AI, 'redone' has been redone. */
+  state: 'approved' | 'redone';
+  /** The student's reason. */
+  reason: string | null;
+  /** What the HOD typed when approving, if anything. */
+  note: string | null;
+  asked_by_name: string | null;
+  asked_at: string | null;
+  decided_by_name: string | null;
+  decided_at: string | null;
+  /** The question was set aside so the paper could go live. */
+  set_aside: boolean;
+}
+
+export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
+  const out: HodAiRedoItem[] = [];
+  for (const x of asRows(raw)) {
+    const r = obj(x);
+    const id = str(r.id);
+    const paper = str(r.paper_id);
+    const state = r.ai_redo_state === 'approved' || r.ai_redo_state === 'redone' ? r.ai_redo_state : null;
+    if (!id || !paper || !state) continue;
+    out.push({
+      id,
+      paper_id: paper,
+      paper_title: paperTitleOf({ title: str(r.paper_title), subject: str(r.subject), cls: str(r.cls), school: str(r.school) }),
+      ord: num(r.ord),
+      display_number: str(r.display_number),
+      number_path: str(r.number_path),
+      body: typeof r.body === 'string' ? r.body : '',
+      marks: numOrNull(r.marks),
+      state,
+      reason: str(r.ai_redo_reason),
+      note: str(r.ai_redo_note),
+      asked_by_name: str(r.asked_by_name),
+      asked_at: str(r.asked_at),
+      decided_by_name: str(r.decided_by_name),
+      decided_at: str(r.decided_at),
+      set_aside: r.question_state === 'set_aside',
+    });
+  }
+  return out;
+}
+
 /** "Sent up by a student" for the escalated pile, "Flagged by the computer" for the other. */
 export function whyItNeedsYou(
   q: Pick<HodNeedsQuestion, 'review_bucket' | 'escalated_by_name' | 'reason' | 'ai_review_reason'> &

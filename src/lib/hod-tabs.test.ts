@@ -10,10 +10,11 @@ import { TABS } from '@/pages/Hod';
 
 describe('HOD desk tabs', () => {
   it('are in the owner order, and the page lists exactly these tabs', () => {
-    expect(TAB_KEYS).toEqual(['needs-you', 'ready', 'uploads', 'requests', 'live', 'assignments', 'verifiers', 'history', 'ai-trust', 'teacher-reviewers']);
+    expect(TAB_KEYS).toEqual(['needs-you', 'send-to-ai', 'ready', 'uploads', 'requests', 'live', 'assignments', 'verifiers', 'history', 'ai-trust', 'teacher-reviewers']);
     expect(TABS.map((t) => t.key)).toEqual([...TAB_KEYS]);
     expect(TABS.map((t) => t.label)).toEqual([
       'Needs you',
+      'Send to AI',
       'Ready to go live',
       'Uploads',
       'Requests',

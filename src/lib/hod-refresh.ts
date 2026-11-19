@@ -46,7 +46,7 @@ export function hodRefreshPlan(scope: string, change: HodChange): HodRefreshPlan
     case 'needs-you':
       return {
         now: [k('needs-you'), k('ready'), k('trail'), k('counts'), k('timeline')],
-        later: [k('assignments'), k('unassigned'), k('preview'), k('live')],
+        later: [k('assignments'), k('unassigned'), k('preview'), k('live'), k('ai-redo')],
       };
     case 'publish':
       return {
