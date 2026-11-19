@@ -19,6 +19,7 @@ function code(path: string): string {
 
 const sqlFirst = code('supabase/migrations/20261119100000_hod_ai_redo_list.sql');
 const sql = code('supabase/migrations/20261119200000_hod_ai_redo_flow.sql');
+const sqlLive = code('supabase/migrations/20261119300000_hod_ai_redo_list_live_copies.sql');
 
 const row = { id: 'q1', paper_id: 'p1', paper_title: 'Beccon X Maths', ai_redo_state: 'approved', ai_redo_reason: 'Cut off', asked_by_name: 'Asha' };
 
@@ -57,6 +58,19 @@ describe('reading the list', () => {
   it('is empty for nothing', () => {
     expect(normaliseAiRedoList(null)).toEqual([]);
     expect(normaliseAiRedoList([])).toEqual([]);
+  });
+
+  it('knows a question on a frozen live Maths copy from any other', () => {
+    const out = normaliseAiRedoList([
+      { ...row, id: 'a', ai_redo_state: 'requested', paper_source: 'live_copy' },
+      { ...row, id: 'b', ai_redo_state: 'requested', paper_source: 'new_ocr' },
+      { ...row, id: 'c', ai_redo_state: 'requested' },
+    ]);
+    expect(out.map((x) => [x.id, x.live_copy])).toEqual([
+      ['a', true],
+      ['b', false],
+      ['c', false],
+    ]);
   });
 });
 
@@ -121,7 +135,27 @@ describe('saying yes or no from the tab', () => {
   });
 });
 
-describe('20261119200000_hod_ai_redo_flow.sql (the live list function)', () => {
+describe('20261119300000_hod_ai_redo_list_live_copies.sql (the list function that shows live Maths copies too)', () => {
+  it('only an HOD or admin can read it, and it is closed to visitors', () => {
+    expect(sqlLive).toMatch(/not public\.is_hod\(\)/);
+    expect(sqlLive).toContain("'42501'");
+    expect(sqlLive).toMatch(/revoke all on function public\.hod_ai_redo_list\(\) from public, anon, authenticated/);
+    expect(sqlLive).toMatch(/grant execute on function public\.hod_ai_redo_list\(\) to authenticated/);
+  });
+
+  it('lists requested, approved and redone questions, live Maths copies included, and says which kind of paper each is on', () => {
+    expect(sqlLive).toMatch(/ai_redo_state in \('requested',\s*'approved',\s*'redone'\)/);
+    expect(sqlLive).toContain("'paper_source', ap.source");
+    expect(sqlLive).not.toMatch(/distinct from 'live_copy'/);
+    expect(sqlLive).toContain("'trail'");
+  });
+
+  it('only reads: it never writes a table', () => {
+    expect(sqlLive).not.toMatch(/\b(insert into|update public|delete from|alter table|drop table)\b/i);
+  });
+});
+
+describe('20261119200000_hod_ai_redo_flow.sql (the previous list function, kept so it can be pasted back)', () => {
   it('only an HOD or admin can read it, and it is closed to visitors', () => {
     expect(sql).toMatch(/not public\.is_hod\(\)/);
     expect(sql).toContain("'42501'");
@@ -174,6 +208,13 @@ describe('the screen', () => {
     expect(tab).toContain('aria-controls={storyId}');
     expect(tab).toContain('See the whole story');
     expect(tab).toContain('data-testid="ai-redo-stages"');
+  });
+
+  it('gives a frozen live Maths copy a note and its own group, with no yes, no or Open paper', () => {
+    expect(tab).toContain('data-testid="ai-redo-frozen-note"');
+    expect(tab).toContain("item.state === 'requested' && !item.live_copy");
+    expect(tab).toContain('{item.live_copy ? null : (');
+    expect(tab).toContain('On frozen live Maths copies (cannot be decided here)');
   });
 
   it('sends nothing to the AI and uses no em or en dashes', () => {

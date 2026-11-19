@@ -703,6 +703,7 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
             decided_by_name: null,
             decided_at: null,
             set_aside: x.state === 'set_aside',
+            live_copy: false,
             trail: [
               step('checker_ask_ai_redo', x.escalated_by_name, x.ai_redo_reason),
               ...(x.ai_redo_state !== 'requested' ? [step('hod_ai_redo_approve', 'An HOD', x.ai_redo_reason)] : []),

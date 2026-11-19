@@ -462,6 +462,8 @@ export interface HodAiRedoItem {
   decided_at: string | null;
   /** The question was set aside so the paper could go live. */
   set_aside: boolean;
+  /** The paper is a frozen live Maths copy. The HOD desk leaves those out, so Yes and No are refused on them. */
+  live_copy: boolean;
   /** Everything that happened to it since the student asked, oldest first. */
   trail: HodAiRedoStep[];
 }
@@ -511,6 +513,7 @@ export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
       decided_by_name: str(r.decided_by_name),
       decided_at: str(r.decided_at),
       set_aside: r.question_state === 'set_aside',
+      live_copy: r.paper_source === 'live_copy',
       trail: normaliseAiRedoTrail(r.trail),
     });
   }
