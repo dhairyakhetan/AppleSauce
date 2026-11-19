@@ -95,7 +95,7 @@ About 5 to 10 questions per topic, unless the teacher asks for another number. N
 
 - Use the teacher's material below these instructions: notes, a textbook passage or questions. Every question and answer must come from it.
 - If there is none, write from well-established facts in the standard textbook for this chapter, and leave out anything you are not sure of.
-- Write in the material's language: Hindi material gets Hindi questions. The labels (Q:, A:, Also:, Fill:, Wrong:, Level:, Topic, Chapter) always stay in English.
+- Write in the material's language: Hindi material gets Hindi questions. The labels (Board, Class, Subject, Chapter, Topic, Q:, A:, Also:, Fill:, Wrong:, Level:), the words True and False after A:, and the level words (easy, medium, hard) always stay in English.
 
 ## Each question is a block
 

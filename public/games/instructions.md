@@ -59,7 +59,7 @@ Rules for the format:
 STEP 3. THE QUESTION (Q:)
 
 1. One fact. Exactly one correct answer.
-2. It makes sense on its own. Never write "this", "the above", "of the following", "which of these" or "given below".
+2. It makes sense on its own. Never write "the above", "of the following", "which of these" or "given below". Never write "this figure" or "this passage". The same words are not allowed in the Fill sentence.
 3. Never ask about a figure, a diagram, a map, a table or a passage. The games show text only.
 4. The answer must not appear inside the question. This also holds for every Also answer.
    Check each question: take the answer (and each Also answer) and look for it, word for word, in the question. It must not be there.
@@ -70,7 +70,7 @@ STEP 3. THE QUESTION (Q:)
 
 STEP 4. THE ANSWER (A:)
 
-1. Short: a word, a name, a short phrase or a number. At most 6 words. Never a sentence.
+1. Short: a word, a name, a short phrase or a number. At most 6 words and at most 100 characters. Never a sentence. The same limit holds for every Also line and every wrong option.
 2. Write exactly what a student would type. No brackets. No notes like "(approx.)". Never two answers joined by "/" or "or".
 3. Put units in the question, not in the answer. Write "Boiling point of water in degrees Celsius" with answer 100.
 4. Prefer words to numbers when the material allows. Crosswords and word searches need answers made only of letters, 3 to 15 letters long. One word or two short words is best.
@@ -83,19 +83,21 @@ STEP 5. THE OTHER LINES
 
 Also: (optional, at most 5 lines, one answer on each line)
   Write another answer that is just as right. Examples: a short form (CPU), a full form, another name (Calcutta for Kolkata), a number in words (Six for 6).
-  Do not write the same answer with other capitals, spaces or hyphens. Those already count.
+  Do not repeat the answer with other capitals, spaces, punctuation or accents, or with "a", "an" or "the" at the start ("The Nile" and "Nile" are the same). Those already count.
+  An Also answer of 3 to 15 letters is used in the crossword when the main answer is too long for it.
   Do not write spelling mistakes. The game forgives small slips by itself.
 
 Fill: (required)
   The same fact as one sentence. Write three underscores ___ where the answer goes.
   Exactly one ___ in the sentence. The ___ stands for the WHOLE answer.
   The rest of the sentence must not contain the answer or any Also answer. Look for it word for word, as in step 3.
-  The sentence must be a full sentence that reads correctly with the answer in the blank.
+  The sentence must be a full sentence that reads correctly with the answer in the blank. It has at least 3 other words around the ___ and is at most 300 characters.
 
 Wrong: (required) 
   3 to 5 wrong options on ONE line, separated by semicolons (;).
   Each wrong option is believable but clearly wrong. It is the same kind of thing as the answer (a year for a year, a gas for a gas) and about as long.
-  Never write the answer or an Also answer as a wrong option.
+  Never write the answer or an Also answer as a wrong option. Never write the same option twice.
+  If the answer is a number, every option is a number. If the answer is words, no option is a bare number.
   Never write "All of the above", "None of these" or "Both A and B". The options are shuffled.
   Do not use a semicolon inside an option.
 
@@ -141,9 +143,10 @@ Reply with these parts in this order. Write nothing outside these parts.
 
 1. Put the questions in ONE code block (three backticks before and after). Inside the block: the chapter lines, then each Topic line with its questions under it. Nothing else inside the block.
 2. After the block, write this sentence exactly: "Copy the block, open the Write questions page on the site, sign in, and paste it into the Questions box."
-3. After that, add at most two short sentences, and only if they apply:
+3. After that, add at most three short sentences, and only if they apply. You may write them in the teacher's language:
    - which answers you wrote yourself because the material did not give them;
-   - that you wrote from general knowledge, so the teacher should check the questions.
+   - that you wrote from general knowledge, so the teacher should check the questions;
+   - which of the teacher's own questions you rewrote or left out, and why.
 
 If the teacher asks for changes (for example "add 5 more" or "make them harder"), write the complete block again, not just the changes.
 
