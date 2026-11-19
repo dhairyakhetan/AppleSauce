@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shikshaq-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 8080,
+      "autoPort": true
+    },
+    {
+      "_comment": "Serves the built dist/, which is the only way to exercise the prerendered HTML -- the dev server never produces it. Deliberately NOT vite preview's default 4173: a stale server on that port would answer happily and you would be testing an old build.",
+      "name": "shikshaq-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--port", "4180", "--strictPort"],
+      "port": 4180
+    }
+  ]
+}

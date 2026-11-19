@@ -1,0 +1,40 @@
+# Nothing listed here is needed to build or serve the site, and all of it was
+# being uploaded on every deploy. The three question-bank JSONs alone are ~20MB,
+# and data/ is another ~12MB.
+#
+# The bank lives in Supabase (bank_papers / bank_questions). These files are the
+# import-time source of record for scripts/import-bank.ts, read from a
+# developer's machine. They sit outside public/ so they are never served, and
+# they have no reason to reach Vercel at all.
+#
+# Deliberately explicit rather than a blanket *.json: package.json,
+# package-lock.json, components.json, tsconfig*.json and vercel.json are all
+# load-bearing at build time, and excluding any of them breaks the deploy in a
+# way that is tedious to diagnose from here -- we cannot read Vercel's logs.
+
+# Every pattern here is root-anchored with a leading slash, deliberately.
+# .vercelignore uses .gitignore syntax, where an unanchored `data/` matches at
+# ANY depth -- so it would also have excluded src/data/, which nothing imports
+# today but would be a silent, log-less build failure the day something did.
+# Anchoring costs nothing and removes the trap.
+
+# Question-bank sources and re-import inputs (~20MB + data/ another ~12MB)
+/data/
+/history_civics_bank.json
+/question_bank_economics.json
+/question_bank_english_partial.json
+
+# Database migrations: applied via the Supabase CLI, never by the build
+/supabase/
+/*.sql
+
+# Docs, handoff material and design archives
+/docs/
+/*.md
+/*.zip
+/maths_question_bank_deploy*
+/Shikshok mobile design overhaul*
+
+# Local-only
+/tmp/
+/run-dev.bat

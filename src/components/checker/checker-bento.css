@@ -1,0 +1,31 @@
+/* The verify screen as a bento grid (12 Oct 2026): the whole screen fits one
+   viewport, so nothing here may add height to the page. Only a tile scrolls.
+
+   The soft edge at the foot of a tile that has more below is NOT drawn here any more: it is a mask on
+   the scroller (fadeMask in BentoParts.tsx). A coloured strip laid over the tile showed as a pale band
+   across a white diagram sheet (8 Nov 2026). */
+
+/* The phone's tile pager: one tile per swipe, snapping, no visible scrollbar. */
+.checker-pager {
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.checker-pager::-webkit-scrollbar {
+  display: none;
+}
+
+.checker-pane {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* A scroller inside a tile keeps its own scrolling: it must not hand the end of
+   a scroll on to the page (which never scrolls here) or to the pager. */
+.checker-tile-scroll {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--warm-hairline-strong) transparent;
+}

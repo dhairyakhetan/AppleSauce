@@ -1,0 +1,46 @@
+name: Daily redeploy
+
+# WHY THIS EXISTS (owner decision, 14 Nov 2026: "fully automate without laptop").
+# A paper that goes live has no page of its own for search engines and is not in the sitemap until the site is
+# rebuilt, because both are made at build time. Students see the new paper at once (the app reads it live); only
+# search engines wait. This job asks Vercel to rebuild the site once a day, so every paper published that day is
+# searchable by the next morning with nobody having to remember.
+#
+# ONE-TIME SETUP (the owner, about two minutes, no laptop tools needed):
+#   1. Vercel project > Settings > Git > Deploy Hooks > create a hook named "daily" for branch main. Copy its address.
+#   2. GitHub repo > Settings > Secrets and variables > Actions > New repository secret, named VERCEL_DEPLOY_HOOK_URL,
+#      value = that address.
+# Until the secret exists this job says so and stops without failing, so nothing is broken by merging it.
+#
+# The address is a secret: it is never printed here. To run it by hand: Actions tab > Daily redeploy > Run workflow.
+
+on:
+  schedule:
+    # 20:30 UTC = 02:00 in India, when nobody is publishing.
+    - cron: '30 20 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-redeploy
+  cancel-in-progress: false
+
+jobs:
+  redeploy:
+    name: Ask Vercel to rebuild the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "VERCEL_DEPLOY_HOOK_URL is not set yet, so nothing was redeployed. See the setup steps at the top of this file."
+            exit 0
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 -X POST "$HOOK")
+          echo "Vercel answered with status $code"
+          case "$code" in 2*) echo "Redeploy requested." ;; *) echo "Vercel refused the request."; exit 1 ;; esac

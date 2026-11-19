@@ -1,0 +1,177 @@
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { PaperPageFlip } from '@/components/checker/PaperPageFlip';
+import type { HodApi } from '@/lib/hod-api';
+import { actionToneClass } from '@/lib/checker-button-styles';
+import { cn } from '@/lib/utils';
+import { SLOW_WORDS } from '@/lib/checker-timeout';
+import { FIGURE_LABEL, FIGURE_NUMBER, FIGURE_TILE } from '@/lib/chart-styles';
+
+/* Small pieces the HOD tabs share. */
+
+/** "3 minutes ago", or "" when the time is missing or unreadable. */
+export function ago(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : formatDistanceToNow(d, { addSuffix: true });
+}
+
+export function Tile({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+  return (
+    <div className={FIGURE_TILE} title={hint}>
+      <p className={FIGURE_LABEL}>{label}</p>
+      <p className={FIGURE_NUMBER}>{value}</p>
+    </div>
+  );
+}
+
+export function EmptyNote({ children }: { children: ReactNode }) {
+  return <p className="rounded-2xl bg-muted px-4 py-8 text-center text-[14px] text-warm-secondary">{children}</p>;
+}
+
+export function ListSkeleton({ rows = 3, label }: { rows?: number; label: string }) {
+  return (
+    <div className="animate-pulse space-y-2" role="status" aria-label={label}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="h-20 rounded-2xl bg-muted" />
+      ))}
+    </div>
+  );
+}
+
+export function LoadError({ onRetry, what }: { onRetry: () => void; what: string }) {
+  return (
+    <div role="alert" className="rounded-2xl bg-destructive/10 px-4 py-4 text-[14px] text-foreground">
+      <p>{what} did not load. {SLOW_WORDS}</p>
+      <button type="button" onClick={onRetry} className="tap-44 mt-1 font-semibold text-brand-blue">
+        Try again
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The picture beside an escalated question: the question's own crop, else its
+ * page, else the whole paper as a page-flip. Never "judge from the words".
+ */
+export function QuestionPicture({
+  api,
+  paperId,
+  path,
+  page,
+  className,
+}: {
+  api: Pick<HodApi, 'pictureUrl' | 'paperPages'>;
+  paperId: string;
+  /** Storage path of the crop or of the question's page, when one exists. */
+  path: string | null;
+  page: number | null;
+  className?: string;
+}) {
+  const [state, setState] = useState<{ path: string; url: string | null } | null>(null);
+  // The HOD can always open the whole paper: escalations are often "the
+  // picture is of a different question", so the crop alone cannot settle them.
+  const [whole, setWhole] = useState(false);
+  useEffect(() => {
+    setWhole(false);
+  }, [path, paperId]);
+  useEffect(() => {
+    if (!path) return;
+    let cancelled = false;
+    api
+      .pictureUrl(path)
+      .then((url) => {
+        if (!cancelled) setState({ path, url });
+      })
+      // A failed look-up counts as a missing picture: the whole paper opens, not a skeleton that never ends.
+      .catch(() => {
+        if (!cancelled) setState({ path, url: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path]);
+
+  if (!path) {
+    return <PaperPageFlip paperId={paperId} loadPages={api.paperPages} pictureUrl={api.pictureUrl} questionPage={page} className={className} />;
+  }
+  if (!state || state.path !== path) {
+    return <div className={cn('h-40 animate-pulse rounded-2xl bg-muted', className)} role="status" aria-label="Loading the picture" />;
+  }
+  if (!state.url) {
+    // The stored picture is gone: fall back to the whole paper rather than nothing.
+    return <PaperPageFlip paperId={paperId} loadPages={api.paperPages} pictureUrl={api.pictureUrl} questionPage={page} className={className} />;
+  }
+  const toggle = (
+    <button
+      type="button"
+      onClick={() => setWhole((w) => !w)}
+      className="tap-44 self-start rounded-full bg-muted px-3.5 py-1.5 text-[13px] font-semibold text-foreground"
+    >
+      {whole ? "Back to this question's picture" : 'See the whole paper'}
+    </button>
+  );
+  if (whole) {
+    return (
+      <div className={cn('flex min-w-0 flex-col gap-2', className)}>
+        <PaperPageFlip paperId={paperId} loadPages={api.paperPages} pictureUrl={api.pictureUrl} questionPage={page} title="The whole paper" />
+        {toggle}
+      </div>
+    );
+  }
+  return (
+    <div className={cn('flex min-w-0 flex-col gap-2', className)}>
+      <div className="max-h-[56vh] w-full overflow-auto rounded-2xl bg-white p-2">
+        <img src={state.url} alt={page ? `Page ${page} of the printed paper, where this question is` : 'The printed question'} className="mx-auto block h-auto max-w-full" />
+      </div>
+      {toggle}
+    </div>
+  );
+}
+
+/** A "Back to ..." link that also works as a Link to a tab. */
+export function BackLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className="tap-44 mb-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-blue hover:text-brand-blue-deep">
+      <ArrowLeft className="h-4 w-4" aria-hidden />
+      {children}
+    </Link>
+  );
+}
+
+/** The desk URL for a tab, optionally opened on one paper. */
+export function deskLink(tab: string, paper?: string | null): string {
+  const p = new URLSearchParams({ tab });
+  if (paper) p.set('paper', paper);
+  return `/hod?${p.toString()}`;
+}
+
+/** One paper-row card used by Needs you and Ready: title line, meta line, trail, actions. */
+export function PaperRow({ children, ...rest }: { children: ReactNode } & React.HTMLAttributes<HTMLLIElement>) {
+  return (
+    <li className="rounded-[18px] bg-muted shadow-card p-4" {...rest}>
+      {children}
+    </li>
+  );
+}
+
+/** A small quiet status line that announces itself to screen readers. */
+export function Notice({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'good' | 'warn' }) {
+  return (
+    <p
+      role="status"
+      className={cn(
+        'rounded-2xl px-4 py-3 text-[14px] leading-snug',
+        tone === 'good' ? 'bg-mint text-foreground' : tone === 'warn' ? 'bg-brand-subtle text-foreground' : 'bg-muted text-warm-secondary',
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+/** A quiet button that reads on a grey card, a white panel and a printed sheet alike. */
+export const quietButton = cn(actionToneClass('muted'), 'bg-card text-foreground');

@@ -1,0 +1,164 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: { rpc: vi.fn(), from: vi.fn(), auth: { getSession: vi.fn(), onAuthStateChange: vi.fn() } },
+}));
+
+import { ADMIN_HOME, CHECKER_HOME, HOD_HOME, TEACHER_REVIEW_HOME, TEAMS, homeFor, roleGroups, roleLinks, type Roles } from '@/lib/role-home';
+import { LINK_ICON, TEAM_STYLE } from '@/components/layout/team-style';
+import { ADMIN_TABS } from '@/lib/admin-hints';
+import { buildAdminNav } from '@/pages/admin/shell';
+
+/* Each role lands on one home, and every link the roles are given resolves to
+   a real route (read from App.tsx, so renaming a route fails here). */
+
+const app = readFileSync('src/App.tsx', 'utf8');
+const routes = [...app.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]);
+const matches = (href: string) => routes.some((r) => new RegExp('^' + r.replace(/:[^/]+/g, '[^/]+') + '$').test(href.split(/[?#]/)[0]));
+
+const none: Roles = { isAdmin: false, isHod: false, isChecker: false, isTeacherReviewer: false };
+const only = (over: Partial<Roles>): Roles => ({ ...none, ...over });
+/** An admin is also an HOD, a checker and a reviewer, because the database functions say so. */
+const admin: Roles = { isAdmin: true, isHod: true, isChecker: true, isTeacherReviewer: true };
+
+describe('role home', () => {
+  it('sends each role to its own home, admin first', () => {
+    expect(homeFor(only({ isChecker: true }))).toBe('/checker');
+    expect(homeFor(only({ isHod: true, isChecker: true }))).toBe('/hod');
+    expect(homeFor(admin)).toBe('/admin');
+    expect(homeFor(only({ isTeacherReviewer: true }))).toBe('/teacher-review');
+    expect(homeFor(only({ isChecker: true, isTeacherReviewer: true }))).toBe('/checker');
+    expect(homeFor(none)).toBeNull();
+  });
+
+  it('offers one account menu link per role, in team order', () => {
+    expect(roleLinks(none)).toEqual([]);
+    expect(roleLinks(only({ isChecker: true })).map((l) => l.label)).toEqual(['Verify papers']);
+    expect(roleLinks(only({ isHod: true })).map((l) => l.label)).toEqual(['HOD desk']);
+    expect(roleLinks(only({ isTeacherReviewer: true })).map((l) => l.label)).toEqual(['Review teachers']);
+    expect(roleLinks(admin).map((l) => l.label)).toEqual(['Verify papers', 'HOD desk', 'Review teachers', 'Admin']);
+  });
+
+  it('every home and menu link is a real route', () => {
+    for (const to of [ADMIN_HOME, HOD_HOME, CHECKER_HOME, TEACHER_REVIEW_HOME]) expect(matches(to), to).toBe(true);
+    for (const l of roleLinks(admin)) expect(matches(l.to), l.to).toBe(true);
+  });
+});
+
+describe('account menu by team', () => {
+  const labels = (r: Roles) => roleGroups(r).map((g) => g.label);
+
+  it('shows only the teams the person belongs to, each with its own label', () => {
+    expect(roleGroups(none)).toEqual([]);
+    expect(labels(only({ isChecker: true }))).toEqual(['Papers team']);
+    expect(labels(only({ isHod: true }))).toEqual(['Papers team']);
+    expect(labels(only({ isTeacherReviewer: true }))).toEqual(['Teachers team']);
+    expect(labels(only({ isAdmin: true }))).toEqual(['Admin team']);
+    expect(labels(only({ isChecker: true, isTeacherReviewer: true }))).toEqual(['Papers team', 'Teachers team']);
+    expect(labels(admin)).toEqual(['Papers team', 'Teachers team', 'Admin team']);
+  });
+
+  it('puts the verify and HOD links together under the papers team, the reviewer link under teachers', () => {
+    const g = roleGroups(admin);
+    expect(g[0].links.map((l) => l.label)).toEqual(['Verify papers', 'HOD desk']);
+    expect(g[1].links.map((l) => l.label)).toEqual(['Review teachers']);
+    expect(g[2].links.map((l) => l.label)).toEqual(['Admin']);
+  });
+
+  it('a section label never appears without a link under it, for every mix of roles', () => {
+    const bools = [false, true];
+    for (const isAdmin of bools) for (const isHod of bools) for (const isChecker of bools) for (const isTeacherReviewer of bools) {
+      const r: Roles = { isAdmin, isHod, isChecker, isTeacherReviewer };
+      for (const g of roleGroups(r)) expect(g.links.length, JSON.stringify(r)).toBeGreaterThan(0);
+      expect(roleGroups(r).flatMap((x) => x.links)).toEqual(roleLinks(r));
+    }
+  });
+
+  it('every team has its own accent and every link its own icon, with no raw colour and no opacity on a variable', () => {
+    for (const t of TEAMS) {
+      expect(TEAM_STYLE[t.team], t.team).toBeDefined();
+      expect(TEAM_STYLE[t.team].chip).not.toMatch(/#|\[|\//);
+      expect(TEAM_STYLE[t.team].label).not.toMatch(/#|\[|\//);
+    }
+    const chips = TEAMS.map((t) => TEAM_STYLE[t.team].chip);
+    expect(new Set(chips).size).toBe(chips.length);
+    const icons = Object.values(LINK_ICON);
+    expect(new Set(icons).size).toBe(icons.length);
+    for (const l of roleLinks(admin)) expect(LINK_ICON[l.key], l.key).toBeDefined();
+  });
+
+  it('the menus read their sections from roleGroups, so desktop and mobile cannot drift', () => {
+    for (const f of ['src/components/layout/TopBar.tsx', 'src/components/Navbar.tsx']) {
+      const src = readFileSync(f, 'utf8');
+      expect(src, f).toContain('roleGroups(');
+      expect(src, f).not.toContain('My work');
+      expect(src, f).not.toContain('HOD view');
+    }
+  });
+});
+
+describe('the games team in the account menu', () => {
+  it('shows its links only to people on the games team, and Approve only to its HoDs and admins', () => {
+    expect(roleGroups(admin).map((g) => g.label)).not.toContain('Games team'); // a Shikshaq admin isn't on it by being admin
+    expect(roleLinks(only({ gamesRole: 'member' })).map((l) => l.label)).toEqual(['Write questions']);
+    expect(roleLinks(only({ gamesRole: 'hod' })).map((l) => l.label)).toEqual(['Write questions', 'Approve questions']);
+    expect(roleGroups({ ...admin, gamesRole: 'admin' }).map((g) => g.label)).toEqual(['Papers team', 'Teachers team', 'Games team', 'Admin team']);
+    expect(homeFor(only({ gamesRole: 'admin' }))).toBeNull(); // where people land after signing in doesn't change
+  });
+
+  it('its links go to the games pages, which App.tsx serves under one route', () => {
+    expect(routes).toContain('/games/*');
+    for (const l of roleLinks(only({ gamesRole: 'admin' }))) expect(l.to, l.key).toMatch(/^\/games(\/[a-z]+)?$/);
+  });
+});
+
+describe('admin menu after the rework', () => {
+  const nav = buildAdminNav('teachers');
+
+  it('has four tabs by job, each page in the tab where an admin would look for it', () => {
+    expect(ADMIN_TABS.map((t) => t.label)).toEqual(['People', 'Teachers', 'Logs', 'System']);
+    const pagesOf = (key: string) => ADMIN_TABS.find((t) => t.key === key)!.sections.map((s) => s.page);
+    expect(pagesOf('people')).toEqual(expect.arrayContaining(['checkers', 'hods', 'reviewers', 'team']));
+    expect(pagesOf('teachers')).toEqual(['applications', 'reviews', 'teachers']);
+    expect(pagesOf('system')).toContain('feedback');
+    expect(pagesOf('logs')).toEqual(expect.arrayContaining(['audit', 'checker-log', 'activity']));
+  });
+
+  it('leaves the paper queues to the HOD desk, which an admin can open', () => {
+    const labels = nav.map((n) => n.label);
+    for (const gone of ['Needs you', 'Papers', 'Library', 'Admin queue', 'Student uploads']) expect(labels).not.toContain(gone);
+    expect(matches('/hod')).toBe(true);
+    expect(roleLinks(admin).map((l) => l.to)).toContain('/hod');
+  });
+
+  it('every menu link resolves', () => {
+    for (const n of nav) expect(matches(n.path), `${n.label} -> ${n.path}`).toBe(true);
+  });
+});
+
+/* Static links written straight into the page files must resolve too. Only
+   plain string literals are checked (a template with ${} is dynamic). */
+describe('links written into the role screens', () => {
+  const files = [
+    'src/pages/Checker.tsx',
+    'src/pages/Hod.tsx',
+    'src/pages/TeacherReview.tsx',
+    'src/pages/CheckerHelp.tsx',
+    'src/pages/CheckerPractice.tsx',
+    'src/components/layout/TopBar.tsx',
+    'src/components/Navbar.tsx',
+    'src/components/admin/HodSection.tsx',
+    'src/components/hod/TeacherReviewersTab.tsx',
+    'src/lib/checker-onboarding.ts',
+  ];
+  it('every to="/x" and navigate(\'/x\') points at a real route', () => {
+    const bad: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      const found = [...src.matchAll(/\bto="(\/[^"{}$]*)"/g), ...src.matchAll(/navigate\('(\/[^'$`]*)'/g), ...src.matchAll(/_PATH = '(\/[^']*)'/g)].map((m) => m[1]);
+      for (const href of found) if (!matches(href)) bad.push(`${f}: ${href}`);
+    }
+    expect(bad).toEqual([]);
+  });
+});
