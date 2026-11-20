@@ -388,6 +388,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
               {promptChapter && <span className="text-[13px] text-warm-secondary">For chapter {promptChapter.chapter_no}: {promptChapter.name}. <button type="button" className={LINKISH} onClick={() => setPicking(true)}>Another chapter</button></span>}
               <span className="sr-only" aria-live="polite">{done === 'prompt' ? 'Prompt copied.' : ''}</span>
             </div>
+            <p className="text-[13px] text-warm-secondary">A chatbot that can open links can also read the same rules as plain text: <a className={LINKISH} href="/games/instructions.md" target="_blank" rel="noreferrer">instructions for chatbots</a>.</p>
           </div>
           <ChapterPicker open={picking} setOpen={setPicking} catalog={catalog} start={examples ? undefined : details}
             onCopy={(ch) => { void copyPrompt(ch); setPicking(false); }} />

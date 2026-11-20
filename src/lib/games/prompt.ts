@@ -89,13 +89,13 @@ ${block(topicLines(ch))}`}
 
 ## How many
 
-20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
+20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter: a chapter with more than 4 topics gets fewer per topic. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
 
 ## The material
 
 - Use the teacher's material below these instructions: notes, a textbook passage or questions. Every question and answer must come from it.
 - If there is none, write from well-established facts in the standard textbook for this chapter, and leave out anything you are not sure of.
-- Write in the material's language: Hindi material gets Hindi questions.
+- Write in the material's language: Hindi material gets Hindi questions. The labels (Board, Class, Subject, Chapter, Topic, Q, A, Also, Fill, Wrong, Level), the words True and False after A:, and the levels easy, medium and hard always stay in English.
 
 ## Each question is a block
 

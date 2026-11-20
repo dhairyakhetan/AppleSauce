@@ -189,3 +189,31 @@ describe("the Chapters page's chatbot prompt (Bulk add)", () => {
     expect(groups.map((g) => `${g.group.board} ${g.group.class} ${g.group.subject}: ${g.chapters}`)).toEqual(['ICSE 10 Physics: 2', 'ISC 11 Chemistry: 1']);
   });
 });
+
+/* public/games/instructions.md is the same rules as plain text, for a chatbot that is given the link instead of the
+   copied prompt. Its limits and its worked example must agree with the checker too. */
+describe('the plain instructions page agrees with the checker', () => {
+  const page = read('public/games/instructions.md');
+
+  it('is plain text, with no HTML or styling', () => {
+    expect(page).not.toMatch(/<[a-z][^>]*>|style=|class=/i);
+  });
+
+  it('has a worked example that the checker reads with no problems', () => {
+    const block = page.slice(page.indexOf('COMPLETE EXAMPLE')).match(/```\n([\s\S]*?)```/)![1];
+    const { rows, issues } = format(block);
+    expect(issues).toEqual([]);
+    expect(rows.length).toBeGreaterThan(1);
+    expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
+  });
+
+  it("states the checker's limits and levels", () => {
+    expect(page).toContain(`At most ${MAX_QUESTION} characters`);
+    expect(page).toContain(`At most ${MAX_ANSWER_WORDS} words`);
+    expect(page).toContain(`at most ${MAX_ALSO} lines`);
+    expect(page).toContain(`${MIN_OPTIONS} to ${MAX_OPTIONS} wrong options`);
+    expect(page).toContain(`Never more than ${MAX_PER_TOPIC} in one topic. Never more than ${MAX_PER_CHAPTER} in the whole chapter.`);
+    expect(page).toContain(`Write ${DIFFICULTIES.join(', ').replace(/, ([^,]*)$/, ' or $1')}.`);
+    for (const label of ['Q:', 'A:', 'Also:', 'Fill:', 'Wrong:', 'Level:']) expect(page).toContain(label);
+  });
+});

@@ -38,7 +38,7 @@ export function Guide() {
             <li><B>True/False:</B> only <C>Q:</C> with a statement, and <C>A: True</C> or <C>A: False</C>.</li>
             <li><B>Fix every red or amber line,</B> then send. A question with a problem isn't sent.</li>
           </ol>
-          <pre data-testid="guide-sample" className="mt-1 overflow-x-auto whitespace-pre rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
+          <pre data-testid="guide-sample" className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
 Class: 10
 Subject: Science
 Chapter 1: Chemical Reactions and Equations
