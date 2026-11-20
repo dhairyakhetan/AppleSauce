@@ -570,3 +570,13 @@ describe('what a pasted chatbot reply needs', () => {
     expect(texts(`${head}प्रश्न: तापमान मापने का यंत्र\nउत्तर: थर्मामीटर`)[0]).toMatch(/^Write the labels in English/);
   });
 });
+
+describe('a question that needs a picture', () => {
+  it('is caught when it says "look at the figure" or names a labelled part', () => {
+    const head = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n';
+    const rest = '\nA: Bulb\nFill: The ___ of a thermometer holds the mercury.\nWrong: Stem; Cap; Scale\nLevel: easy';
+    for (const q of ['Look at the figure and name the bulb', 'Name the part labelled A in a thermometer', 'According to the table, name the hottest place']) {
+      expect(format(`${head}Q: ${q}${rest}`).issues.map((x) => x.text), q).toContain("The question can't use a figure, diagram, map, table or passage: the games show only text.");
+    }
+  });
+});

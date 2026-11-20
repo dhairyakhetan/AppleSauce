@@ -49,7 +49,7 @@ export const NO_FILL = "No Fill: line, so this question can't be used in fill in
 const POSITIONAL = /^(?:all|none|both|neither)\b.*\b(?:above|these|of them|a and b|options?)\b|^(?:both|neither)\s+\(?[a-d]\)?\s+(?:and|nor)\s+\(?[a-d]\)?$/i;
 /** A question that leans on options, a figure or text that games don't show. */
 const NEEDS_MORE = /\b(?:of|among|from) the following\b|\bwhich of these\b|\bthe above\b|\b(?:given|shown|mentioned|stated|listed) (?:above|below)\b/i;
-const NEEDS_PICTURE = /\b(?:in|from|see|refer to|using|use|study|observe) the (?:figure|diagram|picture|image|graph|map|passage|table|chart)\b|\b(?:figure|diagram|picture|image|graph|map|passage|table|chart) (?:given|shown|above|below)\b/i;
+const NEEDS_PICTURE = /\b(?:in|from|see|refer to|using|use|study|observe|look at|according to) the (?:figure|diagram|picture|image|graph|map|passage|table|chart)\b|\b(?:figure|diagram|picture|image|graph|map|passage|table|chart) (?:given|shown|above|below)\b|\b(?:part|point|region|place) (?:labelled|labeled|marked) [A-Z0-9]\b/i;
 const TRUE_FALSE_ASK = /^(?:state\s+)?(?:whether\s+)?(?:true\s+or\s+false|t\s*\/\s*f|true\s*\/\s*false)\b|\(\s*(?:true\s*(?:or|\/)\s*false|t\s*\/\s*f)\s*\)|\btrue\s+or\s+false\s*[:?]/i;
 /** Characters a student can type on an ordinary keyboard (dashes and curly quotes are read as - and '). */
 const TYPEABLE = /^[\p{L}\p{M}\p{Nd}\s!-/:-@[-`{-~₹‘’“”–—−]*$/u;

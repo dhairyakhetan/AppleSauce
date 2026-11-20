@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: no-material-open-chapter
+expected_outcome: |
+  One code block with the four chapter lines exactly as given, 2 to 6 topics chosen from the chapter's own sections,
+  and a question count that follows the per-topic table (never over 30 a topic or 80 in all). The site's checker reads
+  it with no problems; every question has Q, A, Fill, Wrong and Level; a note says the questions came from general
+  knowledge and should be checked.
