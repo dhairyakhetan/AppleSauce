@@ -1,6 +1,0 @@
-schema_version: "1.1"
-name: notes-fixed-topics
-expected_outcome: |
-  One code block, starting with the four chapter lines exactly as given, then only the two fixed Topic lines written
-  exactly, with 15 questions in all, every fact taken from the notes. The site's checker reads the block with no
-  problems, and every question has Q, A, Fill, Wrong and Level (True/False: Q, A, Level).

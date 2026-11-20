@@ -106,16 +106,13 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `lib/games/prompt.test.ts` fails if the prompt, the page, the labels, limits,
   levels or examples drift from the checker. Change `prompt.ts`,
   `public/games/instructions.md`, `Guide.tsx` and `format.ts` together.
-- **The skill:** `skills/shikshaq-questions/` is the same work as a Claude skill (install the packaged
-  `.skill` in claude.ai, or use it from this folder): how to write the blocks, choose questions, trim answers,
-  good and bad examples (`references/examples.md`, every one checked against `format.ts`), and
-  `scripts/check.py`, a Python copy of the checker's main rules. When a rule in `format.ts` changes, change
-  the skill and `check.py` with it, and run both on the same texts to see they still flag the same lines.
-  Its test cases are in `skills/shikshaq-questions/evals/`. (`.claude/skills/` is git-ignored here, so it
-  lives in `skills/`.)
-- **The rules page:** `public/games/instructions.md`, served at
-  `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`). Every
-  rule and the format, one-shot for an AI, in short numbered steps, no styling.
-  It was tried on several chatbots, whose replies the checker read with no
-  problems. The checker leaves out a chatbot's own sentences around its code
-  block, so a whole reply can be pasted.
+- **The rules page (the question-writing skill):** `public/games/instructions.md`, served at
+  `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`). One set of rules for any
+  chatbot, for every way it is used: the copied prompt links to it, and teachers can paste it whole into
+  ChatGPT, Gemini or Claude. It has a version line and a list of changes at the end (bump both with any
+  change), when to use it, the 5 steps, a question-by-question check, long chapters over several replies,
+  fixing rejected questions, and parts A (choosing questions), B (trimming answers) and C (good and bad
+  examples with the page's messages). `prompt.test.ts` checks its limits, its worked example and every
+  good block in part C against the checker. `docs/GAMES_SKILL_TEST_KIT.md` is the test to rerun in
+  fresh chats after a change. The checker leaves out a chatbot's own sentences around its code block,
+  so a whole reply can be pasted.

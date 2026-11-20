@@ -161,9 +161,21 @@ describe('the plain instructions page agrees with the checker', () => {
     expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
   });
 
+  it('has good example blocks in part C that the checker reads with no problems', () => {
+    const good = page.slice(page.indexOf('### Good blocks'), page.indexOf('### Bad blocks'));
+    const blocks = [...good.matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1]);
+    expect(blocks.length).toBeGreaterThan(3);
+    for (const b of blocks) expect(format(`Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n${b}`).issues, b).toEqual([]);
+  });
+
+  it('carries a version line, and says it needs nothing but itself', () => {
+    expect(page).toMatch(/^Version \d+\.\d+, /m);
+    expect(page).toContain("Don't rely on earlier chats, saved memories, custom instructions, browsing or other tools.");
+  });
+
   it("states the checker's limits and levels", () => {
     expect(page).toContain(`At most ${MAX_QUESTION} characters`);
-    expect(page).toContain(`At most ${MAX_ANSWER_WORDS} words`);
+    expect(page).toContain(`at most ${MAX_ANSWER_WORDS} words`);
     expect(page).toContain(`at most ${MAX_ALSO} lines`);
     expect(page).toContain(`${MIN_OPTIONS} to ${MAX_OPTIONS} wrong options`);
     expect(page).toContain(`Never more than ${MAX_PER_TOPIC} in one topic, and never more than ${MAX_PER_CHAPTER} in the chapter`);
