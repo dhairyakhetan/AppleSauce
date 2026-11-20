@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Version 1.3, 21 November 2026. Lives at https://shikshaq.in/games/instructions.md
+Version 1.4, 21 November 2026. Lives at https://shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -34,11 +34,11 @@ Then the topics. The teacher's message says which case it is:
 
 - **"fixed"**: use only the given Topic lines, written exactly. Skip one the material doesn't cover. Never add one, and never force a fact into a topic it doesn't clearly belong to: leave it out, and say after the block what you left out.
 - **"already in use"**: keep those lines exactly for questions that belong there, and number any new topic after the last one.
-- **none given**: split the chapter yourself into 2 to 6 topics: the parts the textbook gives headings to, in teaching order. Not "MCQs", not one fact, not the chapter's name.
+- **none given**: split the chapter yourself into 2 to 6 topics: the parts the textbook gives headings to, in teaching order, named as the textbook names them. If it has no headings, group by its main themes; never invent finer subtopics. Not "MCQs", not one fact, not the chapter's name.
 
 Write each topic as "Topic 1: Name", "Topic 2: Name", and so on.
 
-The material is the teacher's notes, passage or rough questions. Every fact comes from it. With no material, use only well-established facts from the standard textbook for that chapter, and say in your reply that the teacher should check them. Ask about the chapter's central ideas, standard definitions and commonly taught examples. Never invent textbook wording, examples, dates or numbers, and leave out anything that depends on one edition or syllabus. With exact numbers, dates and lesser-known names, leave one out rather than guess, and name any you kept but aren't sure of. The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
+The material is the teacher's notes, passage or rough questions. Facts come from three places, in this order: the teacher's material (always first, and the only source when it is given); standard content of the textbook for that board and class (only when there is no material); anything else, which you leave out. With no material, use only well-established facts from the standard textbook for that chapter, and say in your reply that they come from general knowledge of the textbook, not from the teacher's own book, so the teacher should check them. Never imply you checked them against a particular edition. Ask about the chapter's central ideas, standard definitions and commonly taught examples. Never invent textbook wording, examples, dates or numbers, and leave out anything that depends on one edition or syllabus. With exact numbers, dates and lesser-known names, leave one out rather than guess, and name any you kept but aren't sure of. The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
 
 ## 2. Choose what to ask
 
@@ -56,7 +56,14 @@ How many, if the teacher gives no number:
 
 Never more than 30 in one topic, and never more than 80 in the chapter, whatever is asked. If the teacher gives a total, spread it over the topics.
 
-**Quality comes before the count.** The counts are targets, not quotas. Accuracy and distinct questions matter more than reaching a number: never add an obscure, trivial, repeated or doubtful question to make up the count. But don't stop early either: a chapter's terms, named features, causes, effects, comparisons and examples usually give plenty of good questions. Write fewer only when a topic really has no more, and say so after the block.
+**When these pull against each other, this order decides:**
+
+1. **Accuracy**: every fact is certain and comes from the right place (step 1).
+2. **Coverage**: the questions cover what the material (or the chapter) really teaches; a fixed topic the material doesn't cover is skipped, not filled.
+3. **Distinct**: each question tests a different fact, and each answer in a topic is different.
+4. **The count**: the numbers above are targets, not quotas.
+
+So never add an obscure, trivial, repeated or doubtful question to make up a count. But don't stop early either: a chapter's terms, named features, causes, effects, comparisons and examples usually give plenty of good questions. Write fewer only when a topic really has no more, and say so after the block.
 
 ## 3. Write each question as a block
 
@@ -75,10 +82,10 @@ The rules the checker enforces (it rejects any break):
 - **English labels.** Board, Class, Subject, Chapter, Topic, Q, A, Also, Fill, Wrong, Level, the words True and False, and easy, medium, hard stay in English. Everything else is in the material's language.
 - **Q.** One fact with exactly one correct answer. At most 300 characters. Makes sense alone: never "the above", "of the following", "which of these", "given below", or a figure, diagram, map, table or passage. Never contains the answer or any Also answer, word for word. No yes/no questions; no "True or false" or "(True/False)" in it.
 - **A.** What a student types: at most 6 words and 100 characters, never a sentence, no brackets or notes, never two answers joined by "/" or "or". Units go in the question. A symbol a keyboard lacks (x², √2, π) needs an Also line typed with ordinary keys (x^2, sqrt 2, pi). Part B shows how to cut an answer down without changing the fact.
-- **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only an answer that is just as right: short form, full form, another name, a number in words. Never the answer again with a space, hyphen, capital, punctuation or "the" changed: the game already accepts those, and the checker rejects the line ("The Alps" for Alps, "Flood plain" for Floodplain).
+- **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only an answer that is just as right: short form, full form, another name, a number in words. Never the answer again with a space, hyphen, capital, punctuation or "the" changed: the game already accepts those, and the checker rejects the line ("The Alps" for Alps, "Flood plain" for Floodplain). In Hindi and other scripts, add another spelling or term only if the textbook itself uses it, not a common misspelling, and not an English-letter version unless the teacher asks.
 - **Fill** (required). The same fact as one sentence with exactly one `___` standing for the whole answer. At least 3 other words around the ___, and at most 300 characters. It reads correctly with the answer in the gap, and must not contain the whole answer or any whole Also answer.
-- **Wrong** (required). 3 to 5 wrong options on one line, separated by `;` (never commas), each at most 6 words. Believable, clearly wrong, the same kind as the answer (a year for a year), about as long. A number answer gets number options; a word answer gets no bare numbers. Never the answer, an Also answer, a partly right option, a repeat, or "All of the above", "None of these", "Both A and B" (options are shuffled).
-- **Level** (required). easy, medium or hard: easy is recall, medium is understanding, hard is applying, comparing, predicting or linking ideas. The level measures the thinking needed, not how obscure the fact is: a hard-to-remember date is not a hard question.
+- **Wrong** (required). 3 to 5 wrong options on one line, separated by `;` (never commas), each at most 6 words. Believable, clearly wrong, the same kind as the answer (a year for a year), about as long. A number answer gets number options; a word answer gets no bare numbers. Never the answer, an Also answer, a partly right option, a repeat, or "All of the above", "None of these", "Both A and B" (options are shuffled). Read each option against the exact wording of the question: if it could be argued to be right, replace it.
+- **Level** (required). easy, medium or hard: easy is recall, medium is understanding, hard is applying, comparing, predicting or linking ideas. The level measures the thinking needed, not how obscure the fact is: a hard-to-remember date is not a hard question. Judge it for a student of that class: the same question can be easy in class 10 and hard in class 6.
 - **True/False** (at most 1 in 5). A True/False question is different: it has only Q, A and Level. Q is a statement, `A: True` or `A: False` with nothing after the word. Use it to test a real concept or a common misconception, never an obvious statement ("The Sun is a star") or one that is only sometimes true.
 - **No repeats.** Never more than 30 in one topic, and never more than 80 in the chapter. The same question twice in a chapter is rejected, even with a different ending ("?" or ".").
 
@@ -91,12 +98,12 @@ Go through the questions one by one and check each of these in order. Fix anythi
 1. **Chapter and Topic lines**: the chapter lines are exactly as given, the question is under a Topic line, and the Topic lines follow step 1.
 2. **Complete**: Q, A, Fill, Wrong and Level are all there. A True/False question has only Q, A and Level.
 3. **No giveaway**: neither Q nor Fill contains the answer or any Also answer, word for word.
-4. **Fill**: exactly one ___, standing for the whole answer, with at least 3 other words around it.
-5. **Answer**: at most 6 words and 100 characters, not a sentence, no brackets, no "/" or "or", no unit after a number.
+4. **Fill**: exactly one ___, standing for the whole answer, with at least 3 other words around it, and the sentence reads correctly with the answer put in (a or an, singular or plural).
+5. **Answer**: at most 6 words and 100 characters, not a sentence, no brackets, no "/" or "or", no unit after a number, and a typed Also line for any symbol a keyboard lacks.
 6. **Also lines**: each one a different right answer, not the answer respelt, with a space, hyphen, capital or "the" changed.
-7. **Wrong options**: 3 to 5, separated by `;`, none right or partly right, the same kind as the answer.
+7. **Wrong options**: 3 to 5, separated by `;`, the same kind as the answer, and none of them right, partly right, or arguably right under the question's exact wording.
 8. **True/False**: written as a statement, with `A: True` or `A: False` and nothing after the word.
-9. **Repeats**: no two questions test the same fact, even in different words ("Gas plants take in to make food" and "Gas absorbed in photosynthesis" are one question), and no two questions in a topic have the same answer.
+9. **Repeats**: no two questions test the same fact, even in different words ("Gas plants take in to make food" and "Gas absorbed in photosynthesis" are one question), and no two questions in a topic have the same answer (capitals, spaces and "the" don't make answers different).
 10. **Worth asking**: the fact is central and certain, the level fits the thinking it needs, and a True/False tests a real misconception.
 11. **Format**: labels, True/False and levels in English; no numbering, bullets, bold or quotation marks around lines.
 
@@ -104,7 +111,7 @@ Go through the questions one by one and check each of these in order. Fix anythi
 
 Put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. After the block, at most three short sentences in the teacher's language, only those that apply: which answers you supplied because the material lacked them; that you wrote from general knowledge and the teacher should check; that there are fewer questions than asked because the topic or material has no more good ones; facts you left out because they fit none of the fixed topics. If asked for changes, write the whole block again.
 
-**If it won't fit in one reply** (a long chapter, or a reply limit): stop at the end of a whole topic, never in the middle of one. After the block, say exactly what is done and what is left, for example "Topics 1 to 3 are done. Reply 'continue' for topics 4 to 6." Start the next reply with the chapter lines again, then carry on from the next topic, without repeating or skipping any question. Never say the set is complete when it isn't, and never summarise questions you haven't written.
+**If it won't fit in one reply** (a long chapter, or a reply limit): stop at the end of a whole topic, never in the middle of one. After the block, say exactly what is done and what is left, for example "Topics 1 to 3 are done. Reply 'continue' for topics 4 to 6." Start the next reply with the chapter lines again, then carry on from the next topic, without repeating or skipping any question. Keep a running count and state it each time ("Questions 1 to 40 of 78"). Never say the set is complete when it isn't, and never summarise questions you haven't written.
 
 Never say that you saved or sent anything: the teacher pastes your block into the site. Never ask for a password, an account or personal details.
 
@@ -433,6 +440,7 @@ I wrote these from general knowledge, so please check them before using them.
 
 ## Changes
 
+- 1.4 (21 November 2026): an order for when rules pull apart (accuracy, coverage, distinct, count); three kinds of fact, and no claim of checking against the teacher's edition; level judged for the class; wrong options checked against the exact wording; Hindi Also lines only for spellings the textbook uses; Fill grammar, typed symbols and a running count across replies in the check; topic names from the textbook.
 - 1.3 (21 November 2026): quality comes before the count; one fact is tested once, however it is worded; the level is the thinking needed, not how obscure the fact is; with no material, no textbook wording or edition-dependent facts; fixed topics never take facts that don't belong; True/False tests a real misconception.
 - 1.2 (20 November 2026): with no material, being careful about single facts doesn't mean writing far fewer questions.
 - 1.1 (20 November 2026): one set of rules for every chatbot, at this address and for pasting. Added: when to use it, these rules come first, ask for missing details once, a question-by-question check, long chapters over several replies, no reliance on memory or tools, Part C examples.
