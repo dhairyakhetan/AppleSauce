@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Version 1.2, 20 November 2026. Lives at https://shikshaq.in/games/instructions.md
+Version 1.3, 21 November 2026. Lives at https://shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -32,17 +32,17 @@ Chapter 4: Heat
 
 Then the topics. The teacher's message says which case it is:
 
-- **"fixed"**: use only the given Topic lines, written exactly. Skip one the material doesn't cover. Never add one.
+- **"fixed"**: use only the given Topic lines, written exactly. Skip one the material doesn't cover. Never add one, and never force a fact into a topic it doesn't clearly belong to: leave it out, and say after the block what you left out.
 - **"already in use"**: keep those lines exactly for questions that belong there, and number any new topic after the last one.
 - **none given**: split the chapter yourself into 2 to 6 topics: the parts the textbook gives headings to, in teaching order. Not "MCQs", not one fact, not the chapter's name.
 
 Write each topic as "Topic 1: Name", "Topic 2: Name", and so on.
 
-The material is the teacher's notes, passage or rough questions. Every fact comes from it. With no material, use only well-established facts from the standard textbook for that chapter, and say in your reply that the teacher should check them. Be most careful with exact numbers, dates and lesser-known names: leave one out rather than guess, and name any you kept but aren't sure of. That care is for single facts, not whole topics: a chapter's main ideas, terms, named features and examples are well established, so still aim for the counts in step 2. The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
+The material is the teacher's notes, passage or rough questions. Every fact comes from it. With no material, use only well-established facts from the standard textbook for that chapter, and say in your reply that the teacher should check them. Ask about the chapter's central ideas, standard definitions and commonly taught examples. Never invent textbook wording, examples, dates or numbers, and leave out anything that depends on one edition or syllabus. With exact numbers, dates and lesser-known names, leave one out rather than guess, and name any you kept but aren't sure of. The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
 
 ## 2. Choose what to ask
 
-Read part A before you write. In short: one fact per question; spread questions over the whole topic, not its first paragraph; prefer answers that are a word or two of letters (they work in all five games); give each question in a topic a different answer; mix easy, medium and hard.
+Read part A before you write. In short: one fact per question; spread questions over the whole topic, not its first paragraph; prefer answers that are a word or two of letters (they work in all five games); never test the same fact twice, however it is worded, and give each question in a topic a different answer; mix easy, medium and hard.
 
 How many, if the teacher gives no number:
 
@@ -54,7 +54,9 @@ How many, if the teacher gives no number:
 | 5 | 16 |
 | 6 | 13 |
 
-Never more than 30 in one topic, and never more than 80 in the chapter, whatever is asked. If the teacher gives a total, spread it over the topics. Fewer is fine when the material is short; never pad.
+Never more than 30 in one topic, and never more than 80 in the chapter, whatever is asked. If the teacher gives a total, spread it over the topics.
+
+**Quality comes before the count.** The counts are targets, not quotas. Accuracy and distinct questions matter more than reaching a number: never add an obscure, trivial, repeated or doubtful question to make up the count. But don't stop early either: a chapter's terms, named features, causes, effects, comparisons and examples usually give plenty of good questions. Write fewer only when a topic really has no more, and say so after the block.
 
 ## 3. Write each question as a block
 
@@ -76,8 +78,8 @@ The rules the checker enforces (it rejects any break):
 - **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only an answer that is just as right: short form, full form, another name, a number in words. Never the answer again with a space, hyphen, capital, punctuation or "the" changed: the game already accepts those, and the checker rejects the line ("The Alps" for Alps, "Flood plain" for Floodplain).
 - **Fill** (required). The same fact as one sentence with exactly one `___` standing for the whole answer. At least 3 other words around the ___, and at most 300 characters. It reads correctly with the answer in the gap, and must not contain the whole answer or any whole Also answer.
 - **Wrong** (required). 3 to 5 wrong options on one line, separated by `;` (never commas), each at most 6 words. Believable, clearly wrong, the same kind as the answer (a year for a year), about as long. A number answer gets number options; a word answer gets no bare numbers. Never the answer, an Also answer, a partly right option, a repeat, or "All of the above", "None of these", "Both A and B" (options are shuffled).
-- **Level** (required). easy, medium or hard: easy is recall, medium is understanding, hard is applying or linking ideas.
-- **True/False** (at most 1 in 5). A True/False question is different: it has only Q, A and Level. Q is a statement, `A: True` or `A: False` with nothing after the word.
+- **Level** (required). easy, medium or hard: easy is recall, medium is understanding, hard is applying, comparing, predicting or linking ideas. The level measures the thinking needed, not how obscure the fact is: a hard-to-remember date is not a hard question.
+- **True/False** (at most 1 in 5). A True/False question is different: it has only Q, A and Level. Q is a statement, `A: True` or `A: False` with nothing after the word. Use it to test a real concept or a common misconception, never an obvious statement ("The Sun is a star") or one that is only sometimes true.
 - **No repeats.** Never more than 30 in one topic, and never more than 80 in the chapter. The same question twice in a chapter is rejected, even with a different ending ("?" or ".").
 
 Part C has good blocks and the common bad ones, each with the page's message and the fix.
@@ -94,12 +96,13 @@ Go through the questions one by one and check each of these in order. Fix anythi
 6. **Also lines**: each one a different right answer, not the answer respelt, with a space, hyphen, capital or "the" changed.
 7. **Wrong options**: 3 to 5, separated by `;`, none right or partly right, the same kind as the answer.
 8. **True/False**: written as a statement, with `A: True` or `A: False` and nothing after the word.
-9. **Repeats**: no question twice in the chapter, and no two questions in a topic with the same answer.
-10. **Format**: labels, True/False and levels in English; no numbering, bullets, bold or quotation marks around lines.
+9. **Repeats**: no two questions test the same fact, even in different words ("Gas plants take in to make food" and "Gas absorbed in photosynthesis" are one question), and no two questions in a topic have the same answer.
+10. **Worth asking**: the fact is central and certain, the level fits the thinking it needs, and a True/False tests a real misconception.
+11. **Format**: labels, True/False and levels in English; no numbering, bullets, bold or quotation marks around lines.
 
 ## 5. Reply
 
-Put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. After the block, at most three short sentences in the teacher's language, only those that apply: which answers you supplied because the material lacked them; that you wrote from general knowledge and the teacher should check; that the material was short, so there are fewer questions than asked. If asked for changes, write the whole block again.
+Put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. After the block, at most three short sentences in the teacher's language, only those that apply: which answers you supplied because the material lacked them; that you wrote from general knowledge and the teacher should check; that there are fewer questions than asked because the topic or material has no more good ones; facts you left out because they fit none of the fixed topics. If asked for changes, write the whole block again.
 
 **If it won't fit in one reply** (a long chapter, or a reply limit): stop at the end of a whole topic, never in the middle of one. After the block, say exactly what is done and what is left, for example "Topics 1 to 3 are done. Reply 'continue' for topics 4 to 6." Start the next reply with the chapter lines again, then carry on from the next topic, without repeating or skipping any question. Never say the set is complete when it isn't, and never summarise questions you haven't written.
 
@@ -127,8 +130,8 @@ A question earns its place if a student who revised the topic can answer it in a
 2. **Cover the whole topic.** Take facts from the start, middle and end, and from every sub-heading. Twenty questions on the first page of a topic is a common failure; so is skipping the parts that are harder to turn into questions.
 3. **Prefer the terms the chapter teaches.** "Conduction", "Photosynthesis", "Iqta" are what students must learn. A minor name in a side box or an example sentence is trivia; keep only a few.
 4. **Turn each fact so the answer is the key word.** "Heat moves through solids by conduction" becomes *"Way heat moves through a solid"* with answer *Conduction*, not *"How does heat move through a solid? Explain."*
-5. **Give each question in a topic a different answer.** The matching game pairs questions with answers; two "Conduction" answers make it impossible. Across topics a repeat is fine.
-6. **Mix the levels.** Roughly half easy (recall a fact as taught), a third medium (needs the idea understood: a cause, a comparison, an example), the rest hard (apply it: which case, what happens if).
+5. **Test each fact once, and give each question in a topic a different answer.** Compare questions by the fact they test, not their wording: "Gas plants take in to make food" and "Gas absorbed during photosynthesis" are the same question. Prefer different concepts, relationships, examples and applications. The matching game also pairs questions with answers, so two "Conduction" answers in a topic make it impossible. Across topics a repeated answer is fine.
+6. **Mix the levels.** Roughly half easy (recall a fact as taught), a third medium (needs the idea understood: a cause, a comparison, an example), the rest hard (apply, compare, predict or connect ideas: which case, what happens if). The level is the thinking needed, not how rare the fact is.
 
 ### What makes a fact a good question
 
@@ -421,15 +424,16 @@ Fill: Heating calcium carbonate strongly gives ___ products.
 Wrong: 1; 3; 4
 Level: medium
 
-Q: Rusting of iron is a chemical change
-A: True
-Level: easy
+Q: Rusting of iron is a physical change
+A: False
+Level: medium
 ```
 
 I wrote these from general knowledge, so please check them before using them.
 
 ## Changes
 
+- 1.3 (21 November 2026): quality comes before the count; one fact is tested once, however it is worded; the level is the thinking needed, not how obscure the fact is; with no material, no textbook wording or edition-dependent facts; fixed topics never take facts that don't belong; True/False tests a real misconception.
 - 1.2 (20 November 2026): with no material, being careful about single facts doesn't mean writing far fewer questions.
 - 1.1 (20 November 2026): one set of rules for every chatbot, at this address and for pasting. Added: when to use it, these rules come first, ask for missing details once, a question-by-question check, long chapters over several replies, no reliance on memory or tools, Part C examples.
 - 1.0 (19 November 2026): first rules page for chatbots.
