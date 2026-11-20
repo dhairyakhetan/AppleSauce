@@ -76,7 +76,7 @@ Go through every block before you reply: chapter lines exact; every block under 
 
 ## 5. Reply
 
-Put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. After the block, at most three short sentences, only those that apply: which answers you supplied because the material lacked them; that you wrote from general knowledge and the teacher should check; that the material was short so there are fewer questions than asked. If asked for changes, write the whole block again.
+Put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. After the block, at most three short sentences in the teacher's language, only those that apply: which answers you supplied because the material lacked them; that you wrote from general knowledge and the teacher should check; that the material was short so there are fewer questions than asked. If asked for changes, write the whole block again.
 
 ## Fixing questions the page turned away
 
