@@ -106,6 +106,13 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `lib/games/prompt.test.ts` fails if the prompt, the page, the labels, limits,
   levels or examples drift from the checker. Change `prompt.ts`,
   `public/games/instructions.md`, `Guide.tsx` and `format.ts` together.
+- **The skill:** `skills/shikshaq-questions/` is the same work as a Claude skill (install the packaged
+  `.skill` in claude.ai, or use it from this folder): how to write the blocks, choose questions, trim answers,
+  good and bad examples (`references/examples.md`, every one checked against `format.ts`), and
+  `scripts/check.py`, a Python copy of the checker's main rules. When a rule in `format.ts` changes, change
+  the skill and `check.py` with it, and run both on the same texts to see they still flag the same lines.
+  Its test cases are in `skills/shikshaq-questions/evals/`. (`.claude/skills/` is git-ignored here, so it
+  lives in `skills/`.)
 - **The rules page:** `public/games/instructions.md`, served at
   `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`). Every
   rule and the format, one-shot for an AI, in short numbered steps, no styling.
