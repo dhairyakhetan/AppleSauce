@@ -388,7 +388,6 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
               {promptChapter && <span className="text-[13px] text-warm-secondary">For chapter {promptChapter.chapter_no}: {promptChapter.name}. <button type="button" className={LINKISH} onClick={() => setPicking(true)}>Another chapter</button></span>}
               <span className="sr-only" aria-live="polite">{done === 'prompt' ? 'Prompt copied.' : ''}</span>
             </div>
-            <p className="text-[13px] text-warm-secondary">The prompt sends the chatbot to the full rules, at <a className={LINKISH} href="/games/instructions.md" target="_blank" rel="noreferrer">shikshaq.in/games/instructions.md</a>.</p>
           </div>
           <ChapterPicker open={picking} setOpen={setPicking} catalog={catalog} start={examples ? undefined : details}
             onCopy={(ch) => { void copyPrompt(ch); setPicking(false); }} />
@@ -475,7 +474,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
                 <ActionIcon done={done === 'fix'}><Copy /></ActionIcon>Copy prompt to fix them
               </button>
               <p className="min-h-[1.5em] text-[13px] text-warm-secondary" aria-live="polite">
-                {done === 'fix' ? 'Copied. Paste it into the chatbot, then paste its whole reply into Questions, over the old text.' : 'The prompt has each problem and the whole text, and asks the chatbot to write it all again.'}
+                {done === 'fix' ? 'Copied. Paste it into the chatbot, then paste its whole reply into Questions, over the old text.' : ''}
               </p>
             </div>
           </DialogContent>
@@ -607,7 +606,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg rounded-2xl bg-card">
         <DialogTitle>Which chapter are the questions for?</DialogTitle>
-        <DialogDescription>The prompt is made for one chapter on the list and its topics, so the chatbot writes only what fits them.</DialogDescription>
+        <DialogDescription className="sr-only">Choose the board, class, subject and chapter.</DialogDescription>
         {!catalog.list ? (
           <p className="text-[14px] text-warm-secondary">{catalog.error ? `Couldn't load the list of chapters. ${catalog.error}` : 'Loading the list of chapters…'}</p>
         ) : !list.length ? (
@@ -620,7 +619,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
               {field('Subject', subject ?? '', subjects.map((s) => [s, s]), (v) => setPick((p) => ({ ...p, subject: v, chapter: '' })), 'col-span-2 sm:col-span-1')}
               {field('Chapter', ch ? String(ch.chapter_no) : '', chapters.map((c) => [String(c.chapter_no), `${c.chapter_no}: ${c.name}`]), (v) => setPick((p) => ({ ...p, chapter: v })), 'col-span-full')}
             </div>
-            {ch && <p className="text-[13px] text-warm-secondary">{ch.topics.length ? `Its topics${isOpen(ch) ? ' so far' : ''}: ${ch.topics.map((t) => `${t.topic_no} ${t.name}`).join(', ')}.` : 'Its topics aren\'t fixed: the chatbot divides the questions into topics.'}{ch.topics.length && isOpen(ch) ? ' The chatbot can add more.' : ''}</p>}
+            {ch && ch.topics.length > 0 && <p className="text-[13px] text-warm-secondary">Topics: {ch.topics.map((t) => `${t.topic_no} ${t.name}`).join(', ')}.</p>}
             <button type="submit" className={btn('brand', 'w-fit')} disabled={!ch}><Copy aria-hidden />Copy chatbot prompt</button>
           </form>
         )}

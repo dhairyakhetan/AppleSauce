@@ -78,8 +78,7 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
   return (
     <div className="flex flex-col gap-4">
       <p className="max-w-prose text-[14px] text-warm-secondary">
-        Questions can only be written for a chapter on this list. Pick a board, class and subject, then open a chapter for its topics, and a topic for its
-        questions. Changes stay marked here until you save them.
+        Questions can only be written for a chapter on this list. Changes stay marked here until you save them.
       </p>
 
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Which chapters">
