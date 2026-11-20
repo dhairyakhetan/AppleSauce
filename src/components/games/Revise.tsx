@@ -115,7 +115,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
               <span className={label} id={`${uid}-class`}>Class</span>
               <div className="flex flex-wrap gap-1" role="radiogroup" aria-labelledby={`${uid}-class`}>
                 {classes.map((n) => (
-                  <button key={n} type="button" role="radio" aria-checked={n === chapter.cls} onClick={() => open(chapters.find((c) => c.cls === n))}
+                  <button key={n} type="button" role="radio" aria-checked={n === chapter.cls} onClick={() => open(chapters.find((c) => c.cls === n && c.subject === chapter.subject) ?? chapters.find((c) => c.cls === n))}
                     className={cn(pill, n === chapter.cls ? 'bg-panel text-background' : 'bg-card text-warm-secondary hover:text-foreground')}>Class {n}</button>
                 ))}
               </div>
@@ -164,6 +164,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
               </label>
             ))}
           </div>
+          {chosen.length === 1 && chapter.topics.length > 1 && <p className={cn('text-warm-secondary', compact ? 'text-[11px]' : 'text-[12px]')}>At least one topic stays ticked.</p>}
         </fieldset>
       </section>
 

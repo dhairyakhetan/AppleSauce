@@ -105,3 +105,11 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples
   drift from the checker. Change `prompt.ts`, `Guide.tsx` and `format.ts`
   together.
+- **The same rules as a plain page:** `public/games/instructions.md`, served at
+  `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`), for
+  a chatbot that is given a link instead of the copied prompt. Write questions
+  links to it under "Copy chatbot prompt". It is written for bots in short
+  numbered steps, has no styling, and was tried on several chatbots, whose
+  replies the checker read with no problems. `prompt.test.ts` checks its limits
+  and that its worked example reads with no problems: change it with the
+  three files above.
