@@ -73,7 +73,11 @@ STEP 5. THE OTHER LINES
 
 Also: (optional; at most 5 lines; one answer on each line)
   Another answer that is just as right: a short form (CPU), the full form, another name (Calcutta for Kolkata), a number in words (Six for 6).
-  Not the answer again with other capitals, spaces, punctuation, or "a", "an" or "the" in front: those count already. No spelling mistakes: the game forgives small slips by itself.
+  Never the answer again written another way: other capitals, spaces, hyphens or punctuation, or "a", "an" or "the" in front. These already count as right, and the page turns them away:
+    A: Alps        not Also: The Alps
+    A: Floodplain  not Also: Flood plain
+    A: Chota Nagpur Plateau  not Also: Chotanagpur Plateau
+  No spelling mistakes: the game forgives small slips by itself.
   At most 6 words, like the answer.
 
 Fill: (required)
@@ -118,8 +122,9 @@ STEP 7. CHECK EVERY QUESTION BEFORE YOU REPLY
 5. Every Fill has exactly one ___ and at least 3 other words.
 6. Every Wrong line has 3 to 5 options separated by semicolons, none of them right.
 7. Every answer, Also answer and wrong option is at most 6 words.
-8. No question is written twice. No numbering, bullets, bold or quotation marks around lines.
-9. The labels, True/False and the levels are in English.
+8. No Also line is just the answer again with a space, hyphen, capital or "the" changed.
+9. No question is written twice. No numbering, bullets, bold or quotation marks around lines.
+10. The labels, True/False and the levels are in English.
 
 
 STEP 8. YOUR REPLY
