@@ -53,8 +53,8 @@ describe('the chatbot prompt agrees with the checker', () => {
   });
 
   it("states the checker's limits", () => {
-    expect(text).toContain(`Never more than ${MAX_PER_TOPIC} in one topic, and never more than ${MAX_PER_CHAPTER} in the whole chapter`);
-    expect(text).toContain('5 to 10 questions per topic');
+    expect(text).toContain(`never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter`);
+    expect(text).toContain('20 to 30 questions per topic');
     expect(text).toContain(`At most ${MAX_ANSWER_WORDS} words`);
     expect(text).toContain(`At most ${MAX_QUESTION} characters`);
     expect(text).toContain(`${MIN_OPTIONS} wrong options (at most ${MAX_OPTIONS}), separated by ";"`);
@@ -76,7 +76,7 @@ describe('the chatbot prompt agrees with the checker', () => {
     expect(plain).toMatch(/A topic is a part of the chapter that the textbook gives a heading of its own/);
     expect(plain).toMatch(/2 to 6 topics, fewer if the chapter is short, numbered from 1 in the order the chapter teaches them\. Write each as "Topic 1: Name"/);
     expect(plain).not.toMatch(/^Topic \d/m); // no topics of its own to keep yet
-    expect(plain).toContain(`Never more than ${MAX_PER_TOPIC} in one topic, and never more than ${MAX_PER_CHAPTER} in the whole chapter`);
+    expect(plain).toContain(`never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter`);
     // a reply shaped the way it asks: topics of its own, each over its questions
     const reply = `${chapterLines(NO_TOPICS)}\n\nTopic 1: Mountains\n\n${EXAMPLE_BLOCKS}\n\nTopic 2: Plateaus\n\nQ: Flat land raised above its surroundings\nA: Plateau\nFill: A raised flat land is a ___.\nWrong: Valley; Delta; Plain\nLevel: easy`;
     const { rows, issues } = format(reply);

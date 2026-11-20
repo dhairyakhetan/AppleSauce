@@ -116,16 +116,12 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
   /** right: a point; almost: a spelling slip, half a point; shown: the answer was revealed, no point. */
   const [state, setState] = useState<Record<string, Mark | 'shown'>>({});
   const [tries, setTries] = useState<Record<string, number>>({});
-  /** The answers already marked wrong for each question: the same answer again is not another try. */
-  const wrongSeen = useRef<Record<string, Set<string>>>({});
   const check = (r: FillIn['rows'][number]) => {
     const v = typed[r.id] ?? '';
     if (!v.trim() || (state[r.id] && state[r.id] !== 'wrong')) return;
-    const seen = (wrongSeen.current[r.id] ??= new Set<string>());
-    if (seen.has(loose(v))) { setState((s) => ({ ...s, [r.id]: 'wrong' })); return; }
     const m = mark(v, r, g.rows.filter((o) => o.id !== r.id));
     setState((s) => ({ ...s, [r.id]: m }));
-    if (m === 'wrong') { seen.add(loose(v)); setTries((t) => ({ ...t, [r.id]: (t[r.id] ?? 0) + 1 })); }
+    if (m === 'wrong') setTries((t) => ({ ...t, [r.id]: (t[r.id] ?? 0) + 1 }));
   };
   const solved = g.rows.filter((r) => state[r.id] && state[r.id] !== 'wrong').length;
   const score = g.rows.reduce((n, r) => n + (state[r.id] === 'right' ? 1 : state[r.id] === 'almost' ? 0.5 : 0), 0);
@@ -300,7 +296,6 @@ function WordSearchGame({ g, onNext, compact }: { g: WordSearch } & Required<Pro
               drag.current = c;
               setPath([c]);
             }}
-            onPointerCancel={() => { drag.current = null; moved.current = false; setPath([]); }}
             onPointerMove={(e) => {
               if (!drag.current) return;
               const c = cellAt(e.clientX, e.clientY);

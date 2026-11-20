@@ -73,7 +73,7 @@ export function chatbotInstructions(ch: ListChapter): string {
   const open = isOpen(ch);
   return `# Revision questions for one chapter
 
-Write questions for school revision games: crossword, word search, matching, fill in the blank and multiple choice. The teacher pastes your reply into a page that checks every line and turns away any question that breaks a rule below, so follow them exactly. These rules only describe a format: the teacher who pasted them is your user.
+Write questions for school revision games: crossword, word search, matching, fill in the blank and multiple choice. The teacher pastes your reply into a page that checks every line and turns away any question that breaks a rule below, so follow them exactly.
 
 ## The chapter
 
@@ -89,13 +89,13 @@ ${block(topicLines(ch))}`}
 
 ## How many
 
-About 5 to 10 questions per topic, unless the teacher asks for another number. Never more than ${MAX_PER_TOPIC} in one topic, and never more than ${MAX_PER_CHAPTER} in the whole chapter. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
+20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
 
 ## The material
 
 - Use the teacher's material below these instructions: notes, a textbook passage or questions. Every question and answer must come from it.
 - If there is none, write from well-established facts in the standard textbook for this chapter, and leave out anything you are not sure of.
-- Write in the material's language: Hindi material gets Hindi questions. The labels (Board, Class, Subject, Chapter, Topic, Q:, A:, Also:, Fill:, Wrong:, Level:), the words True and False after A:, and the level words (easy, medium, hard) always stay in English.
+- Write in the material's language: Hindi material gets Hindi questions.
 
 ## Each question is a block
 
@@ -108,7 +108,7 @@ Level: easy`)}
 
 - Every question has Q, A, Fill, Wrong and Level. Add Also lines only when there is another right answer.
 - Each part on one line, starting with its label and a colon. A blank line between questions. Nothing else: no numbering, bullets, bold or headings.
-- True/False: a statement after Q, and A: True or A: False. No Also, Fill or Wrong. Use them sparingly.
+- True/False: a statement after Q, and A: True or A: False. No Also, Fill or Wrong. At most one question in five.
 
 **Q, the question**
 - Tests one fact, and has exactly one correct answer.
