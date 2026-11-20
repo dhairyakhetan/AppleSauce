@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Version 1.1, 20 November 2026. Lives at https://shikshaq.in/games/instructions.md
+Version 1.2, 20 November 2026. Lives at https://shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -38,7 +38,7 @@ Then the topics. The teacher's message says which case it is:
 
 Write each topic as "Topic 1: Name", "Topic 2: Name", and so on.
 
-The material is the teacher's notes, passage or rough questions. Every fact comes from it. With no material, use only well-established facts from the standard textbook for that chapter, and say in your reply that the teacher should check them. Be most careful with exact numbers, dates and lesser-known names: leave one out rather than guess, and name any you kept but aren't sure of. The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
+The material is the teacher's notes, passage or rough questions. Every fact comes from it. With no material, use only well-established facts from the standard textbook for that chapter, and say in your reply that the teacher should check them. Be most careful with exact numbers, dates and lesser-known names: leave one out rather than guess, and name any you kept but aren't sure of. That care is for single facts, not whole topics: a chapter's main ideas, terms, named features and examples are well established, so still aim for the counts in step 2. The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
 
 ## 2. Choose what to ask
 
@@ -430,5 +430,6 @@ I wrote these from general knowledge, so please check them before using them.
 
 ## Changes
 
+- 1.2 (20 November 2026): with no material, being careful about single facts doesn't mean writing far fewer questions.
 - 1.1 (20 November 2026): one set of rules for every chatbot, at this address and for pasting. Added: when to use it, these rules come first, ask for missing details once, a question-by-question check, long chapters over several replies, no reliance on memory or tools, Part C examples.
 - 1.0 (19 November 2026): first rules page for chatbots.

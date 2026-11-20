@@ -86,5 +86,7 @@ Level: easy
 
 | Date | Rules version | Chatbot | Test 1 | Test 2 | Test 3 | Notes |
 |---|---|---|---|---|---|---|
-| 2026-11-20 | 1.1 | Claude Haiku (fresh) | | | | |
-| 2026-11-20 | 1.1 | Claude Sonnet (fresh) | | | | |
+| 2026-11-20 | 1.1 | Claude Haiku (fresh) | 15 questions, 1 problem (a Fill line with no ___) | 25 in 6 topics, 0 problems, far too few | 4 kept, 0 problems | Too few in test 2: wording fixed in 1.2 |
+| 2026-11-20 | 1.1 | Claude Sonnet (fresh) | 15 questions, 0 problems | not run (stopped) | 4 kept, 0 problems | |
+| | 1.2 | ChatGPT | | | | |
+| | 1.2 | Gemini | | | | |
