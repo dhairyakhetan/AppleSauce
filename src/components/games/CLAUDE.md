@@ -98,18 +98,17 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
-- **The chatbot prompt is made for one chapter** on the list (its lines and
-  topics, nothing else; for an open chapter it asks the chatbot to divide the
-  questions into topics, keeping those already in use) and states every rule
-  the checker applies.
-  `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples
-  drift from the checker. Change `prompt.ts`, `Guide.tsx` and `format.ts`
-  together.
-- **The same rules as a plain page:** `public/games/instructions.md`, served at
-  `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`), for
-  a chatbot that is given a link instead of the copied prompt. Write questions
-  links to it under "Copy chatbot prompt". It is written for bots in short
-  numbered steps, has no styling, and was tried on several chatbots, whose
-  replies the checker read with no problems. `prompt.test.ts` checks its limits
-  and that its worked example reads with no problems: change it with the
-  three files above.
+- **The chatbot prompt is short and made for one chapter** on the list: it
+  sends the chatbot to the rules at `https://shikshaq.in/games/instructions.md`
+  (`INSTRUCTIONS_URL` in `prompt.ts`) and gives what that page can't know: the
+  chapter's lines, its topics (fixed, already in use, or none given, in the
+  page's own words) and a place for the teacher's material.
+  `lib/games/prompt.test.ts` fails if the prompt, the page, the labels, limits,
+  levels or examples drift from the checker. Change `prompt.ts`,
+  `public/games/instructions.md`, `Guide.tsx` and `format.ts` together.
+- **The rules page:** `public/games/instructions.md`, served at
+  `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`). Every
+  rule and the format, one-shot for an AI, in short numbered steps, no styling.
+  It was tried on several chatbots, whose replies the checker read with no
+  problems. The checker leaves out a chatbot's own sentences around its code
+  block, so a whole reply can be pasted.

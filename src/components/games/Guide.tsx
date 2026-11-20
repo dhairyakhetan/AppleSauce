@@ -35,7 +35,7 @@ export function Guide() {
               <C>Fill:</C> the same fact as a sentence with <C>___</C> where the answer goes, <C>Wrong:</C> {MIN_OPTIONS} wrong options separated by{' '}
               <C>;</C>, and <C>Level:</C> easy, medium or hard.
             </li>
-            <li><B>True/False:</B> only <C>Q:</C> with a statement, and <C>A: True</C> or <C>A: False</C>.</li>
+            <li><B>True/False:</B> only <C>Q:</C> with a statement, <C>A: True</C> or <C>A: False</C>, and <C>Level:</C>.</li>
             <li><B>Fix every red or amber line,</B> then send. A question with a problem isn't sent.</li>
           </ol>
           <pre data-testid="guide-sample" className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
@@ -59,7 +59,8 @@ Wrong: Oxygen; Chlorine; Nitrogen
 Level: medium
 
 Q: Rusting of iron is a chemical change
-A: True`}</pre>
+A: True
+Level: easy`}</pre>
         </Card>
 
         <Card title="Writing good questions">

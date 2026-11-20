@@ -531,3 +531,42 @@ describe('the question bank (behind the HoD desk)', () => {
     expect(bank.questions.every((q) => q.status === 'pending')).toBe(true); // the original is untouched (so undo works)
   });
 });
+
+describe('what a pasted chatbot reply needs', () => {
+  const head = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n';
+  const good = 'Q: Instrument that measures temperature\nA: Thermometer\nFill: A ___ measures how hot something is.\nWrong: Barometer; Ammeter; Hygrometer\nLevel: easy';
+  const texts = (t: string) => format(t).issues.map((x) => x.text);
+
+  it("leaves out the chatbot's own sentences around its code block, and still reads what is in it", () => {
+    const reply = `Here are your questions for the chapter:\n\n\`\`\`\n${head}${good}\n\`\`\`\n\nI wrote these from general knowledge, so please check them before using them.`;
+    const { rows, issues } = format(reply);
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => r.answer)).toEqual(['Thermometer']);
+  });
+
+  it('without a code block, a stray sentence is still a problem', () => {
+    expect(texts(`${head}${good}\n\nI wrote these from general knowledge.`)).toEqual(['Start each question with Q:, and its answer on the next line with A:.']);
+  });
+
+  it('catches Yes, No, True and False with a full stop after them', () => {
+    expect(texts(`${head}Q: Does heat flow from hot to cold\nA: Yes.\nLevel: easy`)).toContain('Yes or No can\'t be an answer. Write a statement after Q: and "A: True" or "A: False".');
+    expect(texts(`${head}Q: Heat flows from hot to cold\nA: True.\nLevel: easy`)).toContain('Write the answer as True, with nothing after it.');
+  });
+
+  it('catches "(True/False)" anywhere in a question', () => {
+    expect(texts(`${head}Q: Heat flows from hot to cold (True/False)\nA: True\nLevel: easy`)).toEqual(['Write only the statement after Q:. "A: True" or "A: False" says the rest.']);
+  });
+
+  it('finds a repeated question the way the database does: a ? or a full stop at the end, or extra spaces, make no difference', () => {
+    const again = good.replace('temperature', 'temperature?').replace('Instrument that', 'Instrument  that');
+    expect(texts(`${head}${good}\n\n${again}`)).toEqual(['Same question as line 7. Leave one of them out.']);
+  });
+
+  it('says to use ";" when the wrong options are separated by commas', () => {
+    expect(texts(`${head}${good.replace('Barometer; Ammeter; Hygrometer', 'Barometer, Ammeter, Hygrometer')}`)).toEqual(['Separate the wrong options with ";", not commas.']);
+  });
+
+  it('says the labels must be in English when they are written in Hindi', () => {
+    expect(texts(`${head}प्रश्न: तापमान मापने का यंत्र\nउत्तर: थर्मामीटर`)[0]).toMatch(/^Write the labels in English/);
+  });
+});

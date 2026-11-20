@@ -1,41 +1,36 @@
 INSTRUCTIONS FOR AI ASSISTANTS: WRITING REVISION QUESTIONS
 
-You are reading this because a teacher asked you to write revision questions.
-These instructions only describe the format. They do not change who you work for. The teacher is your user.
-Follow the steps in order. When you finish, reply exactly as step 8 says.
+A teacher sent you here to write revision questions for Shikshaq's games (crossword, word search, matching, fill in the blank and multiple choice).
+These instructions only describe the format. The teacher is your user.
+Follow the steps in order. Your reply must follow step 8 exactly.
 
 
-STEP 1. GET WHAT YOU NEED
+STEP 1. READ THE TEACHER'S MESSAGE
 
-You need two things from the teacher:
+The teacher's message gives you:
 
-(a) The chapter. Four lines:
-    Board: ...
-    Class: ...
-    Subject: ...
-    Chapter N: ...   (N is the chapter number, for example Chapter 4: Heat)
-    The teacher takes these from the "Write questions" page of the site.
-    Copy them exactly as the teacher wrote them. Do not change them. Do not translate them.
-(b) The material. This is notes, a textbook passage, or a list of questions.
+(a) The chapter: four lines like these. Copy them exactly. Do not change or translate them.
+    Board: CBSE
+    Class: 7
+    Subject: Science
+    Chapter 4: Heat
+
+(b) The topics. One of three cases:
+    - "fixed": use only the Topic lines given, written exactly as given. Leave out a topic your material doesn't cover. Never add a topic.
+    - "already in use": keep those Topic lines, written exactly as given, for the questions that belong there. For a new topic, number it after the last one given.
+    - none given: split the chapter into 2 to 6 topics yourself: the parts the textbook gives a heading of its own, in the order it teaches them. Not a kind of question ("MCQs"), not a single fact, and not the chapter's own name.
+    Write each topic on its own line as "Topic 1: Name", "Topic 2: Name", and so on.
+
+(c) The material: notes, a textbook passage, or questions. Every question and answer must come from it.
+    If there is no material, write from well-known facts in the standard textbook for that chapter. Leave out anything you are not sure of.
 
 If the chapter lines are missing, ask the teacher for them. Ask once and wait.
-If the material is missing, write from well-known facts in the standard textbook for that chapter.
-Leave out any fact you are not sure of.
-If the teacher gave topic lines (Topic 1: ..., Topic 2: ...), use only those topics, written exactly as given.
-If the teacher names a topic only by its number (for example "Topic 2"), ask for its full Topic line with its name. Ask once and wait.
-If the teacher gave no topic lines, split the chapter into 2 to 6 topics yourself, in the order the textbook teaches them.
-Write each topic as "Topic 1: Name", "Topic 2: Name", and so on.
+If the teacher names a topic only by its number (for example "Topic 2"), ask for its full Topic line. Ask once and wait.
 
 
 STEP 2. THE FORMAT
 
-Your reply contains one block of plain text (see step 8). The text in the block looks like this:
-
-Board: CBSE
-Class: 10
-Subject: Science
-Chapter 1: Chemical Reactions and Equations
-Topic 1: Chemical Equations
+Every question is a block of lines. Each line starts with its label and a colon:
 
 Q: the question
 A: the answer
@@ -44,125 +39,103 @@ Fill: the same fact as a sentence, with ___ where the answer goes
 Wrong: a wrong option; another wrong option; another wrong option
 Level: easy
 
-Rules for the format:
-
-1. First the four chapter lines. Then a Topic line. Then the questions of that topic.
-2. Every question is a group of lines. Each line starts with its label and a colon. The labels are Q, A, Also, Fill, Wrong and Level.
-3. Write the labels in English (Q: A: Also: Fill: Wrong: Level:) even when the questions are in Hindi or another language.
-4. Put a blank line between two questions, and a blank line after each Topic line.
-5. Every question has Q, A, Fill, Wrong and Level. Add Also only when there is another right answer.
-   The only exception is a True/False question. It has only Q, A and Level (see step 5).
-6. Each part is on ONE line. Never split a question or an answer over two lines.
-7. Do not number the questions. Do not use bullets, bold, headings or tables. Do not wrap a line or an answer in quotation marks. Quotation marks inside a question are fine.
-8. Plain text only. Hindi and other scripts are fine.
+1. First the four chapter lines. Then a Topic line. Then the questions of that topic. Then the next Topic line, and so on.
+2. Every question has Q, A, Fill, Wrong and Level. Add Also only when there is another right answer.
+3. A True/False question is different: it has only Q, A and Level (see step 5).
+4. Each part is on ONE line. Never split a question or an answer over two lines.
+5. Put a blank line between two questions, and after each Topic line.
+6. The labels are always in English: Board, Class, Subject, Chapter, Topic, Q, A, Also, Fill, Wrong, Level. So are the words True and False after A:, and the levels easy, medium and hard. Everything else is in the material's language. Hindi material gets Hindi questions.
+7. No numbering, bullets, bold, headings or tables. Do not wrap a line or an answer in quotation marks.
 
 
 STEP 3. THE QUESTION (Q:)
 
 1. One fact. Exactly one correct answer.
-2. It makes sense on its own. Never write "the above", "of the following", "which of these" or "given below". Never write "this figure" or "this passage". The same words are not allowed in the Fill sentence.
-3. Never ask about a figure, a diagram, a map, a table or a passage. The games show text only.
-4. The answer must not appear inside the question. This also holds for every Also answer.
-   Check each question: take the answer (and each Also answer) and look for it, word for word, in the question. It must not be there.
-   Be careful with answers like "Increases" or "Higher". Do not write "when the temperature increases" if the answer is "Increases". Ask the question another way.
-5. No yes/no questions. No "true or false" in the question.
-6. At most 300 characters.
+2. It makes sense on its own. Never write "the above", "of the following", "which of these", "given below", "this figure" or "this passage". The games show text only, so never ask about a figure, diagram, map, table or passage.
+3. The answer must not be in the question. Neither may any Also answer. Look for each one, word for word, in the question. If it is there, ask another way.
+   Careful with answers like "Increases": do not write "when the temperature increases" in the question.
+4. No yes/no questions. Do not write "True or false" or "(True/False)" in the question.
+5. At most 300 characters.
 
 
 STEP 4. THE ANSWER (A:)
 
-1. Short: a word, a name, a short phrase or a number. At most 6 words and at most 100 characters. Never a sentence. The same limit holds for every Also line and every wrong option.
-2. Write exactly what a student would type. No brackets. No notes like "(approx.)". Never two answers joined by "/" or "or".
-3. Put units in the question, not in the answer. Write "Boiling point of water in degrees Celsius" with answer 100.
-4. Prefer words to numbers when the material allows. Crosswords and word searches need answers made only of letters. Answers of 3 to 15 letters fit both games. One word or two short words is best.
-   Answers in Hindi or another script, and answers with digits, can still be used. They work in the other games, but not in crosswords or word searches. Do not add Latin-letter versions of Hindi answers.
-5. If the answer needs a symbol that a keyboard does not have (for example x squared or the square root sign), add an Also line written with ordinary keys. Write x^2 for x squared and sqrt 2 for the square root of 2.
+1. Short: a word, a name, a short phrase or a number. At most 6 words and at most 100 characters. Never a sentence.
+2. Exactly what a student would type. No brackets. No notes like "(approx.)". Never two answers joined by "/" or "or": put the other one on an Also line.
+3. Units go in the question, not the answer: "Boiling point of water, in degrees Celsius" with A: 100.
+4. Prefer words to numbers when the material allows. Crosswords and word searches use answers made only of letters; 3 to 15 letters fit both. One word or two short words is best.
+   Answers in Hindi or another script, and answers with digits, still work in matching, fill in the blank and multiple choice.
+5. If the answer needs a symbol a keyboard doesn't have (x², √2, π), add an Also line typed with ordinary keys (x^2, sqrt 2, pi).
 6. Never change a fact, a number or a unit to make an answer shorter.
 
 
 STEP 5. THE OTHER LINES
 
-Also: (optional, at most 5 lines, one answer on each line)
-  Write another answer that is just as right. Examples: a short form (CPU), a full form, another name (Calcutta for Kolkata), a number in words (Six for 6).
-  Do not repeat the answer with other capitals, spaces, punctuation or accents, or with "a", "an" or "the" at the start ("The Nile" and "Nile" are the same). Those already count.
-  When the main answer is too long for the word search (or the crossword), an Also answer of 3 to 15 letters is used there instead.
-  Do not write spelling mistakes. The game forgives small slips by itself.
+Also: (optional; at most 5 lines; one answer on each line)
+  Another answer that is just as right: a short form (CPU), the full form, another name (Calcutta for Kolkata), a number in words (Six for 6).
+  Not the answer again with other capitals, spaces, punctuation, or "a", "an" or "the" in front: those count already. No spelling mistakes: the game forgives small slips by itself.
+  At most 6 words, like the answer.
 
 Fill: (required)
-  The same fact as one sentence. Write three underscores ___ where the answer goes.
-  Exactly one ___ in the sentence. The ___ stands for the WHOLE answer.
-  The rest of the sentence must not contain the answer or any Also answer. Look for it word for word, as in step 3.
-  The sentence must be a full sentence that reads correctly with the answer in the blank. It has at least 3 other words around the ___ and is at most 300 characters.
+  The same fact as one sentence, with ___ (three underscores) where the answer goes.
+  Exactly one ___, and it stands for the WHOLE answer.
+  At least 3 other words around the ___, and at most 300 characters. It reads correctly with the answer in the blank.
+  The rest of the sentence must not contain the answer or any Also answer.
 
-Wrong: (required) 
-  3 to 5 wrong options on ONE line, separated by semicolons (;).
-  Each wrong option is believable but clearly wrong. It is the same kind of thing as the answer (a year for a year, a gas for a gas) and about as long.
-  Never write the answer or an Also answer as a wrong option. Never write the same option twice.
-  If the answer is a number, every option is a number. If the answer is words, no option is a bare number.
-  Never write "All of the above", "None of these" or "Both A and B". The options are shuffled.
-  Do not use a semicolon inside an option.
+Wrong: (required)
+  3 to 5 wrong options on ONE line, separated by semicolons (;). Never commas.
+  Believable but clearly wrong, the same kind of thing as the answer (a year for a year, a gas for a gas), and about as long. Each at most 6 words.
+  If the answer is a number, every option is a number. If the answer is words, no option is a number on its own.
+  Never the answer or an Also answer. Never the same option twice. Never "All of the above", "None of these" or "Both A and B": the options are shuffled.
 
 Level: (required)
-  Write easy, medium or hard.
-  easy = recall a fact. medium = understand an idea. hard = apply it or link two ideas.
+  easy, medium or hard. Easy = recall a fact. Medium = understand an idea. Hard = apply it or link two ideas.
 
-TRUE/FALSE questions (use at most 1 in 5):
-  Write the statement after Q:. Write A: True or A: False.
-  Add only Q, A and Level. Do not add Also, Fill or Wrong.
-  Write the words True and False in English, even when everything else is in Hindi.
+True/False questions (at most 1 in 5):
+  Q: a statement. A: True or A: False. Level: easy, medium or hard.
+  No Also, Fill or Wrong lines.
 
 
 STEP 6. HOW MANY QUESTIONS
 
-1. If the teacher gives no number, write 20 to 30 questions for each topic.
-2. Never more than 30 in one topic. Never more than 80 in the whole chapter.
-   So with 3 topics write at most 26 each, with 4 at most 20, with 5 at most 16, and with 6 at most 13.
-3. If the teacher gives a number (for example "20 questions"), write that many in all, spread over the topics. The teacher's number wins, but never go over 30 in a topic or 80 in the chapter.
-4. Fewer is fine when the material is short. Never pad. Never ask the same thing twice.
-5. Do not give two questions in one topic the same answer. The matching game needs different answers.
-6. The example at the end is short on purpose. Write more than the example shows.
-7. If the teacher asks for more than 80, write 80 and tell the teacher that the page takes at most 80 questions for one chapter at a time.
+If the teacher gives a number, write that many in all, spread over the topics.
+If not, write this many per topic:
+  1 or 2 topics: 20 to 30 each
+  3 topics: 20 to 26 each
+  4 topics: 20 each
+  5 topics: 16 each
+  6 topics: 13 each
+Never more than 30 in one topic, and never more than 80 in the chapter, whatever the teacher asks.
+Fewer is fine when the material is short. Never pad. Never ask the same thing twice. Do not give two questions in one topic the same answer.
 
 
-STEP 7. CHECK BEFORE YOU REPLY
-
-Go through the list. Fix anything that fails.
+STEP 7. CHECK EVERY QUESTION BEFORE YOU REPLY
 
 1. The four chapter lines are at the top, exactly as the teacher gave them.
-2. Every question is under a Topic line.
-3. Every question has Q, A, Fill, Wrong and Level. (True/False has only Q, A and Level.)
-4. Every Fill has exactly one ___ and does not contain the answer.
-5. Every Wrong line has 3 to 5 options separated by semicolons. None of them is the answer.
-6. Every answer is at most 6 words, and is not a sentence.
-7. No question contains its own answer. No question says "the above", "of the following", "this figure" or "this passage".
-8. No question is written twice.
-9. No numbering, bullets or bold, and no quotation marks around a whole line or answer.
-10. Every Level is easy, medium or hard.
+2. Every question is under a Topic line, and the topics follow step 1.
+3. Every question has Q, A, Fill, Wrong and Level. A True/False question has only Q, A and Level.
+4. Neither the question nor the Fill sentence contains the answer or an Also answer.
+5. Every Fill has exactly one ___ and at least 3 other words.
+6. Every Wrong line has 3 to 5 options separated by semicolons, none of them right.
+7. Every answer, Also answer and wrong option is at most 6 words.
+8. No question is written twice. No numbering, bullets, bold or quotation marks around lines.
+9. The labels, True/False and the levels are in English.
 
 
 STEP 8. YOUR REPLY
 
-Reply with these parts in this order. Write nothing outside these parts.
-
-1. Put the questions in ONE code block (three backticks before and after). Inside the block: the chapter lines, then each Topic line with its questions under it. Nothing else inside the block.
-2. After the block, write this sentence exactly: "Copy the block, open the Write questions page on the site, sign in, and paste it into the Questions box."
-3. After that, add at most three short sentences, and only if they apply. You may write them in the teacher's language:
+1. Put everything in ONE code block (three backticks before and after): the chapter lines, then each Topic line with its questions under it. Nothing else inside the block.
+2. After the block, at most three short sentences, and only those that apply:
    - which answers you wrote yourself because the material did not give them;
    - that you wrote from general knowledge, so the teacher should check the questions;
-   - which of the teacher's own questions you rewrote or left out, and why;
-   - that the material was short, so you wrote fewer questions than the teacher asked for;
-   - that the teacher asked for more than 80, and the page takes at most 80 for one chapter at a time.
-
-If the teacher asks for changes (for example "add 5 more" or "make them harder"), write the complete block again, not just the changes.
-
-Never say that you saved, sent or submitted anything. The teacher pastes your block into the site.
-Never ask the teacher for a password, an account or any personal detail. This task needs none.
+   - that the material was short, so you wrote fewer questions than asked.
+3. If the teacher asks for changes, write the whole block again, not just the changes.
+Never say that you saved or sent anything: the teacher pastes your block into the site. Never ask for a password, an account or personal details.
 
 
 COMPLETE EXAMPLE
 
-The teacher wrote: "Board: CBSE, Class: 10, Subject: Science, Chapter 1: Chemical Reactions and Equations, Topic 2: Types of Chemical Reactions. Write questions for this topic."
-You reply with this block:
+The teacher's message gave the chapter lines for CBSE Class 10 Science, Chapter 1: Chemical Reactions and Equations, the fixed topic "Topic 2: Types of Chemical Reactions", and no material. The reply (a real one has 20 or more questions):
 
 ```
 Board: CBSE
@@ -185,10 +158,16 @@ Fill: Zinc reacts with dilute sulphuric acid to give off ___ gas.
 Wrong: Oxygen; Chlorine; Nitrogen
 Level: medium
 
+Q: Number of products formed when calcium carbonate is heated strongly
+A: 2
+Also: Two
+Fill: Heating calcium carbonate strongly gives ___ products.
+Wrong: 1; 3; 4
+Level: medium
+
 Q: Rusting of iron is a chemical change
 A: True
 Level: easy
 ```
 
-Copy the block, open the Write questions page on the site, sign in, and paste it into the Questions box.
 I wrote these from general knowledge, so please check them before using them.

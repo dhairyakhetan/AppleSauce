@@ -50,7 +50,7 @@ const POSITIONAL = /^(?:all|none|both|neither)\b.*\b(?:above|these|of them|a and
 /** A question that leans on options, a figure or text that games don't show. */
 const NEEDS_MORE = /\b(?:of|among|from) the following\b|\bwhich of these\b|\bthe above\b|\b(?:given|shown|mentioned|stated|listed) (?:above|below)\b/i;
 const NEEDS_PICTURE = /\b(?:in|from|see|refer to|using|use|study|observe) the (?:figure|diagram|picture|image|graph|map|passage|table|chart)\b|\b(?:figure|diagram|picture|image|graph|map|passage|table|chart) (?:given|shown|above|below)\b/i;
-const TRUE_FALSE_ASK = /^(?:state\s+)?(?:whether\s+)?(?:true\s+or\s+false|t\s*\/\s*f|true\s*\/\s*false)\b|\(\s*true\s+or\s+false\s*\)|\btrue\s+or\s+false\s*[:?]/i;
+const TRUE_FALSE_ASK = /^(?:state\s+)?(?:whether\s+)?(?:true\s+or\s+false|t\s*\/\s*f|true\s*\/\s*false)\b|\(\s*(?:true\s*(?:or|\/)\s*false|t\s*\/\s*f)\s*\)|\btrue\s+or\s+false\s*[:?]/i;
 /** Characters a student can type on an ordinary keyboard (dashes and curly quotes are read as - and '). */
 const TYPEABLE = /^[\p{L}\p{M}\p{Nd}\s!-/:-@[-`{-~₹‘’“”–—−]*$/u;
 const untypeable = (s: string) => [...new Set([...s].filter((ch) => !TYPEABLE.test(ch)))].join(' ');
@@ -187,7 +187,9 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     if (blanks(q) > 1) err(b.line, 'Only one ___ in a question.', 'Keep at most one ___ in the question.');
 
     // the answer
-    const yesNo = /^(yes|no)$/i.test(a);
+    const yesNo = /^(yes|no)[.!]?$/i.test(a);
+    // True or False with a full stop isn't read as True/False: it would go in as an ordinary answer
+    if (/^(true|false)[.!]$/i.test(a)) err(aLine, `Write the answer as ${a.slice(0, -1)}, with nothing after it.`, `Write "A: ${a.slice(0, -1)}" with nothing after the word.`);
     if (!b.a) err(b.line, NO_ANSWER, 'Add the A: line with the answer.');
     else if (!a) err(aLine, 'The answer is empty. Write it after A:.', 'Write the answer after A:.');
     else if (!hasContent(a)) err(aLine, 'The answer has no letters or digits.', 'Write the answer in letters or digits.');
@@ -254,6 +256,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       const positional = ws.find((o) => POSITIONAL.test(o));
       const isAnswer = ws.find((o) => [a, ...also].some((x) => x && sameAnswer(o, x)));
       if (trueFalse) err(line, 'A True/False question needs no Wrong: line: the other of True and False is its option.', 'Remove the Wrong: line (a True/False question has none).');
+      else if (ws.length < MIN_OPTIONS && ws.length === 1 && ws[0].includes(',')) err(line, 'Separate the wrong options with ";", not commas.', 'Separate the wrong options with ";", not commas.');
       else if (ws.length < MIN_OPTIONS) err(line, `Write at least ${MIN_OPTIONS} wrong options, separated by ";".`, `Give ${MIN_OPTIONS} wrong options on the Wrong: line (it has ${ws.length}).`);
       else if (ws.length > MAX_OPTIONS) err(line, `At most ${MAX_OPTIONS} wrong options.`, `Keep at most ${MAX_OPTIONS} wrong options.`);
       else if (ws.some((o) => o.length > MAX_ANSWER || words(o) > MAX_ANSWER_WORDS)) err(line, `A wrong option is too long: at most ${MAX_ANSWER_WORDS} words, like an answer.`, `Shorten the wrong options to at most ${MAX_ANSWER_WORDS} words each.`);
@@ -272,7 +275,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     const cid = chapterId(c.boardCode, c.class, c.subjectCode, c.chapter_no);
     const chapterKey = cid ?? [c.board, c.class, c.subject, c.chapter_no, c.chapter].join('\u0000').toLowerCase();
     if (q) {
-      const dupKey = `${chapterKey}\u0001${q.toLowerCase()}`;
+      const dupKey = `${chapterKey}\u0001${q.toLowerCase().replace(/[\s?.!:;,।]+$/u, '').replace(/\s+/g, ' ')}`;
       const earlier = seen.get(dupKey);
       if (earlier) err(b.line, `Same question as line ${earlier}. Leave one of them out.`, 'Remove this question: it is written twice in the chapter.');
       else seen.set(dupKey, b.line);
@@ -325,11 +328,15 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     block = null;
   };
 
+  // a pasted chatbot reply: when the text has a code block, ordinary sentences outside it are the chatbot talking, not
+  // questions, so they are left out (labelled and detail lines outside it are still read)
+  const fenced = /^\s*(```|~~~)/m.test(raw);
+  let inFence = false;
   raw.split(/\r?\n/).forEach((text, i) => {
     const line = i + 1;
     const t = text.trim();
     if (!t) { gap = true; return; }
-    if (/^(```|~~~)/.test(t)) return; // a chatbot's code fence
+    if (/^(```|~~~)/.test(t)) { inFence = !inFence; return; } // a chatbot's code fence
 
     const label = readLabel(t);
     if (label) {
@@ -360,6 +367,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       return setMeta(meta.key, meta.value, line);
     }
     const near = nearLabel(t);
+    if (fenced && !inFence && !near && !/\s\|\s|\t/.test(t) && !/^\(?[a-dA-D][.)]\s+\S/.test(t)) { close(); return; }
     // a loose line right under a question is part of it; after a blank line it stands on its own
     if (gap) close();
     if (block) block.end = line;
@@ -375,6 +383,8 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       return;
     }
     if (block) return err(line, 'This line isn\'t part of the question. Start it with A:, Also:, Fill:, Wrong: or Level:, or start a new question with Q:. A question or answer must fit on one line.', `Remove the line "${t}", or start it with its label (A:, Also:, Fill:, Wrong: or Level:).`);
+    // a label in another language (प्रश्न:, उत्तर:)
+    if (/^[^\s:]{1,15}\s*:/.test(t) && !/^[\p{Script=Latin}\d\s*_#-]+:/u.test(t)) return err(line, 'Write the labels in English: Q:, A:, Also:, Fill:, Wrong: and Level:. The question and answer can be in any language.', 'Write the labels in English (Q:, A:, Also:, Fill:, Wrong:, Level:), keeping the question and answer as they are.');
     err(line, 'Start each question with Q:, and its answer on the next line with A:.', 'Remove this line, or write it as a question block.');
   });
   close();
