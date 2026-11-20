@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Last updated 21 November 2026 (version 1.11). Lives at https://www.shikshaq.in/games/instructions.md
+Last updated 21 November 2026 (version 1.12). Lives at https://www.shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -90,7 +90,7 @@ The rules the checker enforces (it rejects any break):
 - **English labels.** Board, Class, Subject, Chapter, Topic, Q, A, Also, Fill, Wrong, Level, the words True and False, and easy, medium, hard stay in English. Everything else is in the material's language.
 - **Q.** One fact with exactly one correct answer. At most 300 characters. Makes sense alone: never "the above", "of the following", "which of these", "given below", or a figure, diagram, map, table or passage. Never contains the answer or any Also answer, word for word. No yes/no questions; no "True or false" or "(True/False)" in it.
 - **A.** What a student types: at most 6 words and 100 characters, never a sentence, no brackets or notes, never two answers joined by "/" or "or". Units go in the question. A symbol a keyboard lacks (x², √2, π) needs an Also line typed with ordinary keys (x^2, sqrt 2, pi). Part B shows how to cut an answer down without changing the fact.
-- **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only a different answer that is just as right, never the answer respelt (part B lists what counts). In Hindi and other scripts, add another spelling or term only if the textbook itself uses it, and not an English-letter version unless the teacher asks.
+- **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only a different answer that is just as right (part B lists what counts). The game already ignores capitals, spaces, hyphens, punctuation, brackets and a leading "a", "an" or "the" when it marks an answer, so never add an Also line that differs only in those: not "Air-tight containers" for "Airtight containers", not "s" for "(s)", not "The Alps" for "Alps". In Hindi and other scripts, add another spelling or term only if the textbook itself uses it, and not an English-letter version unless the teacher asks.
 - **Fill** (required). The same fact as one sentence with exactly one `___` standing for the whole answer. At least 3 other words around the ___, and at most 300 characters. It reads correctly with the answer in the gap, and must not contain the whole answer or any whole Also answer.
 - **Wrong** (required). 3 to 5 wrong options on one line, separated by `;` (never commas), each at most 6 words, the same kind as the answer: a number answer gets number options, a word answer gets no bare numbers. Never the answer, an Also answer, a repeat, or "All of the above", "None of these", "Both A and B" (options are shuffled). Read each option against the exact wording of the question: if it could be argued to be right, even partly, replace it. Part A shows good ones.
 - **Level** (required). easy, medium or hard: easy is recall, medium is understanding, hard is applying, comparing, predicting or linking ideas. The level measures the thinking needed, not how obscure the fact is: a hard-to-remember date is not a hard question. Judge it for a student of that class: the same question can be easy in class 10 and hard in class 6.
@@ -108,7 +108,7 @@ Go through the questions one by one and check each of these in order. Fix anythi
 3. **No giveaway**: neither Q nor Fill contains the answer or any Also answer, word for word.
 4. **Fill**: exactly one ___, standing for the whole answer, with at least 3 other words around it, and the sentence reads correctly with the answer put in (a or an, singular or plural).
 5. **Answer**: at most 6 words and 100 characters, not a sentence, no brackets, no "/" or "or", no unit after a number, and a typed Also line for any symbol a keyboard lacks.
-6. **Also lines**: each one a different right answer, not the answer respelt, with a space, hyphen, capital or "the" changed.
+6. **Also lines**: each one a different right answer, not the answer again with only capitals, spaces, hyphens, punctuation, brackets or "the" changed.
 7. **Wrong options**: 3 to 5, separated by `;`, the same kind as the answer, and none of them right, partly right, or arguably right under the question's exact wording.
 8. **Repeats**: no two questions test the same fact, even in different words, and no two questions in a topic have the same answer (capitals, spaces and "the" don't make answers different).
 9. **Worth asking**: the fact is central and certain, the level fits the thinking it needs, and a True/False tests a real misconception.

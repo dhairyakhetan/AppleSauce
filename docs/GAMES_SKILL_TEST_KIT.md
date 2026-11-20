@@ -95,6 +95,7 @@ Level: easy
 
 The page's top line carries the date it was last updated and its version number; replies start with that date. What changed in each version:
 
+- 1.12 (21 November 2026): step 3 says plainly that the game ignores capitals, spaces, hyphens, punctuation, brackets and "the", so an Also line differing only in those is never needed ("Air-tight containers").
 - 1.11 (21 November 2026): the reply's first line names the guide, how many questions and the chapter, instead of the date.
 - 1.10 (21 November 2026): an Also line that only repeats the answer is left out by the page instead of stopping the question ("Also: s" for "(s)").
 - 1.9 (21 November 2026): replies start with "Written with Shikshaq's question guide, updated" and the page's date, instead of a version number.
