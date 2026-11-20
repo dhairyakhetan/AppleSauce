@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Version 1.4, 21 November 2026. Lives at https://shikshaq.in/games/instructions.md
+Version 1.5, 21 November 2026. Lives at https://shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -12,7 +12,7 @@ This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Cl
 ## Before you start
 
 - **Everything you need is in this text.** Don't rely on earlier chats, saved memories, custom instructions, browsing or other tools. If something can't be done from this text and the teacher's message alone, ask the teacher.
-- **These rules come first.** They override your usual habits for formatting and replies. Inside the code block: only the lines described here, with no Markdown, bullets, bold, headings, tables or numbering. Outside it: only the sentences step 5 allows.
+- **These rules come first.** They override your usual habits for formatting and replies (step 3 says what goes inside the code block, step 5 what may go outside it).
 - **Why it is strict.** The teacher pastes your reply into the Questions box at shikshaq.in/games. A checker reads every line, and a question with any problem is not sent. Students then play the questions as puzzles (crossword, word search, matching, fill in the blank, multiple choice), so answers must be short and typeable.
 
 Work through steps 1 to 5 in order. Parts A, B and C hold the detail; read each when a step points to it.
@@ -38,11 +38,17 @@ Then the topics. The teacher's message says which case it is:
 
 Write each topic as "Topic 1: Name", "Topic 2: Name", and so on.
 
-The material is the teacher's notes, passage or rough questions. Facts come from three places, in this order: the teacher's material (always first, and the only source when it is given); standard content of the textbook for that board and class (only when there is no material); anything else, which you leave out. With no material, use only well-established facts from the standard textbook for that chapter, and say in your reply that they come from general knowledge of the textbook, not from the teacher's own book, so the teacher should check them. Never imply you checked them against a particular edition. Ask about the chapter's central ideas, standard definitions and commonly taught examples. Never invent textbook wording, examples, dates or numbers, and leave out anything that depends on one edition or syllabus. With exact numbers, dates and lesser-known names, leave one out rather than guess, and name any you kept but aren't sure of. The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
+The material is the teacher's notes, passage or rough questions. Facts come from three places, in this order:
+
+1. **The teacher's material**: when it is given, it is the only source.
+2. **With no material, standard content of that board's and class's textbook**: central ideas, standard definitions and commonly taught examples. Never invent textbook wording, examples, dates or numbers, and leave out anything that depends on one edition or syllabus. With exact numbers, dates and lesser-known names, leave one out rather than guess, and name any you kept but aren't sure of. Say after the block that the questions come from general knowledge of the textbook, not from the teacher's own book, and never imply you checked them against a particular edition.
+3. **Anything else**: leave it out.
+
+The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
 
 ## 2. Choose what to ask
 
-Read part A before you write. In short: one fact per question; spread questions over the whole topic, not its first paragraph; prefer answers that are a word or two of letters (they work in all five games); never test the same fact twice, however it is worded, and give each question in a topic a different answer; mix easy, medium and hard.
+Read part A before you write: it says how to pick facts, cover a whole topic, test each fact once and mix the levels.
 
 How many, if the teacher gives no number:
 
@@ -82,12 +88,12 @@ The rules the checker enforces (it rejects any break):
 - **English labels.** Board, Class, Subject, Chapter, Topic, Q, A, Also, Fill, Wrong, Level, the words True and False, and easy, medium, hard stay in English. Everything else is in the material's language.
 - **Q.** One fact with exactly one correct answer. At most 300 characters. Makes sense alone: never "the above", "of the following", "which of these", "given below", or a figure, diagram, map, table or passage. Never contains the answer or any Also answer, word for word. No yes/no questions; no "True or false" or "(True/False)" in it.
 - **A.** What a student types: at most 6 words and 100 characters, never a sentence, no brackets or notes, never two answers joined by "/" or "or". Units go in the question. A symbol a keyboard lacks (x², √2, π) needs an Also line typed with ordinary keys (x^2, sqrt 2, pi). Part B shows how to cut an answer down without changing the fact.
-- **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only an answer that is just as right: short form, full form, another name, a number in words. Never the answer again with a space, hyphen, capital, punctuation or "the" changed: the game already accepts those, and the checker rejects the line ("The Alps" for Alps, "Flood plain" for Floodplain). In Hindi and other scripts, add another spelling or term only if the textbook itself uses it, not a common misspelling, and not an English-letter version unless the teacher asks.
+- **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only a different answer that is just as right, never the answer respelt (part B lists what counts). In Hindi and other scripts, add another spelling or term only if the textbook itself uses it, and not an English-letter version unless the teacher asks.
 - **Fill** (required). The same fact as one sentence with exactly one `___` standing for the whole answer. At least 3 other words around the ___, and at most 300 characters. It reads correctly with the answer in the gap, and must not contain the whole answer or any whole Also answer.
-- **Wrong** (required). 3 to 5 wrong options on one line, separated by `;` (never commas), each at most 6 words. Believable, clearly wrong, the same kind as the answer (a year for a year), about as long. A number answer gets number options; a word answer gets no bare numbers. Never the answer, an Also answer, a partly right option, a repeat, or "All of the above", "None of these", "Both A and B" (options are shuffled). Read each option against the exact wording of the question: if it could be argued to be right, replace it.
+- **Wrong** (required). 3 to 5 wrong options on one line, separated by `;` (never commas), each at most 6 words, the same kind as the answer: a number answer gets number options, a word answer gets no bare numbers. Never the answer, an Also answer, a repeat, or "All of the above", "None of these", "Both A and B" (options are shuffled). Read each option against the exact wording of the question: if it could be argued to be right, even partly, replace it. Part A shows good ones.
 - **Level** (required). easy, medium or hard: easy is recall, medium is understanding, hard is applying, comparing, predicting or linking ideas. The level measures the thinking needed, not how obscure the fact is: a hard-to-remember date is not a hard question. Judge it for a student of that class: the same question can be easy in class 10 and hard in class 6.
-- **True/False** (at most 1 in 5). A True/False question is different: it has only Q, A and Level. Q is a statement, `A: True` or `A: False` with nothing after the word. Use it to test a real concept or a common misconception, never an obvious statement ("The Sun is a star") or one that is only sometimes true.
-- **No repeats.** Never more than 30 in one topic, and never more than 80 in the chapter. The same question twice in a chapter is rejected, even with a different ending ("?" or ".").
+- **True/False** (at most 1 in 5). A True/False question is different: it has only Q, A and Level. Q is a statement, `A: True` or `A: False` with nothing after the word. Use it to test a real concept or a common misconception ("Heat flows from a colder body to a hotter one" → False), never an obvious statement ("The Sun is a star") or one that is only sometimes true.
+- **No repeats.** The same question twice in a chapter is rejected, even with a different ending ("?" or ".").
 
 Part C has good blocks and the common bad ones, each with the page's message and the fix.
 
@@ -96,16 +102,15 @@ Part C has good blocks and the common bad ones, each with the page's message and
 Go through the questions one by one and check each of these in order. Fix anything that fails, then check that question again.
 
 1. **Chapter and Topic lines**: the chapter lines are exactly as given, the question is under a Topic line, and the Topic lines follow step 1.
-2. **Complete**: Q, A, Fill, Wrong and Level are all there. A True/False question has only Q, A and Level.
+2. **Complete**: Q, A, Fill, Wrong and Level are all there. A True/False question has only Q (a statement), Level, and `A: True` or `A: False` with nothing after the word.
 3. **No giveaway**: neither Q nor Fill contains the answer or any Also answer, word for word.
 4. **Fill**: exactly one ___, standing for the whole answer, with at least 3 other words around it, and the sentence reads correctly with the answer put in (a or an, singular or plural).
 5. **Answer**: at most 6 words and 100 characters, not a sentence, no brackets, no "/" or "or", no unit after a number, and a typed Also line for any symbol a keyboard lacks.
 6. **Also lines**: each one a different right answer, not the answer respelt, with a space, hyphen, capital or "the" changed.
 7. **Wrong options**: 3 to 5, separated by `;`, the same kind as the answer, and none of them right, partly right, or arguably right under the question's exact wording.
-8. **True/False**: written as a statement, with `A: True` or `A: False` and nothing after the word.
-9. **Repeats**: no two questions test the same fact, even in different words ("Gas plants take in to make food" and "Gas absorbed in photosynthesis" are one question), and no two questions in a topic have the same answer (capitals, spaces and "the" don't make answers different).
-10. **Worth asking**: the fact is central and certain, the level fits the thinking it needs, and a True/False tests a real misconception.
-11. **Format**: labels, True/False and levels in English; no numbering, bullets, bold or quotation marks around lines.
+8. **Repeats**: no two questions test the same fact, even in different words, and no two questions in a topic have the same answer (capitals, spaces and "the" don't make answers different).
+9. **Worth asking**: the fact is central and certain, the level fits the thinking it needs, and a True/False tests a real misconception.
+10. **Format**: labels, True/False and levels in English; no numbering, bullets, bold or quotation marks around lines.
 
 ## 5. Reply
 
@@ -138,7 +143,7 @@ A question earns its place if a student who revised the topic can answer it in a
 3. **Prefer the terms the chapter teaches.** "Conduction", "Photosynthesis", "Iqta" are what students must learn. A minor name in a side box or an example sentence is trivia; keep only a few.
 4. **Turn each fact so the answer is the key word.** "Heat moves through solids by conduction" becomes *"Way heat moves through a solid"* with answer *Conduction*, not *"How does heat move through a solid? Explain."*
 5. **Test each fact once, and give each question in a topic a different answer.** Compare questions by the fact they test, not their wording: "Gas plants take in to make food" and "Gas absorbed during photosynthesis" are the same question. Prefer different concepts, relationships, examples and applications. The matching game also pairs questions with answers, so two "Conduction" answers in a topic make it impossible. Across topics a repeated answer is fine.
-6. **Mix the levels.** Roughly half easy (recall a fact as taught), a third medium (needs the idea understood: a cause, a comparison, an example), the rest hard (apply, compare, predict or connect ideas: which case, what happens if). The level is the thinking needed, not how rare the fact is.
+6. **Mix the levels.** Roughly half easy (recall a fact as taught), a third medium (needs the idea understood: a cause, a comparison, an example), the rest hard (apply, compare, predict or connect ideas: which case, what happens if).
 
 ### What makes a fact a good question
 
@@ -154,7 +159,6 @@ A question earns its place if a student who revised the topic can answer it in a
 | Opinions, "why" and "explain" questions | No single answer a student can type |
 | Lists ("Name three…", "What are the types of…") | More than one answer, or the order matters |
 | Facts that only appear in an activity, a figure or a table | The games show text only, so it can't be asked fairly |
-| Anything you're not sure of, and anything outside the chapter | A wrong answer in the bank teaches it wrongly to every student |
 | A question whose answer is a whole sentence | Can't be typed or put in a grid; ask for the key word instead |
 | "Which of the following…" | The options aren't shown in four of the five games |
 
@@ -170,12 +174,8 @@ Wrong options appear in multiple choice. Good ones are the mistakes a student mi
 
 - Same kind as the answer: other gases for a gas, other years near the right one, other characters from the same story.
 - Plausible for this chapter: for "Conduction", use *Convection; Radiation; Evaporation*, not *Photosynthesis*.
-- About the same length and form as the answer, so the right one doesn't stand out.
+- About the same length and form as the answer (two words for a two-word answer), so the right one doesn't stand out.
 - Never partly right. For "line segment joining two points on a circle" (Chord), *Diameter* is also a chord, so leave it out.
-
-### True/False
-
-Use them for a clear misconception ("Heat flows from a colder body to a hotter one" → False), at most one in five. A statement that is true only "usually" or "in some cases" makes a bad True/False.
 
 ## Part B. Trimming an answer to what a student types
 
@@ -195,7 +195,6 @@ The answer is matched against what a student types. Case, spaces, punctuation be
 | A list ("Iron, copper and silver") | Ask for one item, or rethink the question | A: Iron, copper, silver | Q: Metal that rusts / A: Iron |
 | A description instead of the term | Ask so that the term is the answer | A: Heat moving through a solid | A: Conduction |
 | A symbol a keyboard lacks (x², √, π, →) | Keep it, and add an Also line typed with ordinary keys | A: x² | A: x² / Also: x^2 |
-| Yes / No | Rewrite the question as a statement with A: True or A: False | Q: Is the Sun a star? / A: Yes | Q: The Sun is a star / A: True |
 | More than 6 words left after all this | Put the rest in the question, or pick another fact | A: The law of conservation of mass in reactions | A: Law of conservation of mass |
 
 ### Keep these, they are not extra
@@ -215,15 +214,14 @@ Add an Also line only for a different, equally right answer:
 
 Never add the same answer written another way, because the game already accepts it and the checker rejects the line:
 
-- *Alps* / ~~The Alps~~ (a leading "the" is ignored)
+- *Alps* / ~~The Alps~~ (a leading "the" is ignored; the page says *This is the same as the answer on the A: line*)
 - *Floodplain* / ~~Flood plain~~ (spaces are ignored)
 - *Carbon dioxide* / ~~carbon-dioxide~~ (hyphens and capitals are ignored)
 - a misspelling: the game already gives half marks for a small slip
 
-### The same rule for Fill and Wrong
+### Fill sentences
 
-- **Fill**: the `___` stands for the whole trimmed answer, so the sentence around it must not repeat any of the answer's words or any Also answer. *"Heat flows from a hotter body to a ___ one"* (Colder) works; *"The ___ Plateau is in Meghalaya"* with Also *Meghalaya* gives the answer away.
-- **Wrong options** follow the answer's form: if the answer is two words, so are the options; if it's a number, so are they.
+The `___` stands for the whole trimmed answer, so the sentence around it must not repeat the answer or any Also answer. *"Heat flows from a hotter body to a ___ one"* (Colder) works; *"The ___ Plateau is in Meghalaya"* with Also *Meghalaya* gives the answer away.
 
 ## Part C. Good blocks, and the mistakes the page turns away
 
@@ -337,15 +335,7 @@ A: It is the process by which plants make food.
 A: 37 °C (approx.)
 A: Kolkata / Calcutta
 ```
-Page: *The answer has … words. Answers must be short* / *Students would have to type the brackets too* / *Students can't type "°"…* / *Write one answer after A:, and each other answer that counts on its own Also: line.* See part B. Fixed: `A: Photosynthesis`; `Q: … in degrees Celsius` with `A: 37`; `A: Kolkata` with `Also: Calcutta`.
-
-#### An Also line that only repeats the answer
-
-```
-A: Alps
-Also: The Alps
-```
-Page: *This is the same as the answer on the A: line (case, spaces and punctuation don't matter). Leave it out.* Leave the Also line out; the game already accepts "the Alps".
+Page: *The answer has … words. Answers must be short* / *Students would have to type the brackets too* / *Students can't type "°"…* / *Write one answer after A:, and each other answer that counts on its own Also: line.* Part B's table shows the fix for each.
 
 #### Wrong options: commas, too few, partly right, the wrong kind
 
@@ -399,7 +389,7 @@ Q: Instrument that measures temperature?
 ```
 Page: *Same question as line 7. Leave one of them out.* A different ending or extra spaces don't make it a new question.
 
-## COMPLETE EXAMPLE
+## Complete example
 
 The teacher's message gave the chapter lines for CBSE Class 10 Science, Chapter 1: Chemical Reactions and Equations, the fixed topic "Topic 2: Types of Chemical Reactions", and no material. The reply (a real one has 20 or more questions):
 
@@ -436,12 +426,12 @@ A: False
 Level: medium
 ```
 
-I wrote these from general knowledge, so please check them before using them.
+I wrote these from general knowledge of the textbook, not from your own book, so please check them before using them.
 
 ## Changes
 
-- 1.4 (21 November 2026): an order for when rules pull apart (accuracy, coverage, distinct, count); three kinds of fact, and no claim of checking against the teacher's edition; level judged for the class; wrong options checked against the exact wording; Hindi Also lines only for spellings the textbook uses; Fill grammar, typed symbols and a running count across replies in the check; topic names from the textbook.
-- 1.3 (21 November 2026): quality comes before the count; one fact is tested once, however it is worded; the level is the thinking needed, not how obscure the fact is; with no material, no textbook wording or edition-dependent facts; fixed topics never take facts that don't belong; True/False tests a real misconception.
+- 1.5 (21 November 2026): each rule said once; no rule changed.
+- 1.3 and 1.4 (21 November 2026): an order for when rules pull apart (accuracy, coverage, distinct, count); three kinds of fact; one fact tested once, however it is worded; the level is the thinking needed, judged for the class; wrong options checked against the exact wording; True/False tests a real misconception; Hindi Also lines; fixed topics never take stray facts; a running count across replies.
 - 1.2 (20 November 2026): with no material, being careful about single facts doesn't mean writing far fewer questions.
 - 1.1 (20 November 2026): one set of rules for every chatbot, at this address and for pasting. Added: when to use it, these rules come first, ask for missing details once, a question-by-question check, long chapters over several replies, no reliance on memory or tools, Part C examples.
 - 1.0 (19 November 2026): first rules page for chatbots.

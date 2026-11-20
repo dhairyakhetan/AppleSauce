@@ -154,7 +154,7 @@ describe('the plain instructions page agrees with the checker', () => {
   });
 
   it('has a worked example that the checker reads with no problems', () => {
-    const block = page.slice(page.indexOf('COMPLETE EXAMPLE')).match(/```\n([\s\S]*?)```/)![1];
+    const block = page.slice(page.indexOf('## Complete example')).match(/```\n([\s\S]*?)```/)![1];
     const { rows, issues } = format(block);
     expect(issues).toEqual([]);
     expect(rows.length).toBeGreaterThan(1);
