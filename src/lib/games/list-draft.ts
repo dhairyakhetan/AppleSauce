@@ -270,7 +270,7 @@ export function readBulk(text: string, list: AdminChapter[]): { groups: BulkGrou
     const g = at;
     const topic = /^[-*•]\s*(.*)$/.exec(line);
     const body = (topic ? topic[1] : line).trim();
-    const numbered = /^(\d{1,2})\s*[.:)]\s*(.+)$/.exec(body);
+    const numbered = /^(\d{1,3})\s*[.:)]\s*(.+)$/.exec(body); // three digits, so 100 is refused rather than read as a name
     const no = numbered ? Number(numbered[1]) : null;
     const name = (numbered ? numbered[2] : body).trim();
     try {
