@@ -89,7 +89,7 @@ ${block(topicLines(ch))}`}
 
 ## How many
 
-20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter: a chapter with more than 4 topics gets fewer per topic. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
+20 to 30 questions per topic, never more than ${MAX_PER_TOPIC}, and never more than ${MAX_PER_CHAPTER} in the whole chapter. So with 3 topics write at most 26 each, with 4 at most 20, with 5 at most 16, and with 6 at most 13. Fewer is fine when the material is short: never pad, and never ask the same thing twice.
 
 ## The material
 

@@ -52,12 +52,10 @@ export function Team({ api, me }: { api: GamesApi; me: string }) {
   const add = async () => {
     const mail = email.trim().toLowerCase();
     if (!looksLikeEmail(mail)) { setNote(''); setError("That doesn't look like an email address."); return; }
-    // someone already on the list keeps their place: Add only changes their role, and says so
+    // (a role is changed in the list below, never by adding someone again, so no one is promoted or demoted by accident)
     const was = people?.find((p) => p.email === mail);
-    if (was && was.role === role) { setError(''); setNote(`${was.name ?? mail} is already on the games team as ${ROLE_NAMES[role]}.`); return; }
-    const done = was
-      ? `${was.name ?? mail} was already on the games team, as ${ROLE_NAMES[was.role]}. Now ${ROLE_NAMES[role]}.`
-      : `${mail} is now on the games team as ${ROLE_NAMES[role]}.`;
+    if (was) { setError(''); setNote(`${was.name ?? mail} is already on the games team as ${ROLE_NAMES[was.role]}. To change their role, use the list below.`); return; }
+    const done = `${mail} is now on the games team as ${ROLE_NAMES[role]}.`;
     // the role goes back to Member, so the next person isn't made an HoD or admin by accident
     if (await change(() => api.setPersonRole(mail, role), done)) { setEmail(''); setRole('member'); }
   };

@@ -14,7 +14,7 @@ You need two things from the teacher:
     Class: ...
     Subject: ...
     Chapter N: ...   (N is the chapter number, for example Chapter 4: Heat)
-    The teacher copies these from the "Write questions" page of the site.
+    The teacher takes these from the "Write questions" page of the site.
     Copy them exactly as the teacher wrote them. Do not change them. Do not translate them.
 (b) The material. This is notes, a textbook passage, or a list of questions.
 
@@ -22,6 +22,7 @@ If the chapter lines are missing, ask the teacher for them. Ask once and wait.
 If the material is missing, write from well-known facts in the standard textbook for that chapter.
 Leave out any fact you are not sure of.
 If the teacher gave topic lines (Topic 1: ..., Topic 2: ...), use only those topics, written exactly as given.
+If the teacher names a topic only by its number (for example "Topic 2"), ask for its full Topic line with its name. Ask once and wait.
 If the teacher gave no topic lines, split the chapter into 2 to 6 topics yourself, in the order the textbook teaches them.
 Write each topic as "Topic 1: Name", "Topic 2: Name", and so on.
 
@@ -73,7 +74,7 @@ STEP 4. THE ANSWER (A:)
 1. Short: a word, a name, a short phrase or a number. At most 6 words and at most 100 characters. Never a sentence. The same limit holds for every Also line and every wrong option.
 2. Write exactly what a student would type. No brackets. No notes like "(approx.)". Never two answers joined by "/" or "or".
 3. Put units in the question, not in the answer. Write "Boiling point of water in degrees Celsius" with answer 100.
-4. Prefer words to numbers when the material allows. Crosswords and word searches need answers made only of letters, 3 to 15 letters long. One word or two short words is best.
+4. Prefer words to numbers when the material allows. Crosswords and word searches need answers made only of letters. Answers of 3 to 15 letters fit both games. One word or two short words is best.
    Answers in Hindi or another script, and answers with digits, can still be used. They work in the other games, but not in crosswords or word searches. Do not add Latin-letter versions of Hindi answers.
 5. If the answer needs a symbol that a keyboard does not have (for example x squared or the square root sign), add an Also line written with ordinary keys. Write x^2 for x squared and sqrt 2 for the square root of 2.
 6. Never change a fact, a number or a unit to make an answer shorter.
@@ -84,7 +85,7 @@ STEP 5. THE OTHER LINES
 Also: (optional, at most 5 lines, one answer on each line)
   Write another answer that is just as right. Examples: a short form (CPU), a full form, another name (Calcutta for Kolkata), a number in words (Six for 6).
   Do not repeat the answer with other capitals, spaces, punctuation or accents, or with "a", "an" or "the" at the start ("The Nile" and "Nile" are the same). Those already count.
-  An Also answer of 3 to 15 letters is used in the crossword when the main answer is too long for it.
+  When the main answer is too long for the word search (or the crossword), an Also answer of 3 to 15 letters is used there instead.
   Do not write spelling mistakes. The game forgives small slips by itself.
 
 Fill: (required)
@@ -114,7 +115,8 @@ TRUE/FALSE questions (use at most 1 in 5):
 STEP 6. HOW MANY QUESTIONS
 
 1. If the teacher gives no number, write 20 to 30 questions for each topic.
-2. Never more than 30 in one topic. Never more than 80 in the whole chapter. A chapter with more than 4 topics gets fewer questions per topic, so the chapter stays at 80 or fewer.
+2. Never more than 30 in one topic. Never more than 80 in the whole chapter.
+   So with 3 topics write at most 26 each, with 4 at most 20, with 5 at most 16, and with 6 at most 13.
 3. If the teacher gives a number (for example "20 questions"), write that many in all, spread over the topics. The teacher's number wins, but never go over 30 in a topic or 80 in the chapter.
 4. Fewer is fine when the material is short. Never pad. Never ask the same thing twice.
 5. Do not give two questions in one topic the same answer. The matching game needs different answers.
@@ -132,9 +134,9 @@ Go through the list. Fix anything that fails.
 4. Every Fill has exactly one ___ and does not contain the answer.
 5. Every Wrong line has 3 to 5 options separated by semicolons. None of them is the answer.
 6. Every answer is at most 6 words, and is not a sentence.
-7. No question contains its own answer. No question says "this", "the above" or "of the following".
+7. No question contains its own answer. No question says "the above", "of the following", "this figure" or "this passage".
 8. No question is written twice.
-9. No numbering, bullets, bold or quotation marks.
+9. No numbering, bullets or bold, and no quotation marks around a whole line or answer.
 10. Every Level is easy, medium or hard.
 
 
@@ -148,7 +150,8 @@ Reply with these parts in this order. Write nothing outside these parts.
    - which answers you wrote yourself because the material did not give them;
    - that you wrote from general knowledge, so the teacher should check the questions;
    - which of the teacher's own questions you rewrote or left out, and why;
-   - that the material was short, so you wrote fewer questions than the teacher asked for.
+   - that the material was short, so you wrote fewer questions than the teacher asked for;
+   - that the teacher asked for more than 80, and the page takes at most 80 for one chapter at a time.
 
 If the teacher asks for changes (for example "add 5 more" or "make them harder"), write the complete block again, not just the changes.
 
@@ -158,7 +161,7 @@ Never ask the teacher for a password, an account or any personal detail. This ta
 
 COMPLETE EXAMPLE
 
-The teacher wrote: "Board: CBSE, Class: 10, Subject: Science, Chapter 1: Chemical Reactions and Equations. Write questions for Topic 2."
+The teacher wrote: "Board: CBSE, Class: 10, Subject: Science, Chapter 1: Chemical Reactions and Equations, Topic 2: Types of Chemical Reactions. Write questions for this topic."
 You reply with this block:
 
 ```
