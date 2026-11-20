@@ -24,7 +24,7 @@ describe('the chatbot prompt: short, with the link to the rules and this chapter
   const prompt = chatbotPrompt(HEAT);
 
   it('sends the chatbot to the rules page and gives only what that page cannot know', () => {
-    expect(INSTRUCTIONS_URL).toBe('https://shikshaq.in/games/instructions.md');
+    expect(INSTRUCTIONS_URL).toBe('https://www.shikshaq.in/games/instructions.md');
     expect(prompt).toContain(INSTRUCTIONS_URL);
     expect(prompt).toContain(`\`\`\`\n${chapterLines(HEAT)}\n\`\`\``);
     expect(prompt).toContain(`Topics (fixed: use only these, written exactly like this):\n\n\`\`\`\n${topicLines(HEAT)}\n\`\`\``);

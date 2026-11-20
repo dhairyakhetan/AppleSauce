@@ -99,7 +99,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
 - **The chatbot prompt is short and made for one chapter** on the list: it
-  sends the chatbot to the rules at `https://shikshaq.in/games/instructions.md`
+  sends the chatbot to the rules at `https://www.shikshaq.in/games/instructions.md`
   (`INSTRUCTIONS_URL` in `prompt.ts`) and gives what that page can't know: the
   chapter's lines, its topics (fixed, already in use, or none given, in the
   page's own words) and a place for the teacher's material.

@@ -25,7 +25,7 @@ const block = (lines: string) => `${FENCE}\n${lines}\n${FENCE}`;
 const or = (xs: readonly string[]) => `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
 
 /** Where the rules for chatbots live: public/games/instructions.md on the live site. */
-export const INSTRUCTIONS_URL = 'https://shikshaq.in/games/instructions.md';
+export const INSTRUCTIONS_URL = 'https://www.shikshaq.in/games/instructions.md'; // the www address: shikshaq.in redirects there, and some chatbots stop at the redirect
 
 /** The lines that start the chatbot's block: the chapter's details, as the page reads them. */
 export const chapterLines = (ch: ListChapter) =>
@@ -42,7 +42,7 @@ function topicsPart(ch: ListChapter): string {
 }
 
 /** "Copy chatbot prompt": the link to the rules, this chapter, its topics, and a place for the teacher's material. */
-export const chatbotPrompt = (ch: ListChapter) => `Write revision questions for this chapter. First open ${INSTRUCTIONS_URL} and follow every rule on that page exactly: it gives the format and how to reply. If you can't open it, tell me.
+export const chatbotPrompt = (ch: ListChapter) => `Write revision questions for this chapter. First open ${INSTRUCTIONS_URL} and read the whole page, down to the list of changes at the end: it gives every rule, the format and how to reply. Follow it exactly. If you can't open it, or get only part of it, tell me instead of guessing the rules.
 
 The chapter (copy these lines exactly):
 
