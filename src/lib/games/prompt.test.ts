@@ -169,7 +169,9 @@ describe('the plain instructions page agrees with the checker', () => {
   });
 
   it('carries a version line, ends with the heading the prompt names, and says it needs nothing but itself', () => {
-    expect(page).toMatch(/^Version \d+\.\d+, /m);
+    const updated = page.match(/^Last updated (\d{1,2} \w+ \d{4}) \(version \d+\.\d+\)\./m)?.[1];
+    expect(updated).toBeTruthy();
+    expect(page).toContain(`"Written with Shikshaq's question guide, updated ${updated}."`); // the reply's first line names the same date
     expect(page.trimEnd().endsWith('## End of instructions')).toBe(true);
     expect(chatbotPrompt(HEAT)).toContain('down to the heading "End of instructions"');
     expect(page).toContain("Don't rely on earlier chats, saved memories, custom instructions, browsing or other tools.");

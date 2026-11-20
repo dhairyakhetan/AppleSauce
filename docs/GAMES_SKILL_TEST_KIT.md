@@ -93,8 +93,9 @@ Level: easy
 
 ## Versions of the rules
 
-The page carries only its version number (the line at the top). What changed in each version:
+The page's top line carries the date it was last updated and its version number; replies start with that date. What changed in each version:
 
+- 1.9 (21 November 2026): replies start with "Written with Shikshaq's question guide, updated" and the page's date, instead of a version number.
 - 1.8 (21 November 2026): the list of changes moved here from the page; the page ends with an empty "End of instructions" heading, which the prompt names as the end.
 - 1.7 (21 November 2026): the reply starts with the version of these rules it followed; the address is the www one.
 - 1.6 (21 November 2026): the chapter lines in step 1 are placeholders, so they can't be copied as they are.

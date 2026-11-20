@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Version 1.8, 21 November 2026. Lives at https://www.shikshaq.in/games/instructions.md
+Last updated 21 November 2026 (version 1.9). Lives at https://www.shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -116,7 +116,7 @@ Go through the questions one by one and check each of these in order. Fix anythi
 
 ## 5. Reply
 
-Start with one line naming the version of these rules you followed: "Rules version" and the number at the top of this page. It shows the teacher you read them; the page ignores it.
+Start with one line saying which guide you followed, with the date at the top of this page: "Written with Shikshaq's question guide, updated 21 November 2026." It shows the teacher you read it; the page ignores it.
 
 Then put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. After the block, at most three short sentences in the teacher's language, only those that apply: which answers you supplied because the material lacked them; that you wrote from general knowledge and the teacher should check; that there are fewer questions than asked because the topic or material has no more good ones; facts you left out because they fit none of the fixed topics. If asked for changes, write the whole block again.
 
