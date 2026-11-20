@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Version 1.5, 21 November 2026. Lives at https://shikshaq.in/games/instructions.md
+Version 1.6, 21 November 2026. Lives at https://shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -19,14 +19,16 @@ Work through steps 1 to 5 in order. Parts A, B and C hold the detail; read each 
 
 ## 1. Get the chapter, the topics and the material
 
-You need four chapter lines, copied exactly as given (they must match the site's chapter list, so never "correct" or translate them):
+You need four chapter lines, copied exactly as the teacher gives them (they must match the site's chapter list, so never "correct" or translate them). Their shape:
 
 ```
-Board: CBSE
-Class: 7
-Subject: Science
-Chapter 4: Heat
+Board: [the board]
+Class: [the class]
+Subject: [the subject]
+Chapter [number]: [the chapter's name]
 ```
+
+For example, `Board: CBSE`, `Class: 7`, `Subject: Science`, `Chapter 4: Heat`. Always use the teacher's own lines, never these placeholders or this example.
 
 **If something essential is missing** (the board, class, subject, or the chapter's number and name), ask for all the missing items together in one message, then wait. Never guess a chapter number. Ask in the same message if the teacher names a topic only by its number ("topic 2"): you need its full Topic line. Missing notes don't stop you (see below).
 
@@ -430,6 +432,7 @@ I wrote these from general knowledge of the textbook, not from your own book, so
 
 ## Changes
 
+- 1.6 (21 November 2026): the chapter lines in step 1 are placeholders, so they can't be copied as they are.
 - 1.5 (21 November 2026): each rule said once; no rule changed.
 - 1.3 and 1.4 (21 November 2026): an order for when rules pull apart (accuracy, coverage, distinct, count); three kinds of fact; one fact tested once, however it is worded; the level is the thinking needed, judged for the class; wrong options checked against the exact wording; True/False tests a real misconception; Hindi Also lines; fixed topics never take stray facts; a running count across replies.
 - 1.2 (20 November 2026): with no material, being careful about single facts doesn't mean writing far fewer questions.
