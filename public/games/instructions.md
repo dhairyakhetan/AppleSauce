@@ -147,7 +147,8 @@ Reply with these parts in this order. Write nothing outside these parts.
 3. After that, add at most three short sentences, and only if they apply. You may write them in the teacher's language:
    - which answers you wrote yourself because the material did not give them;
    - that you wrote from general knowledge, so the teacher should check the questions;
-   - which of the teacher's own questions you rewrote or left out, and why.
+   - which of the teacher's own questions you rewrote or left out, and why;
+   - that the material was short, so you wrote fewer questions than the teacher asked for.
 
 If the teacher asks for changes (for example "add 5 more" or "make them harder"), write the complete block again, not just the changes.
 
