@@ -168,8 +168,10 @@ describe('the plain instructions page agrees with the checker', () => {
     for (const b of blocks) expect(format(`Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n${b}`).issues, b).toEqual([]);
   });
 
-  it('carries a version line, and says it needs nothing but itself', () => {
+  it('carries a version line, ends with the heading the prompt names, and says it needs nothing but itself', () => {
     expect(page).toMatch(/^Version \d+\.\d+, /m);
+    expect(page.trimEnd().endsWith('## End of instructions')).toBe(true);
+    expect(chatbotPrompt(HEAT)).toContain('down to the heading "End of instructions"');
     expect(page).toContain("Don't rely on earlier chats, saved memories, custom instructions, browsing or other tools.");
   });
 

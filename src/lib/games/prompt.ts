@@ -42,7 +42,7 @@ function topicsPart(ch: ListChapter): string {
 }
 
 /** "Copy chatbot prompt": the link to the rules, this chapter, its topics, and a place for the teacher's material. */
-export const chatbotPrompt = (ch: ListChapter) => `Write revision questions for this chapter. First open ${INSTRUCTIONS_URL} and read the whole page, down to the list of changes at the end: it gives every rule, the format and how to reply. Follow it exactly. If you can't open it, or get only part of it, tell me instead of guessing the rules.
+export const chatbotPrompt = (ch: ListChapter) => `Write revision questions for this chapter. First open ${INSTRUCTIONS_URL} and read all of it, down to the heading "End of instructions": it gives every rule, the format and how to reply. Follow it exactly. If you can't open it, or get only part of it, tell me instead of guessing the rules.
 
 The chapter (copy these lines exactly):
 

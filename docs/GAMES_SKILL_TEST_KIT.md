@@ -90,3 +90,16 @@ Level: easy
 | 2026-11-20 | 1.1 | Claude Sonnet (fresh) | 15 questions, 0 problems | not run (stopped) | 4 kept, 0 problems | |
 | | 1.2 | ChatGPT | | | | |
 | | 1.2 | Gemini | | | | |
+
+## Versions of the rules
+
+The page carries only its version number (the line at the top). What changed in each version:
+
+- 1.8 (21 November 2026): the list of changes moved here from the page; the page ends with an empty "End of instructions" heading, which the prompt names as the end.
+- 1.7 (21 November 2026): the reply starts with the version of these rules it followed; the address is the www one.
+- 1.6 (21 November 2026): the chapter lines in step 1 are placeholders, so they can't be copied as they are.
+- 1.5 (21 November 2026): each rule said once; no rule changed.
+- 1.3 and 1.4 (21 November 2026): an order for when rules pull apart (accuracy, coverage, distinct, count); three kinds of fact; one fact tested once, however it is worded; the level is the thinking needed, judged for the class; wrong options checked against the exact wording; True/False tests a real misconception; Hindi Also lines; fixed topics never take stray facts; a running count across replies.
+- 1.2 (20 November 2026): with no material, being careful about single facts doesn't mean writing far fewer questions.
+- 1.1 (20 November 2026): one set of rules for every chatbot, at this address and for pasting. Added: when to use it, these rules come first, ask for missing details once, a question-by-question check, long chapters over several replies, no reliance on memory or tools, Part C examples.
+- 1.0 (19 November 2026): first rules page for chatbots.
