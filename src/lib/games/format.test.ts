@@ -98,8 +98,6 @@ describe('the checks, each on the line to fix', () => {
     ['the old [optional] notation', 'Q: Splitting of a compound\nA: Decomposition [reaction]', 2, 'error', /type the brackets/],
     ['a symbol nobody can type', 'Q: Square root of 2, written with the root sign\nA: √2', 2, 'error', /can't type "√"/],
     ['a blank in the answer', 'Q: Powerhouse of the cell\nA: Mito___', 2, 'error', /No ___ in the answer/],
-    ['Also same as the answer', 'Q: Highest mountain range in the world\nA: Himalayas\nAlso: The Himalayas', 3, 'error', /same as the answer/],
-    ['Also twice', 'Q: Brain of the computer\nA: Central Processing Unit\nAlso: CPU\nAlso: cpu', 4, 'error', /written twice/],
     ['two answers on one Also line', 'Q: Capital of West Bengal\nA: Kolkata\nAlso: Calcutta; Calcutta city', 3, 'error', /One answer per Also/],
     ['Fill with no blank', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: Plants take in carbon gas.', 3, 'error', /needs ___/],
     ['Fill with two blanks', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: Plants take in ___ and give out ___.', 3, 'error', /Only one ___/],
@@ -578,5 +576,16 @@ describe('a question that needs a picture', () => {
     for (const q of ['Look at the figure and name the bulb', 'Name the part labelled A in a thermometer', 'According to the table, name the hottest place']) {
       expect(format(`${head}Q: ${q}${rest}`).issues.map((x) => x.text), q).toContain("The question can't use a figure, diagram, map, table or passage: the games show only text.");
     }
+  });
+});
+
+describe('an Also line that only repeats the answer', () => {
+  it('is left out quietly instead of stopping a good question: "s" for "(s)", "The Himalayas" for "Himalayas", a second "cpu"', () => {
+    const head = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Chemical Reactions and Equations\nTopic 1: Chemical Equations\n\n';
+    const { rows, issues } = format(`${head}Q: Symbol indicating that a substance is in solid state\nA: (s)\nAlso: s\nFill: The symbol ___ indicates that a substance is in solid state.\nWrong: (l); (g); (aq)\nLevel: easy\n\n`
+      + 'Q: Highest mountain range in the world\nA: Himalayas\nAlso: The Himalayas\nFill: Mount Everest is in the ___ range.\nWrong: Andes; Alps; Rockies\nLevel: easy\n\n'
+      + 'Q: Brain of the computer\nA: Central Processing Unit\nAlso: CPU\nAlso: cpu\nFill: The part that does a computer\'s thinking is the ___.\nWrong: Hard disk; Monitor; Keyboard\nLevel: easy');
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => r.also)).toEqual([[], [], ['CPU']]);
   });
 });

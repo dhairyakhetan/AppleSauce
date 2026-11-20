@@ -169,7 +169,11 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     const q = b.q;
     const a = b.a?.v ?? '';
     const aLine = b.a?.line ?? b.line;
-    const also = b.also.map((x) => x.v);
+    // an Also line that only repeats the answer, or an earlier Also line, with brackets, capitals, spaces, punctuation or
+    // "the" changed ("Also: s" for "(s)", "The Alps" for "Alps") adds nothing: the game already takes it. It is left out,
+    // quietly, rather than stopping a good question; the table on the right no longer shows it.
+    const repeats = (v: string, i: number) => !!v && ((!!a && sameAnswer(v, a)) || b.also.slice(0, i).some((y) => !!y.v && sameAnswer(v, y.v)));
+    const also = b.also.filter((x, i) => !repeats(x.v, i)).map((x) => x.v);
     const it = { answer: a, also };
     const trueFalse = isTrueFalse(a);
 
@@ -229,8 +233,6 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
       if (x.v.includes(';')) return err(x.line, 'One answer per Also: line. Put each one on its own line.', `Split "Also: ${x.v}" into one Also: line per answer.`);
       if (x.v.length > MAX_ANSWER || words(x.v) > MAX_ANSWER_WORDS) return err(x.line, `This answer is too long: at most ${MAX_ANSWER_WORDS} words.`, `Shorten "Also: ${x.v}" to at most ${MAX_ANSWER_WORDS} words.`);
       if (blanks(x.v)) return err(x.line, 'No ___ in an answer.', `Take the ___ out of "Also: ${x.v}".`);
-      if (a && sameAnswer(x.v, a)) return err(x.line, 'This is the same as the answer on the A: line (case, spaces and punctuation don\'t matter). Leave it out.', `Remove "Also: ${x.v}": it is the answer again (capitals, spaces and hyphens already don't count).`);
-      if (also.slice(0, i).some((y) => sameAnswer(x.v, y))) return err(x.line, 'This answer is written twice.', `Remove the second "Also: ${x.v}".`);
     });
 
     // the fill-in sentence

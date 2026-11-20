@@ -171,7 +171,9 @@ describe('the plain instructions page agrees with the checker', () => {
   it('carries a version line, ends with the heading the prompt names, and says it needs nothing but itself', () => {
     const updated = page.match(/^Last updated (\d{1,2} \w+ \d{4}) \(version \d+\.\d+\)\./m)?.[1];
     expect(updated).toBeTruthy();
-    expect(page).toContain(`"Written with Shikshaq's question guide, updated ${updated}."`); // the reply's first line names the same date
+    expect(page).toContain('"Written with Shikshaq\'s question guide: [how many] questions for Chapter [number]: [the chapter\'s name]."');
+    // that first line, before the code block, doesn't trouble the page
+    expect(format('Written with Shikshaq\'s question guide: 1 questions for Chapter 4: Heat.\n\n```\nBoard: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\nQ: Instrument that measures temperature\nA: Thermometer\nFill: A ___ measures how hot something is.\nWrong: Barometer; Ammeter; Hygrometer\nLevel: easy\n```').issues).toEqual([]);
     expect(page.trimEnd().endsWith('## End of instructions')).toBe(true);
     expect(chatbotPrompt(HEAT)).toContain('down to the heading "End of instructions"');
     expect(page).toContain("Don't rely on earlier chats, saved memories, custom instructions, browsing or other tools.");

@@ -109,9 +109,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **The rules page (the question-writing skill):** `public/games/instructions.md`, served at
   `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`). One set of rules for any
   chatbot, for every way it is used: the copied prompt links to it, and teachers can paste it whole into
-  ChatGPT, Gemini or Claude. Its top line has the date it was last updated and a version number (with any change, update both,
-  the date in step 5's sample first line too, and add the change to the list in `docs/GAMES_SKILL_TEST_KIT.md`;
-  `prompt.test.ts` fails if the two dates differ), ends with an empty "End of instructions" heading
+  ChatGPT, Gemini or Claude. Its top line has the date it was last updated and a version number (with any change, update both
+  and add the change to the list in `docs/GAMES_SKILL_TEST_KIT.md`). Replies start with "Written with Shikshaq's
+  question guide", the number of questions and the chapter, which shows the chatbot read the page, ends with an empty "End of instructions" heading
   that the copied prompt names as the end of the page, and covers when to use it, the 5 steps, a question-by-question check, long chapters over several replies,
   fixing rejected questions, and parts A (choosing questions), B (trimming answers) and C (good and bad
   examples with the page's messages). `prompt.test.ts` checks its limits, its worked example and every
