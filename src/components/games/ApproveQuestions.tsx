@@ -248,7 +248,7 @@ function ChapterList({ questions, batches, rowActions, rowClass, download: dl }:
   rowClass: (q: BankQuestion) => string;
   download?: { busy: boolean; run: (chapterId: string, csv: boolean) => void };
 }) {
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState<string | null>(null); // one chapter open at a time
   const [limit, setLimit] = useState(CHAPTERS_SHOWN);
   const sentAt = new Map(batches.map((b) => [b.id, b.at]));
   const groups = new Map<string, BankQuestion[]>();
@@ -259,14 +259,14 @@ function ChapterList({ questions, batches, rowActions, rowClass, download: dl }:
   // most recent first: when a question in it was last approved or sent back (or else sent)
   const latest = (qs: BankQuestion[]) => qs.reduce((m, q) => { const t = q.reviewedAt ?? sentAt.get(q.batch) ?? ''; return t > m ? t : m; }, '');
   const list = [...groups].map(([k, qs]) => ({ k, qs, at: latest(qs) })).sort((x, y) => y.at.localeCompare(x.at));
-  const toggle = (k: string) => setOpen((o) => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
 
   return (
     <>
       <ul className="flex flex-col gap-2">
         {list.slice(0, limit).map(({ k, qs, at }) => {
           const q0 = qs[0];
-          const isOpen = open.has(k);
+          const isOpen = open === k;
           const title = [q0.chapter_no !== null && `Chapter ${q0.chapter_no}`, q0.chapter].filter(Boolean).join(': ') || 'No chapter';
           const meta = [q0.board, q0.class && `Class ${q0.class}`, q0.subject].filter(Boolean).join(' · ');
           return (
