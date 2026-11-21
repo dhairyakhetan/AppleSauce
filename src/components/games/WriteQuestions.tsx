@@ -80,6 +80,9 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   const boxTimer = useRef(0);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
+  /** The list of questions on the right, which scrolls by itself (side by side only). */
+  const tableBox = useRef<HTMLDivElement>(null);
+  const followTimer = useRef(0);
   const backPanel = useRef<HTMLElement>(null);
 
   // on a phone the results are below the box: a small pill points to them while they are out of sight
@@ -292,6 +295,25 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     });
   };
 
+  /**
+   * The Questions box was scrolled: a moment after it stops, the list on the right glides to the question at the top of
+   * the box (the one that line is in, or the next one). Only when the two sit side by side; on a phone they are one
+   * above the other, and moving the page would only get in the way.
+   */
+  const followBox = (line: number) => {
+    clearTimeout(followTimer.current);
+    followTimer.current = window.setTimeout(() => {
+      const list = tableBox.current;
+      if (!list || !matchMedia('(min-width: 1024px)').matches || list.scrollHeight <= list.clientHeight) return;
+      const target = rows.find((r) => (r.end ?? r.line) >= line) ?? rows[rows.length - 1];
+      const el = target && list.querySelector<HTMLElement>(`[data-line="${target.line}"]`);
+      if (!el) return;
+      const top = list.scrollTop + el.getBoundingClientRect().top - list.getBoundingClientRect().top - 12;
+      list.scrollTo({ top: Math.max(0, top), behavior: motion() });
+    }, 700);
+  };
+  useEffect(() => () => clearTimeout(followTimer.current), []);
+
   /** Selects a line of the Questions box, so a reported problem can be fixed in place. */
   const goTo = (line: number) => {
     const ta = box.current;
@@ -372,7 +394,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
-            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} />
+            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={btn('card')} onClick={() => replaceAll(EXAMPLE, 'Example loaded', true)}>Try an example</button>
@@ -414,7 +436,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
           )}
           {notes.length > 0 && <ul className="flex list-disc flex-col gap-0.5 pl-5 text-[14px] text-warm-prose">{notes.map((n) => <li key={n}>{n}</li>)}</ul>}
 
-          <div className="rounded-2xl bg-card p-3 sm:p-4">
+          <div ref={tableBox} className="rounded-2xl bg-card p-3 sm:p-4 lg:max-h-[640px] lg:overflow-y-auto lg:overscroll-contain">
             {rows.length ? (
               <RowsTable key={batch} rows={rows} problem={status}
                 games={(r) => usableIn({ id: String(r.line), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }).map((t) => GAME_NAMES[t])} />
@@ -633,7 +655,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
-function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret }: {
+function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine }: {
   value: string;
   onChange: (v: string) => void;
   /** A paste; `all` when it replaces all the text (or the box was empty). */
@@ -645,6 +667,8 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
   /** The line the cursor is on (set from outside too, when a listed problem is clicked). */
   caret: number;
   setCaret: (line: number) => void;
+  /** The box was scrolled: the line now at its top. */
+  onTopLine?: (line: number) => void;
 }) {
   const back = useRef<HTMLDivElement>(null);
   const pasted = useRef(false); // a paste is finished text: check all of it at once
@@ -656,6 +680,17 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
     (b.firstElementChild as HTMLElement).style.width = `${ta.clientWidth}px`; // excludes the textarea's scrollbar
     b.scrollTop = ta.scrollTop;
     b.scrollLeft = ta.scrollLeft;
+  };
+  /** The first line still in view at the top of the box, read from the copy behind it (it wraps exactly as the box does). */
+  const topLine = () => {
+    const b = back.current;
+    if (!b) return 1;
+    const top = b.getBoundingClientRect().top + 8;
+    for (const el of b.querySelectorAll<HTMLElement>('[data-l]')) {
+      const r = el.getBoundingClientRect();
+      if (r.height && r.bottom > top) return Number(el.dataset.l);
+    }
+    return 1;
   };
   useLayoutEffect(sync);
   useEffect(() => {
@@ -682,9 +717,9 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
               const level = levels.get(i + 1);
               const body = l.trim();
               const nl = i > 0 ? '\n' : '';
-              if (!level || !body) return <Fragment key={i}>{nl}{l}</Fragment>;
+              if (!level || !body) return <Fragment key={i}>{nl}<span data-l={i + 1}>{l}</span></Fragment>;
               const lead = l.slice(0, l.indexOf(body[0]));
-              return <Fragment key={i}>{nl}{lead}<span className={`games-mark ${level}`}>{body}</span>{l.slice(lead.length + body.length)}</Fragment>;
+              return <Fragment key={i}>{nl}<span data-l={i + 1}>{lead}<span className={`games-mark ${level}`}>{body}</span>{l.slice(lead.length + body.length)}</span></Fragment>;
             })}
             {/* keeps an empty last line as tall as the textarea draws it */}
             {'​'}
@@ -697,7 +732,7 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
           }}
           onPaste={(e) => { pasted.current = true; const t = e.currentTarget; onPaste(t.selectionStart === 0 && t.selectionEnd === t.value.length); }}
           onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
-          onScroll={sync} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
+          onScroll={() => { sync(); onTopLine?.(topLine()); }} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
           placeholder={'One block per question, like this:\n\nTopic 1: Chemical Equations\n\nQ: The question\nA: The answer\nFill: A sentence with ___ where the answer goes\nWrong: Wrong option; another; another\nLevel: easy'} />
       </div>
       <p id="caret-note" aria-live="polite"

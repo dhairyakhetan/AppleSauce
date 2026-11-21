@@ -72,6 +72,7 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
           bad && 'border-l-4 pl-1', bad === 'error' && 'border-l-destructive', bad === 'warn' && 'border-l-brand', rowClass?.(r))}
         style={delay(shown++)}
         key={keyOf(r, i)}
+        data-line={(r as { line?: number }).line}
       >
         <span className="pt-0.5 text-right text-[12px] tabular-nums text-warm-meta">{r.question_no}</span>
         <span className="min-w-0 break-words text-[14px] text-foreground">
