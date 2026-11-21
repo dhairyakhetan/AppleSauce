@@ -589,3 +589,26 @@ describe('an Also line that only repeats the answer', () => {
     expect(rows.map((r) => r.also)).toEqual([[], [], ['CPU']]);
   });
 });
+
+describe('fixes from the review', () => {
+  const head = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Chemical Reactions and Equations\n';
+  const q = 'Q: Gas given off when zinc reacts with dilute sulphuric acid\nA: Hydrogen\nFill: Zinc reacts with dilute acid to give off ___ gas.\nWrong: Oxygen; Chlorine; Nitrogen\nLevel: easy';
+
+  it('refuses a long dash in a topic name', () => {
+    const { issues } = format(`${head}Topic 2: Euclid — Division Lemma\n\n${q}`);
+    expect(issues.map((x) => x.text)).toContain('No long dashes in a topic name: use a colon or a comma.');
+  });
+
+  it('finds a repeated question that differs only by an invisible character', () => {
+    const { issues } = format(`${head}Topic 1: Chemical Equations\n\n${q}\n\n${q.replace('Gas given', 'Gas​ given')}`);
+    expect(issues.map((x) => x.text)).toEqual(['Same question as line 7. Leave one of them out.']);
+  });
+
+  it('downloads a CSV whose cells a spreadsheet reads as text, never as a formula', () => {
+    const { rows } = format(`${head}Topic 1: Chemical Equations\n\nQ: =HYPERLINK("http://x","y")\nA: -5\nFill: The value here is ___ for sure.\nWrong: 5; 4; 3\nLevel: easy`);
+    const csv = toCSV(rows);
+    expect(csv).toContain(`"'=HYPERLINK(""http://x"",""y"")"`);
+    expect(csv).toContain(",'-5,");
+    expect(csv).not.toMatch(/,=|,\+|,@/);
+  });
+});

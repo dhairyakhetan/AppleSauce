@@ -147,6 +147,9 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     if (key === 'subject') { const s = checkSubject(v); say(s.problem); return { subject: s.name, subjectCode: s.code, subjectLine: line }; }
     const c = checkNumbered(v, key);
     say(c.problem);
+    // a long dash in a topic name would be saved as a new topic, and then the Chapters page (which refuses dashes) couldn't
+    // save that subject any more
+    if (key === 'topic' && /[–—]/.test(c.name ?? '')) issue(line, 'error', 'No long dashes in a topic name: use a colon or a comma.', 'Replace the long dash in the topic name with a colon or a comma.');
     return key === 'chapter'
       ? { chapter_no: c.no, chapter: c.name, chapterLine: line, topic_no: null, topic: '', topicLine: 0 } // a new chapter starts with no topic
       : { topic_no: c.no, topic: c.name, topicLine: line };
@@ -277,7 +280,8 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     const cid = chapterId(c.boardCode, c.class, c.subjectCode, c.chapter_no);
     const chapterKey = cid ?? [c.board, c.class, c.subject, c.chapter_no, c.chapter].join('\u0000').toLowerCase();
     if (q) {
-      const dupKey = `${chapterKey}\u0001${q.toLowerCase().replace(/[\s?.!:;,।]+$/u, '').replace(/\s+/g, ' ')}`;
+      // (invisible characters, such as a zero-width space, don't make a question new either)
+      const dupKey = `${chapterKey}\u0001${q.toLowerCase().replace(/[\u200b-\u200d\u2060\ufeff]/g, '').replace(/[\s?.!:;,।]+$/u, '').replace(/\s+/g, ' ')}`;
       const earlier = seen.get(dupKey);
       if (earlier) err(b.line, `Same question as line ${earlier}. Leave one of them out.`, 'Remove this question: it is written twice in the chapter.');
       else seen.set(dupKey, b.line);

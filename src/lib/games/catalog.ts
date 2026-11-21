@@ -101,11 +101,12 @@ export function checkList(text: string, rows: Row[], list: ListChapter[]): { iss
       const known = chapter.topics.find((t) => sameName(t.name, r.topic));
       const earlierName = w.byNo.get(r.topic_no);
       const earlierNo = w.byName.get(key(r.topic));
-      if (taken && !sameName(taken.name, r.topic)) {
+      if (known && known.topic_no !== r.topic_no) {
+        // the name is already a topic of this chapter under another number ("Topic: Oxidation" when Oxidation is topic 3)
+        say(atTopic, `Chapter ${chapter.chapter_no} already has "${known.name}" as topic ${known.topic_no}.`, `Change it to ${quoteTopic(known)}, its number in this chapter.`);
+      } else if (taken && !sameName(taken.name, r.topic)) {
         say(atTopic, `Topic ${taken.topic_no} of chapter ${chapter.chapter_no} is already "${taken.name}".`,
           `Change it to ${quoteTopic(taken)} if its questions belong there; otherwise number it ${next}: "Topic ${next}: ${r.topic}".`);
-      } else if (!taken && known) {
-        say(atTopic, `Chapter ${chapter.chapter_no} already has "${known.name}" as topic ${known.topic_no}.`, `Change it to ${quoteTopic(known)}, its number in this chapter.`);
       } else if (!taken && earlierName !== undefined && !sameName(earlierName, r.topic)) {
         say(atTopic, `Topic ${r.topic_no} is "${earlierName}" earlier in the text.`, `Number it ${next} instead: "Topic ${next}: ${r.topic}".`);
       } else if (!taken && earlierNo !== undefined && earlierNo !== r.topic_no) {

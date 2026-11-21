@@ -63,8 +63,13 @@ function table(rows: Row[], sep: string, cell: (v: string) => string): string {
   return [COLUMNS.join(sep), ...rows.map(line)].join('\n');
 }
 
-/** CSV with a header row (RFC 4180 quoting, no byte-order mark), ready to import into a table. */
-export const toCSV = (rows: Row[]) => table(rows, ',', (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)) + '\n';
+/**
+ * CSV with a header row (RFC 4180 quoting, no byte-order mark), ready to import into a table. A cell starting with
+ * = + - @ (or a tab or return) would run as a formula in a spreadsheet, so it gets a ' in front, which spreadsheets read
+ * as "this is text" and don't show.
+ */
+const plain = (v: string) => (/^[=+\-@\t\r]/.test(v) ? `'${v}` : v);
+export const toCSV = (rows: Row[]) => table(rows, ',', (raw) => { const v = plain(raw); return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }) + '\n';
 
 export const toJSON = (rows: Row[]) => JSON.stringify(rows.map(toRecord), null, 2) + '\n';
 

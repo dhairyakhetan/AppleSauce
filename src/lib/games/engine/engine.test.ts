@@ -320,3 +320,24 @@ describe('checkers catch every kind of broken puzzle', () => {
     for (const type of ['matching', 'fill', 'wordsearch', 'crossword', 'choice'] as const) expect(checkGame(makeGame(type, CHEM, 11)!, CHEM)).toEqual([]);
   });
 });
+
+describe('matching counts Also answers as the same answer', () => {
+  const items: Item[] = [
+    { id: 'zinc', question: 'Gas given off when zinc reacts with dilute acid', answer: 'H2', also: ['Hydrogen'] },
+    { id: 'light', question: 'Lightest gas', answer: 'Hydrogen' },
+    { id: 'plants', question: 'Gas plants give out', answer: 'Oxygen' },
+    { id: 'rust', question: 'Process that eats away iron', answer: 'Rusting' },
+    { id: 'salt', question: 'Common salt', answer: 'Sodium chloride' },
+  ];
+  it('never puts two questions whose answers count the same in one game', () => {
+    for (let s = 1; s < 60; s++) {
+      const g = makeMatching(items, rng(s))!;
+      const ids = g.left.map((x) => x.id);
+      expect(ids.includes('zinc') && ids.includes('light'), `seed ${s}`).toBe(false);
+    }
+  });
+  it('and the checker catches it if one does', () => {
+    const g: Matching = { type: 'matching', left: [items[0], items[1], items[2]].map((it) => ({ id: it.id, text: it.question })), right: [items[1], items[2], items[0]].map((it) => ({ id: it.id, text: it.answer })) };
+    expect(checkMatching(g, items)).toContain('answer light is also right for question zinc');
+  });
+});
