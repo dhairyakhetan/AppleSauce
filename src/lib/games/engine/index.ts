@@ -8,7 +8,7 @@
  *
  * Which questions a game uses is decided by what the writer wrote, never guessed: see `usableIn`.
  */
-import { fillText, gridForm, shows, rng, usable, type Item } from './shared';
+import { fillText, gridForm, shows, rng, shuffle, usable, type Item } from './shared';
 import { checkChoice, choiceOnly, makeChoice, wrongOptions, type Choice } from './choice';
 import { checkCrossword, CROSSWORD, makeCrossword, type Crossword } from './crossword';
 import { checkFill, makeFill, type FillIn } from './fill';
@@ -65,9 +65,21 @@ export const TRIES = 12;
 /** The questions a game can use. */
 export const poolFor = (type: GameType, items: Item[]) => usable(items).filter((it) => usableIn(it).includes(type));
 
+/**
+ * Not too many hard questions at once: hard questions are kept to a third of what a puzzle can draw from (which of them,
+ * by the seed, so "New puzzle" brings others). When every question is hard, they are all kept, or there'd be no game.
+ */
+export function balanced(items: Item[], r: () => number): Item[] {
+  const hard = items.filter((it) => it.level === 'hard');
+  const rest = items.filter((it) => it.level !== 'hard');
+  if (!rest.length || hard.length * 2 <= rest.length) return items;
+  const keep = new Set(shuffle(hard, r).slice(0, Math.max(1, Math.floor(rest.length / 2))).map((it) => it.id));
+  return items.filter((it) => it.level !== 'hard' || keep.has(it.id));
+}
+
 /** One game from these questions, checked; null if this game can't be made from them. */
 export function makeGame<T extends GameType>(type: T, items: Item[], seed: number): Extract<Game, { type: T }> | null {
-  const pool = poolFor(type, items);
+  const pool = balanced(poolFor(type, items), rng(seed ^ 0x5bd1e995));
   for (let t = 0; t < TRIES; t++) {
     const g = MAKE[type](pool, rng(seed + t * 0x9e3779b9));
     if (!g) continue;
