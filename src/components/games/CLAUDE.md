@@ -89,6 +89,11 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   problem is on the line to fix and says what to change, and a question with
   any problem (red or amber) isn't sent. Send then offers "Remove those and
   send" or "Copy prompt to fix them" (`fixPrompt` in `prompt.ts`).
+- **What the page can't be sure of goes to the HoD** (`doubts` in `format.ts`): an answer that may be two
+  answers ("Kolkata or Calcutta"), "in the map" or "from the table", a full stop on only some of the answer and
+  options, a wrong option that contains the answer. These don't stop a question: Write questions shows "Sent with
+  a note for the HoD", and Approve questions works out the same notes from the question and shows "Please check".
+  Nothing is stored, so it needs no database change. Clear mistakes stay errors.
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options

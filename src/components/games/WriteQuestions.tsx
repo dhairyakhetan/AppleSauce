@@ -5,7 +5,7 @@ import type { GamesApi, SendResult } from '@/lib/games/api';
 import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
 import { usableIn } from '@/lib/games/engine';
-import { asText, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
+import { asText, doubts, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
 import { chatbotPrompt, fixPrompt } from '@/lib/games/prompt';
 import { type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
@@ -438,7 +438,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
           <div ref={tableBox} className="rounded-2xl bg-card p-3 sm:p-4 lg:max-h-[640px] lg:overflow-y-auto lg:overscroll-contain">
             {rows.length ? (
-              <RowsTable key={batch} rows={rows} problem={status}
+              <RowsTable key={batch} rows={rows} problem={status} doubts={(r) => doubts(r)} doubtsLabel="Sent with a note for the HoD"
                 games={(r) => usableIn({ id: String(r.line), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }).map((t) => GAME_NAMES[t])} />
             ) : <p className="py-6 text-center text-[14px] text-warm-secondary">Your questions will appear here.</p>}
           </div>

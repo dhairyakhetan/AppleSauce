@@ -6,6 +6,7 @@ import { counts, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type St
 import { cn } from '@/lib/utils';
 import { btn, chip, download, FIELD, offerUndo, plural, when } from './helpers';
 import { Empty, Loading, LoadFailed, RowsTable } from './shared';
+import { doubts } from '@/lib/games/format';
 
 /* Approve questions: batches sent from Write questions wait here until an HoD approves each question or sends it back
    with a reason the teacher sees. Approved questions go into the question bank the games use. Waiting and sent-back
@@ -200,7 +201,7 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
             </div>
             {whyBox(`batch:${b.id}`, qs.map((q) => q.id))}
             <div className="rounded-2xl bg-card p-3 sm:p-4">
-              <RowsTable rows={qs} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} />
+              <RowsTable rows={qs} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} doubts={(q) => doubts(q)} />
             </div>
           </section>
         )) : (

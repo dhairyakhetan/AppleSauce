@@ -49,8 +49,10 @@ export const NO_FILL = "No Fill: line, so this question can't be used in fill in
 const POSITIONAL = /^(?:all|none|both|neither)\b.*\b(?:above|these|of them|a and b|options?)\b|^(?:both|neither)\s+\(?[a-d]\)?\s+(?:and|nor)\s+\(?[a-d]\)?$/i;
 /** A question that leans on options, a figure or text that games don't show. */
 const NEEDS_MORE = /\b(?:of|among|from) the following\b|\bwhich of these\b|\bthe above\b|\b(?:given|shown|mentioned|stated|listed) (?:above|below)\b/i;
-const NEEDS_PICTURE = /\b(?:in|from|see|refer to|using|use|study|observe|look at|according to) the (?:figure|diagram|picture|image|graph|map|passage(?! of time)|table|chart)\b|\b(?:figure|diagram|picture|image|graph|map|passage|table|chart) (?:given|shown|above|below)\b|\b(?:part|point|region|place) (?:labelled|labeled|marked) [A-Z0-9]\b/i;
+const NEEDS_PICTURE = /\b(?:see|refer to|using|use|study|observe|look at|according to) the (?:figure|diagram|picture|image|graph|map|passage(?! of time)|table|chart)\b|\b(?:figure|diagram|picture|image|graph|map|passage|table|chart) (?:given|shown|above|below)\b|\b(?:part|point|region|place) (?:labelled|labeled|marked) [A-Z0-9]\b/i;
 const TRUE_FALSE_ASK = /^(?:state\s+)?(?:whether\s+)?(?:true\s+or\s+false|t\s*\/\s*f|true\s*\/\s*false)\b|\(\s*(?:true\s*(?:or|\/)\s*false|t\s*\/\s*f)\s*\)|\btrue\s+or\s+false\s*[:?]/i;
+/** "in the map", "from the table": often a question that needs a picture, sometimes not ("a distance in the map"). The HoD decides. */
+const MAYBE_PICTURE = /\b(?:in|from|on) the (?:figure|diagram|picture|image|graph|map|passage(?! of time)|table|chart)\b/i;
 /** Characters a student can type on an ordinary keyboard (dashes and curly quotes are read as - and '). */
 const TYPEABLE = /^[\p{L}\p{M}\p{Nd}\s!-/:-@[-`{-~₹‘’“”–—−]*$/u;
 const untypeable = (s: string) => [...new Set([...s].filter((ch) => !TYPEABLE.test(ch)))].join(' ');
@@ -546,3 +548,26 @@ A: True
 Q: Which of the following is a combination reaction?
 A: Burning of magnesium
 `;
+
+/**
+ * What the page can't be sure is wrong, so it doesn't stop the question: it goes to the HoD with these notes, and the HoD
+ * decides. Worked out from the question itself, so the Write questions page (for the teacher) and the Approve
+ * questions page (for the HoD) always show the same notes, with nothing stored.
+ */
+export function doubts(r: Pick<Row, 'question' | 'answer' | 'also' | 'fill' | 'wrong_options'>): string[] {
+  const out: string[] = [];
+  const picture = [r.question, r.fill ?? ''].map((t) => t.match(MAYBE_PICTURE)?.[0]).find(Boolean);
+  if (picture && !NEEDS_PICTURE.test(r.question) && !NEEDS_PICTURE.test(r.fill ?? '')) {
+    out.push(`It says "${picture}": check that it doesn't need a picture, map or table the games can't show.`);
+  }
+  const two = r.answer.match(/\S+\s+or\s+\S+/i)?.[0] ?? r.answer.match(/\p{L}{2,}\/\p{L}{2,}/u)?.[0];
+  if (two && !/\s\/\s/.test(r.answer)) out.push(`The answer may be two answers ("${two}"). If so, the second belongs on an Also line.`);
+  const all = [r.answer, ...(r.wrong_options ?? [])];
+  const stops = all.filter((x) => /\p{L}\.$/u.test(x) && !/\..+\.$/.test(x));
+  if (stops.length && stops.length < all.length) out.push('Only some of the answer and wrong options end with a full stop, which can give the answer away in multiple choice.');
+  for (const o of r.wrong_options ?? []) {
+    const x = [r.answer, ...(r.also ?? [])].find((a) => shows(o, { answer: a }));
+    if (x) out.push(`The wrong option "${o}" contains the answer "${x}": check that it isn't partly right.`);
+  }
+  return out;
+}

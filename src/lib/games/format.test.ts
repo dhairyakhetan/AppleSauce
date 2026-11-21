@@ -4,7 +4,7 @@ import {
   SUBJECTS, titleCase, writeDetail,
 } from './details';
 import {
-  asText, baseName, blockOf, EXAMPLE, format, lineLevels, MAX_ANSWER_WORDS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, missing, NO_ANSWER, NO_FILL,
+  asText, baseName, blockOf, doubts, EXAMPLE, format, lineLevels, MAX_ANSWER_WORDS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, missing, NO_ANSWER, NO_FILL,
   problemsByRow, visibleIssues,
 } from './format';
 import { counts, setStatus, toCSV, toJSON, toRecord, toTSV, type Bank } from './rows';
@@ -660,5 +660,38 @@ describe('fixes from the second review', () => {
 
   it('allows "the passage of time"', () => {
     expect(texts(`${head}Q: Change that happens with the passage of time in iron left in moist air\nA: Rusting${rest.replace('Zinc reacts with dilute acid to give off ___ gas.', 'Iron left in moist air slowly undergoes ___ over months.')}`)).toEqual([]);
+  });
+});
+
+describe('what the page is unsure of goes to the HoD, without stopping the question', () => {
+  const head = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n';
+  const block = (q: string, a: string, wrong = 'Mumbai; Chennai; Delhi', fill = 'The answer to this one is ___ here.') => `${head}Q: ${q}\nA: ${a}\nFill: ${fill}\nWrong: ${wrong}\nLevel: easy`;
+  const read = (t: string) => { const { rows, issues } = format(t); return { issues: issues.map((x) => x.text), doubts: doubts(rows[0]) }; };
+
+  it('two answers joined by "or" or a slash', () => {
+    for (const a of ['Kolkata or Calcutta', 'Kolkata/Calcutta']) {
+      const r = read(block('Capital of West Bengal', a));
+      expect(r.issues, a).toEqual([]);
+      expect(r.doubts[0], a).toMatch(/may be two answers/);
+    }
+    expect(read(block('Speed is measured in', 'km/h', '1/2; m/s; kg/m')).doubts).toEqual([]);
+  });
+
+  it('"in the map" is flagged, while "look at the figure" is still refused', () => {
+    const map = read(block('Ratio of a distance in the map to the real distance', 'Scale', 'Legend; Grid; Key'));
+    expect(map.issues).toEqual([]);
+    expect(map.doubts[0]).toMatch(/"in the map"/);
+    expect(read(block('Look at the figure and name the bulb', 'Bulb', 'Stem; Cap; Scale')).issues[0]).toMatch(/can't use a figure/);
+  });
+
+  it('a full stop on only some of the answer and options', () => {
+    expect(read(block('Lightest gas', 'Hydrogen.', 'Oxygen; Nitrogen; Helium')).doubts[0]).toMatch(/full stop/);
+    expect(read(block('Lightest gas', 'Hydrogen', 'Oxygen; Nitrogen; Helium')).doubts).toEqual([]);
+  });
+
+  it('a wrong option that contains the answer', () => {
+    const r = read(block('Lightest gas', 'Hydrogen', 'Hydrogen gas; Nitrogen; Helium'));
+    expect(r.issues).toEqual([]);
+    expect(r.doubts).toEqual(['The wrong option "Hydrogen gas" contains the answer "Hydrogen": check that it isn\'t partly right.']);
   });
 });
