@@ -466,6 +466,8 @@ export function readMeta(line: string): { key: MetaKey; value: string } | null {
   if (!m) return null;
   const k = KEY_OF[m[1].toLowerCase()];
   const rest = m[2];
+  // a word joined on with a hyphen is a compound word, not a label: "Subject-verb agreement", "Topic-wise"
+  if (/^-\p{L}/u.test(rest)) return null;
   if (k === 'chapter' || k === 'topic') {
     const r = rest.match(/^(\d+(?:\.\d+)*)?\s*([:\-–—.)]\s*)?(.*)$/)!;
     if (!r[1] && !r[2]) return null;

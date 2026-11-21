@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Last updated 21 November 2026 (version 1.12). Lives at https://www.shikshaq.in/games/instructions.md
+Last updated 21 November 2026 (version 1.13). Lives at https://www.shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -84,7 +84,7 @@ Wrong: a wrong option; another; another
 Level: easy
 ```
 
-The rules the checker enforces (it rejects any break):
+Follow every one of these rules. The page checks most of them and turns away a question that breaks one; the rest (such as testing the same fact twice, or a wrong option that is partly right) only you can catch, in step 4.
 
 - **Layout.** The chapter lines first, then a Topic line, then that topic's blocks. A blank line between blocks and after each Topic line. Each part on one line. No numbering, bullets, bold, headings or tables.
 - **English labels.** Board, Class, Subject, Chapter, Topic, Q, A, Also, Fill, Wrong, Level, the words True and False, and easy, medium, hard stay in English. Everything else is in the material's language.

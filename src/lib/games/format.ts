@@ -49,7 +49,7 @@ export const NO_FILL = "No Fill: line, so this question can't be used in fill in
 const POSITIONAL = /^(?:all|none|both|neither)\b.*\b(?:above|these|of them|a and b|options?)\b|^(?:both|neither)\s+\(?[a-d]\)?\s+(?:and|nor)\s+\(?[a-d]\)?$/i;
 /** A question that leans on options, a figure or text that games don't show. */
 const NEEDS_MORE = /\b(?:of|among|from) the following\b|\bwhich of these\b|\bthe above\b|\b(?:given|shown|mentioned|stated|listed) (?:above|below)\b/i;
-const NEEDS_PICTURE = /\b(?:in|from|see|refer to|using|use|study|observe|look at|according to) the (?:figure|diagram|picture|image|graph|map|passage|table|chart)\b|\b(?:figure|diagram|picture|image|graph|map|passage|table|chart) (?:given|shown|above|below)\b|\b(?:part|point|region|place) (?:labelled|labeled|marked) [A-Z0-9]\b/i;
+const NEEDS_PICTURE = /\b(?:in|from|see|refer to|using|use|study|observe|look at|according to) the (?:figure|diagram|picture|image|graph|map|passage(?! of time)|table|chart)\b|\b(?:figure|diagram|picture|image|graph|map|passage|table|chart) (?:given|shown|above|below)\b|\b(?:part|point|region|place) (?:labelled|labeled|marked) [A-Z0-9]\b/i;
 const TRUE_FALSE_ASK = /^(?:state\s+)?(?:whether\s+)?(?:true\s+or\s+false|t\s*\/\s*f|true\s*\/\s*false)\b|\(\s*(?:true\s*(?:or|\/)\s*false|t\s*\/\s*f)\s*\)|\btrue\s+or\s+false\s*[:?]/i;
 /** Characters a student can type on an ordinary keyboard (dashes and curly quotes are read as - and '). */
 const TYPEABLE = /^[\p{L}\p{M}\p{Nd}\s!-/:-@[-`{-~₹‘’“”–—−]*$/u;
@@ -61,7 +61,8 @@ const BRACKETED = /\s([([][^)\]]*\p{L}{2,}[^)\]]*[)\]])/u;
 
 /** A label at the start of a line, after a bullet or a number and with Markdown bold around it if a chatbot added them. */
 function readLabel(line: string): { key: Key; value: string } | null {
-  const t = line.trim().replace(/^(?:[-*•▪◦·]\s+|\d{1,3}[.)]\s+)/, '').replace(/^\*\*([^*]{1,8}?)\*\*/, '$1');
+  const t = line.trim().replace(/^(?:[-*•▪◦·]\s+|\d{1,3}[.)]\s+)/, '').replace(/^\*\*([^*]{1,8}?)\*\*/, '$1')
+    .replace(/^q\s*\d{1,3}\s*[:.)]\s*/i, 'Q: '); // a numbered label, as chatbots often write it: "Q1:", "Q 2.", "Q3)"
   const m = t.match(/^(q|a|also|fill|wrong|level)\s*:\s*(.*)$/i);
   return m ? { key: m[1].toLowerCase() as Key, value: clean(m[2]) } : null;
 }
@@ -82,13 +83,15 @@ function nearLabel(line: string): Key | null {
 
 /** Extra spaces, and quotes or bold around the whole part, go. Nothing inside is changed. */
 function clean(v: string): string {
-  let t = v.replace(/\s+/g, ' ').trim();
+  let t = v.replace(/\\_/g, '_').replace(/\s+/g, ' ').trim(); // "\\_" is Markdown's escaped underscore, so "\\_\\_\\_" is a blank
   const m = t.match(/^(\*\*|`|"|“)(.+)(\*\*|`|"|”)$/);
   if (m && (m[1] === '“' ? '”' : m[1]) === m[3] && !m[2].includes(m[1])) t = m[2].trim();
   return t;
 }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
+/** The level as written, without a full stop or a note in brackets after it: "Medium." and "medium (understanding)" are medium. */
+const levelOf = (v: string) => v.replace(/\s*\([^)]*\)\s*$/, '').replace(/[.!]+$/, '').trim().toLowerCase() as Difficulty;
 
 interface Context {
   board: string; boardCode: string | null;
@@ -197,7 +200,8 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     const yesNo = /^(yes|no)[.!]?$/i.test(a);
     // True or False with a full stop isn't read as True/False: it would go in as an ordinary answer
     if (/^(true|false)[.!]$/i.test(a)) err(aLine, `Write the answer as ${a.slice(0, -1)}, with nothing after it.`, `Write "A: ${a.slice(0, -1)}" with nothing after the word.`);
-    if (!b.a) err(b.line, NO_ANSWER, 'Add the A: line with the answer.');
+    if (!b.a && /\sA\s*:\s*\S/.test(q)) err(b.line, 'The answer is on the Q: line. Put "A:" and the answer on a line of its own, under the question.', 'Move "A:" and the answer to a line of its own, under the question.');
+    else if (!b.a) err(b.line, NO_ANSWER, 'Add the A: line with the answer.');
     else if (!a) err(aLine, 'The answer is empty. Write it after A:.', 'Write the answer after A:.');
     else if (!hasContent(a)) err(aLine, 'The answer has no letters or digits.', 'Write the answer in letters or digits.');
     else {
@@ -230,8 +234,10 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     }
 
     // other answers that count
+    let kept = 0;
     b.also.forEach((x, i) => {
-      if (i === MAX_ALSO) err(x.line, `At most ${MAX_ALSO} Also: lines.`, `Keep at most ${MAX_ALSO} Also: lines.`);
+      if (repeats(x.v, i)) return; // left out (see above), so not counted
+      if (++kept === MAX_ALSO + 1) err(x.line, `At most ${MAX_ALSO} Also: lines.`, `Keep at most ${MAX_ALSO} Also: lines.`);
       if (!x.v) return err(x.line, 'This Also: line is empty.', 'Remove the empty Also: line.');
       if (x.v.includes(';')) return err(x.line, 'One answer per Also: line. Put each one on its own line.', `Split "Also: ${x.v}" into one Also: line per answer.`);
       if (x.v.length > MAX_ANSWER || words(x.v) > MAX_ANSWER_WORDS) return err(x.line, `This answer is too long: at most ${MAX_ANSWER_WORDS} words.`, `Shorten "Also: ${x.v}" to at most ${MAX_ANSWER_WORDS} words.`);
@@ -257,7 +263,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     if (b.wrong) {
       const ws = b.wrong.v;
       const line = b.wrong.line;
-      const kind = (s: string) => (/\p{L}/u.test(s) ? 'words' : 'a number');
+      const kind = (s: string) => (NUMBER_AND_UNIT.test(s.trim()) || !/\p{L}/u.test(s) ? 'a number' : 'words');
       const positional = ws.find((o) => POSITIONAL.test(o));
       const isAnswer = ws.find((o) => [a, ...also].some((x) => x && sameAnswer(o, x)));
       if (trueFalse) err(line, 'A True/False question needs no Wrong: line: the other of True and False is its option.', 'Remove the Wrong: line (a True/False question has none).');
@@ -274,7 +280,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     if (trueFalse && b.also.length) err(b.also[0].line, 'A True/False question has no Also: line.', 'Remove the Also: line (a True/False question has none).');
 
     // the level
-    if (b.level && !DIFFICULTIES.includes(b.level.v.toLowerCase() as Difficulty)) err(b.level.line, 'The level must be easy, medium or hard.', `Change "Level: ${b.level.v}" to easy, medium or hard.`);
+    if (b.level && !DIFFICULTIES.includes(levelOf(b.level.v))) err(b.level.line, 'The level must be easy, medium or hard.', `Change "Level: ${b.level.v}" to easy, medium or hard.`);
 
     // where it goes, how many, and repeats
     const cid = chapterId(c.boardCode, c.class, c.subjectCode, c.chapter_no);
@@ -320,7 +326,7 @@ export function format(raw: string): { rows: Row[]; issues: Issue[] } {
     if (inChapter === MAX_PER_CHAPTER + 1) err(b.line, `The chapter has more than ${MAX_PER_CHAPTER} questions from here on: at most ${MAX_PER_CHAPTER} per chapter.`, over('the chapter', MAX_PER_CHAPTER));
     else if (inChapter > MAX_PER_CHAPTER) err(b.line, `More than ${MAX_PER_CHAPTER} questions in this chapter.`, over('the chapter', MAX_PER_CHAPTER));
 
-    const level = b.level?.v.toLowerCase() as Difficulty | undefined;
+    const level = b.level ? levelOf(b.level.v) : undefined;
     rows.push({
       chapter_id: cid, topic_id: tid, board: c.board, class: c.class, subject: c.subject, chapter_no: c.chapter_no, chapter: c.chapter,
       topic_no: topicNo, topic: c.topic, question_no: n, question: q, answer: a, also, fill: b.fill?.v ?? null,

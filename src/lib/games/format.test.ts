@@ -612,3 +612,53 @@ describe('fixes from the review', () => {
     expect(csv).not.toMatch(/,=|,\+|,@/);
   });
 });
+
+describe('fixes from the second review', () => {
+  const head = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Chemical Reactions and Equations\nTopic 1: Chemical Equations\n\n';
+  const rest = '\nFill: Zinc reacts with dilute acid to give off ___ gas.\nWrong: Oxygen; Chlorine; Nitrogen\nLevel: easy';
+  const texts = (t: string) => format(t).issues.map((x) => x.text);
+
+  it('reads "Q1:", "Q 2." and "Q3)" as Q: labels', () => {
+    for (const label of ['Q1:', 'Q 2.', 'Q3)']) {
+      const { rows, issues } = format(`${head}${label} Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest}`);
+      expect(issues, label).toEqual([]);
+      expect(rows[0].question).toBe('Gas given off when zinc reacts with dilute acid');
+    }
+  });
+
+  it('reads Markdown-escaped underscores as the blank', () => {
+    const { rows, issues } = format(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest.replace('___', '\\_\\_\\_')}`);
+    expect(issues).toEqual([]);
+    expect(rows[0].fill).toBe('Zinc reacts with dilute acid to give off ___ gas.');
+  });
+
+  it('reads "Level: Medium." and "Level: medium (understanding)" as medium', () => {
+    for (const lv of ['Medium.', 'medium (understanding)']) {
+      const { rows, issues } = format(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest.replace('Level: easy', `Level: ${lv}`)}`);
+      expect(issues, lv).toEqual([]);
+      expect(rows[0].difficulty).toBe('medium');
+    }
+  });
+
+  it('says to move the answer when it is written on the Q: line', () => {
+    expect(texts(`${head}Q: Gas given off when zinc reacts with dilute acid? A: Hydrogen${rest}`)).toEqual(['The answer is on the Q: line. Put "A:" and the answer on a line of its own, under the question.']);
+  });
+
+  it('gives a number with a unit one error (move the unit), not a second one about the options', () => {
+    expect(texts(`${head}Q: Normal body temperature\nA: 37 °C\nFill: Normal body temperature is about ___ for a healthy person.\nWrong: 35; 39; 40\nLevel: easy`).filter((t) => /same kind/.test(t))).toEqual([]);
+  });
+
+  it('does not read a line starting "Subject-verb" as a Subject line', () => {
+    const { rows } = format(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest}\n\nSubject-verb agreement is a stray note\n\nQ: Lightest gas of all\nA: Hydrogen${rest.replace('Zinc reacts with dilute acid to give off ___ gas.', 'The lightest gas of all is ___ here.')}`);
+    expect(rows.map((r) => r.subject)).toEqual(['Science', 'Science']);
+  });
+
+  it('counts only the Also lines that count towards the limit of 5', () => {
+    const also = ['Hydrogen gas', 'H2', 'H₂', 'Dihydrogen', 'Protium', 'hydrogen'].map((x) => `Also: ${x}`).join('\n');
+    expect(texts(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen\n${also}${rest}`).filter((t) => /At most 5/.test(t))).toEqual([]);
+  });
+
+  it('allows "the passage of time"', () => {
+    expect(texts(`${head}Q: Change that happens with the passage of time in iron left in moist air\nA: Rusting${rest.replace('Zinc reacts with dilute acid to give off ___ gas.', 'Iron left in moist air slowly undergoes ___ over months.')}`)).toEqual([]);
+  });
+});
