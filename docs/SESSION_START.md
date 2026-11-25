@@ -74,6 +74,11 @@ waiting on the HOD is never taken back), so this number only falls when an HOD d
 - The picture-storage cap used by the pipeline is **900 MB** across storage, with a 40 MB reserve (ceiling 860). The
   query above counts one bucket only, so for the true figure run `picture_queue.py status` in the papers folder.
 - "Stuck" means 7 days without progress (owner decision, 13 Nov 2026).
+- **Rebuild needed?** (owner rule, 25 Nov 2026). Read-only: `select max(created_at) from public.bank_papers where is_published`
+  and `git log -1 --format=%cI origin/main`. If the newest live paper is later than the last merge to `main`, the
+  search pages and sitemap are behind. Tell the owner in one plain sentence and offer the one-line pull request to
+  `docs/LAST_REBUILD.md` (see `CLAUDE.md`, "Pages freeze at build time"). Do not open it without the owner's yes, and
+  the owner merges it.
 
 ## Then
 

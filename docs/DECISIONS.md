@@ -155,6 +155,11 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
   DISABLED in GitHub (turn it back on from the Actions tab, Daily redeploy, Enable workflow, and add the secret
   `VERCEL_DEPLOY_HOOK_URL`). Until then a new paper's own search page and sitemap entry appear at the next merge or
   a manual redeploy in Vercel.
+  **CONFIRMED 25 Nov 2026 (owner): keep it off, and let Claude ask for a rebuild whenever a session finds one is
+  needed** (a paper went live after the last merge to `main`). The way: a one-line pull request to
+  `docs/LAST_REBUILD.md` that the owner merges, because Claude cannot reach the live site's Vercel account. The
+  rule is in `CLAUDE.md` (Architecture worth knowing, "Pages freeze at build time") and the check is in
+  `docs/SESSION_START.md` section 4.
 - **A student can ask for a question to be sent back to the AI, but only an HOD can say yes (18 Nov 2026, owner).** In the
   student's "Ask for help" sheet there is a second button, "Send back to the AI", and it needs a reason (5 characters or
   more). Nothing goes to the AI at that moment. The question leaves the student and waits in the HOD's Needs you tab,
