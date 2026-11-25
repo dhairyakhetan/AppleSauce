@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { QuestionBody } from '@/components/admin/approval/QuestionBody';
 import { MathText } from '@/components/papers/math-text';
-import { QuestionFixForm } from '@/components/hod/QuestionFixForm';
+import { PaperRowEditor } from '@/components/hod/PaperRowEditor';
 import { deskLink, quietButton } from '@/components/hod/HodShared';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import { displaySchool } from '@/lib/school-display';
@@ -134,12 +134,11 @@ function SheetQuestion({
   return (
     <li id={`q-${q.id}`} style={indent} className={cn('min-w-0 rounded-[14px] p-3', q.state === 'open' || q.scanner_junk ? 'bg-brand-subtle' : 'bg-transparent')} data-testid="sheet-question">
       {mode === 'fix' ? (
-        <QuestionFixForm
-          target={{ body: q.body, display_number: q.display_number, marks: q.marks, options: q.options }}
+        <PaperRowEditor
+          row={q}
           busy={busy}
           error={error}
           onError={setError}
-          primaryLabel="Save the fix"
           onCancel={() => {
             setMode(null);
             setError(null);
@@ -154,6 +153,11 @@ function SheetQuestion({
         />
       ) : (
         <>
+          {q.section_label ? (
+            <p className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-warm-label" data-testid="sheet-heading">
+              Heading above this question on the site: {q.section_label}
+            </p>
+          ) : null}
           <QuestionBody
             number={q.display_number ?? q.number_path}
             marks={q.marks}
@@ -197,9 +201,9 @@ function SheetQuestion({
                   setMode('fix');
                   setError(null);
                 }}
-                aria-label={`Fix the words of question ${label}`}
+                aria-label={`Edit question ${label}`}
               >
-                Fix the words
+                Edit
               </button>
               {q.scanner_junk ? (
                 <button
@@ -248,6 +252,172 @@ function SheetQuestion({
         </>
       )}
     </li>
+  );
+}
+
+/** A heading or instruction line: shown as before, with an Edit button while the paper is not live. */
+function SheetLine({ q, api, editable, onChanged }: { q: PreviewQuestion; api: HodApi; editable: boolean; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isHeading = q.kind === 'section_break';
+  const empty = q.body.trim() === '';
+
+  async function save(changes: Record<string, unknown>) {
+    if (Object.keys(changes).length === 0) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.editQuestion(q.id, q.version, changes, '');
+      setEditing(false);
+      onChanged();
+    } catch (err) {
+      setError(errorWords(err));
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <li id={`q-${q.id}`} className="rounded-[14px] bg-muted p-3 font-sans" data-testid="sheet-line-editing">
+        <PaperRowEditor
+          row={q}
+          busy={busy}
+          error={error}
+          onError={setError}
+          onSave={(c) => void save(c)}
+          onCancel={() => {
+            setEditing(false);
+            setError(null);
+          }}
+        />
+      </li>
+    );
+  }
+  // An emptied line has nothing to show; while the paper can be edited it stays as a small way back.
+  if (empty && !editable) return null;
+  return (
+    <li id={`q-${q.id}`} data-testid="sheet-line" data-kind={q.kind}>
+      {empty ? (
+        <p className="font-sans text-[13px] italic text-neutral-500">An empty line (taken out of the preview).</p>
+      ) : isHeading ? (
+        <p className="pt-3 text-center text-[14px] font-bold uppercase tracking-[0.1em] text-neutral-800">{q.body || q.section_label || 'Section'}</p>
+      ) : (
+        <MathText text={q.body} className="text-[14px] italic leading-[1.55] text-neutral-700" />
+      )}
+      {editable ? (
+        <div className="mt-1 flex justify-center font-sans">
+          <button
+            type="button"
+            className="inline-flex min-h-11 md:min-h-10 items-center rounded-full bg-card px-3.5 text-[13px] font-bold text-foreground transition-transform duration-150 hover:bg-warm-hairline active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setEditing(true)}
+            aria-label={isHeading ? 'Edit this heading line' : 'Edit this line'}
+          >
+            Edit
+          </button>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/** The paper's General instructions: shown as before, now with an Edit button (saved through the same box as the Details step). */
+function GeneralInstructionsBlock({
+  api,
+  paperId,
+  text,
+  editable,
+  onChanged,
+  children,
+}: {
+  api: HodApi;
+  paperId: string;
+  text: string | null;
+  editable: boolean;
+  onChanged: () => void;
+  children?: ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(text ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updatePublishMeta(paperId, 'general_instructions', value);
+      setEditing(false);
+      toast.message('General instructions saved.');
+      onChanged();
+    } catch (err) {
+      setError(errorWords(err, 'Could not save the instructions. Nothing was changed.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <section aria-label="General instructions" className="border-b border-neutral-300 py-4 font-sans" data-testid="general-instructions-editing">
+        <label className="flex flex-col gap-1 text-[13px] font-semibold text-foreground">
+          General instructions, as printed on the paper
+          <textarea
+            value={value}
+            onChange={(ev) => setValue(ev.target.value)}
+            rows={8}
+            disabled={busy}
+            className="w-full rounded-xl bg-muted p-3 text-[16px] font-normal outline-none focus-visible:ring-2 focus-visible:ring-focus sm:text-[14px]"
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="mt-2 text-[13px] text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" className={cn(actionToneClass('brand'), 'h-[46.5px]')} disabled={busy} onClick={() => void save()}>
+            {busy ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            type="button"
+            className={quietButton}
+            disabled={busy}
+            onClick={() => {
+              setEditing(false);
+              setValue(text ?? '');
+              setError(null);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section aria-label="General instructions" className="border-b border-neutral-300 py-4 font-serif" data-testid="general-instructions">
+      {children}
+      {editable ? (
+        <div className="mt-2 font-sans">
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center rounded-full bg-card px-3.5 text-[13px] font-bold text-foreground hover:bg-warm-hairline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-10"
+            onClick={() => {
+              setValue(text ?? '');
+              setEditing(true);
+            }}
+          >
+            {text ? 'Edit the general instructions' : 'Add general instructions'}
+          </button>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -328,13 +498,13 @@ export function PaperSheet({
         </header>
 
         {h.general_instructions ? (
-          <section aria-label="General instructions" className="border-b border-neutral-300 py-4 font-serif">
+          <GeneralInstructionsBlock api={api} paperId={paper.audit_paper_id} text={h.general_instructions} editable={editable} onChanged={onChanged}>
             <h4 className="mb-1 text-[13px] font-bold uppercase tracking-[0.08em] text-neutral-700">General instructions</h4>
             <MathText text={h.general_instructions} className="text-[14px] leading-[1.6] text-neutral-900" />
-          </section>
+          </GeneralInstructionsBlock>
         ) : topLines.length > 0 ? (
-          <section aria-label="General instructions" data-testid="top-lines-instructions" className="border-b border-neutral-300 py-4 font-serif">
-            <h4 className="mb-1 text-[13px] font-bold uppercase tracking-[0.08em] text-neutral-700">General instructions</h4>
+          <GeneralInstructionsBlock api={api} paperId={paper.audit_paper_id} text={instructionsText(topLines)} editable={editable} onChanged={onChanged}>
+            <h4 className="mb-1 text-[13px] font-bold uppercase tracking-[0.08em] text-neutral-700" data-testid="top-lines-instructions">General instructions</h4>
             <ul className="list-disc pl-5">
               {topLines.map((r) => (
                 <li key={r.id}>
@@ -353,30 +523,22 @@ export function PaperSheet({
                 </button>
               ) : null}
             </div>
-          </section>
+          </GeneralInstructionsBlock>
         ) : (
-          <p className="border-b border-neutral-300 py-4 text-[13px] italic text-neutral-500">
-            No general instructions on this paper yet. If the printed paper has some, type them in on the Details step.
-          </p>
+          <GeneralInstructionsBlock api={api} paperId={paper.audit_paper_id} text={null} editable={editable} onChanged={onChanged}>
+            <p className="text-[13px] italic text-neutral-500">
+              No general instructions on this paper yet. If the printed paper has some, add them here or on the Details step.
+            </p>
+          </GeneralInstructionsBlock>
         )}
 
         <ol className="mt-4 flex flex-col gap-3 font-serif" aria-label="Questions">
           {questions.map((q) => {
             // Already shown, word for word, as the saved general instructions above.
             if (topLineIds.has(q.id)) return null;
-            if (q.kind === 'section_break' || q.state === 'section') {
-              return (
-                <li key={q.id} className="pt-3 text-center text-[14px] font-bold uppercase tracking-[0.1em] text-neutral-800">
-                  {q.body || q.section_label || 'Section'}
-                </li>
-              );
-            }
-            if (q.kind !== 'question') {
-              return (
-                <li key={q.id}>
-                  <MathText text={q.body} className="text-[14px] italic leading-[1.55] text-neutral-700" />
-                </li>
-              );
+            // Headings, instruction lines and notes: every one can be edited, or emptied to take it out of the preview.
+            if (q.kind !== 'question' || q.state === 'section') {
+              return <SheetLine key={q.id} q={q} api={api} editable={editable} onChanged={onChanged} />;
             }
             return <SheetQuestion key={q.id} q={q} depth={depths.get(q.id) ?? 0} api={api} paperId={paper.audit_paper_id} editable={editable} onChanged={onChanged} pictureWork={pictureWork} />;
           })}

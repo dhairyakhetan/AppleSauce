@@ -1384,3 +1384,57 @@ export function buildQuestionChanges(
   if (newMarks !== orig.marks) changes.marks = newMarks;
   return { changes };
 }
+
+// ------------------------------------------------------------------ Edit any line of the paper
+
+/** The kinds of line on a paper. Only a real question is copied to the live site as its own row. */
+export function isQuestionRow(kind: string): boolean {
+  return kind === 'question';
+}
+
+export interface RowDraft {
+  body: string;
+  number: string;
+  marks: string;
+  /** The question's own instructions ("Answer any three"), shown above its words on the site. */
+  instructions: string;
+  /** The heading shown once above the question on the site ("Part I", "Section A"). */
+  sectionLabel: string;
+}
+
+export interface RowOriginal {
+  kind: string;
+  body: string;
+  display_number: string | null;
+  marks: number | null;
+  instructions: string | null;
+  section_label: string | null;
+}
+
+/**
+ * What an edit of ANY line sends (hod_edit_question's p_changes): only the keys that really changed, the words
+ * exactly as typed. A question keeps its words (never emptied); a heading or instruction line may be emptied,
+ * which removes it from the preview (such lines are never copied to the live site as rows). A question's own
+ * instructions and heading may be cleared, which sends null.
+ */
+export function buildRowChanges(orig: RowOriginal, draft: RowDraft): QuestionChangesResult {
+  const isQuestion = isQuestionRow(orig.kind);
+  const changes: Record<string, unknown> = {};
+
+  if (draft.body !== orig.body) {
+    if (isQuestion && draft.body.trim() === '') return { error: 'The question needs its words. Type them, or press Cancel.' };
+    changes.body = draft.body;
+  }
+  if (isQuestion) {
+    const built = buildQuestionChanges(orig, draft);
+    if ('error' in built) return built;
+    // body is already decided above; take only the number and the marks from the question rules.
+    if ('display_number' in built.changes) changes.display_number = built.changes.display_number;
+    if ('marks' in built.changes) changes.marks = built.changes.marks;
+  }
+  const instructions = draft.instructions.trim();
+  if (instructions !== (orig.instructions ?? '').trim()) changes.instructions = instructions === '' ? null : draft.instructions;
+  const heading = draft.sectionLabel.trim();
+  if (heading !== (orig.section_label ?? '').trim()) changes.section_label = heading === '' ? null : draft.sectionLabel;
+  return { changes };
+}
