@@ -12,8 +12,8 @@ import { chip, GAME_NAMES, plural, whyNot } from './helpers';
 
    Used twice: Try the games (the approved question bank, full size) and the preview on Write questions (`written`: the
    class, subject and chapter are the ones being written, so their pickers show only when the text has more than one to
-   choose from; `compact` too in the page itself: smaller, with what each greyed-out game needs, so the writer can fix
-   it). */
+   choose from; `compact` too in the page itself: smaller). Hovering a greyed-out game's tab says what it needs, so the
+   writer can fix it. */
 
 /** What a puzzle needs to know about a question. */
 export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'also' | 'fill' | 'wrong_options' | 'difficulty'>;
@@ -90,7 +90,6 @@ export function Revise({ questions, compact = false, written = false, heading, e
   }, [items, seed]);
   const type = want && games[want] ? want : GAME_TYPES.find((t) => games[t]);
   const game = type && games[type];
-  const missing = GAME_TYPES.filter((t) => !games[t]);
 
   const toggle = (k: string) => {
     const out = pick.chapter === chapter!.id ? pick.out.filter((t) => known.includes(t)) : [];
@@ -172,9 +171,9 @@ export function Revise({ questions, compact = false, written = false, heading, e
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div role="tablist" aria-label="Game" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-card p-1 sm:rounded-full">
             {GAME_TYPES.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={t === type} disabled={!games[t]} onClick={() => setWant(t)}
+              <button key={t} type="button" role="tab" aria-selected={t === type} aria-disabled={!games[t] || undefined} onClick={() => games[t] && setWant(t)}
                 title={whyNot(t, items, !!games[t]) ?? undefined}
-                className={cn('flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:text-warm-label disabled:line-through',
+                className={cn('flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-disabled:cursor-not-allowed aria-disabled:text-warm-label aria-disabled:line-through',
                   compact ? 'h-8 px-2.5 text-[12px]' : 'h-9 px-3 text-[13px]',
                   t === type ? 'bg-muted text-foreground' : 'text-warm-secondary hover:text-foreground')}>
                 {GAME_NAMES[t]}
@@ -186,11 +185,6 @@ export function Revise({ questions, compact = false, written = false, heading, e
             <button type="button" className={chip('card')} onClick={() => setRound((r) => r + 1)}><Shuffle aria-hidden /> New puzzle</button>
           </div>
         </div>
-        {compact && missing.length > 0 && (
-          <ul className="flex flex-col gap-1 text-[12px] text-warm-secondary">
-            {missing.map((t) => <li key={t}><b className="text-foreground">{GAME_NAMES[t]}:</b> {whyNot(t, items, false)}</li>)}
-          </ul>
-        )}
         <div className={cn('rounded-2xl bg-card', compact ? 'p-3' : 'p-4 sm:p-6')}>
           {game ? <GameView key={`${type}|${seed}|${made}`} game={game} compact={compact} onNext={() => setRound((r) => r + 1)} />
             : <p className="py-6 text-center text-[14px] text-warm-secondary">These topics don't have enough questions for a puzzle yet. {written ? 'Add a few more.' : 'Pick more topics.'}</p>}

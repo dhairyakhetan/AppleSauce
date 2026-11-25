@@ -112,6 +112,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   A green, Also teal, Fill blue, Wrong orange-brown, Level light grey; labels a little lighter). The textarea's text is
   see-through and the copy behind it (`games-backdrop`, `kindOf` in `WriteQuestions.tsx`) is what shows, so the copy
   must keep exactly the textarea's font, padding and width: no bold, no other font size.
+- **Write questions, small behaviours:** Clear (and "Start a new batch") removes the questions but keeps the chapter
+  lines; Try an example asks first when the box has questions of your own (Undo works either way); both keep the
+  pressed button where it was on screen (`steady`), so the page never jumps. Topic buttons show a tick and how many
+  questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.

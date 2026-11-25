@@ -1,6 +1,6 @@
 import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDown, Copy, Send, Trash2 } from 'lucide-react';
+import { ArrowDown, Check, Copy, Send, Trash2 } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
 import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
@@ -30,6 +30,28 @@ const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: '
 const EXAMPLE_QUESTIONS = new Set(format(EXAMPLE).rows.map((r) => r.question.toLowerCase()));
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 const SECTION = 'flex flex-col gap-4 rounded-[24px] bg-muted p-4 sm:p-6';
+
+/**
+ * Runs a change that replaces the text (Try an example, Clear) and keeps `el` where it was on screen, so the page
+ * doesn't jump when what is above it grows or shrinks. Measured again after each redraw for a second.
+ */
+function steady(el: HTMLElement | null, act: () => void) {
+  const t0 = el?.getBoundingClientRect().top;
+  act();
+  if (!el || t0 === undefined) return;
+  const settle = () => {
+    const d = el.getBoundingClientRect().top - t0;
+    if (Math.abs(d) >= 1) window.scrollBy({ top: d, behavior: 'instant' as ScrollBehavior });
+  };
+  requestAnimationFrame(settle);
+  // parts of the page redraw a little later (they wait for typing to settle): correct after each, before it is painted
+  if (typeof ResizeObserver === 'undefined') return;
+  const ro = new ResizeObserver(settle);
+  ro.observe(document.body);
+  const form = el.closest('form, section');
+  if (form) ro.observe(form);
+  window.setTimeout(() => ro.disconnect(), 1000);
+}
 
 /** Scrolls smoothly to a part of the page and moves keyboard focus there, without adding "#..." to the address. */
 function scrollToEl(el: HTMLElement | null) {
@@ -200,6 +222,18 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     setExample(isExample);
     setBatch((b) => b + 1);
   };
+
+  /** Clear and "Start a new batch" empty the questions but keep the chapter lines, ready for the next ones. */
+  const headOf = (t: string) => {
+    const d = readDetails(t);
+    const head = DETAIL_KEYS.reduce((acc, k) => (d[k].trim() ? writeDetail(acc, k, d[k]) : acc), '');
+    return head.trim() ? `${head.trimEnd()}\n\n` : '';
+  };
+  const clearAll = () => replaceAll(headOf(raw), 'Cleared');
+  /** "Try an example" over questions of your own asks first. */
+  const [askExample, setAskExample] = useState(false);
+  const exampleBtn = useRef<HTMLButtonElement>(null);
+  const loadExample = () => { setAskExample(false); steady(exampleBtn.current, () => replaceAll(EXAMPLE, 'Example loaded', true)); };
 
   /** "Fix it" on a sent-back question: it goes in the Questions box with its details (the text before it can be had back with Undo). */
   const fix = (a: SentBack) => {
@@ -464,9 +498,15 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
             <div className="flex flex-col gap-1.5">
               <p className="text-[12px] font-semibold text-warm-secondary">Add a topic</p>
               <div className="flex flex-wrap gap-2">
-                {chosen.topics.map((t) => (
-                  <button key={t.topic_id} type="button" className={chip('card')} onClick={() => addTopic(t)}>Topic {t.topic_no}: {t.name}</button>
-                ))}
+                {chosen.topics.map((t) => {
+                  const n = own.filter((q) => q.chapter_id === chosen.chapter_id && q.topic_no === t.topic_no).length;
+                  return (
+                    <button key={t.topic_id} type="button" className={cn(chip('card'), n > 0 && 'text-success-subtle-text')} onClick={() => addTopic(t)}
+                      title={n ? `${plural(n, 'question')} written under this topic. Click to add its Topic line again.` : undefined}>
+                      {n > 0 && <Check aria-hidden />}Topic {t.topic_no}: {t.name}{n > 0 && <span className="font-normal">({n})</span>}
+                    </button>
+                  );
+                })}
               </div>
               {isOpen(chosen) && <p className="text-[13px] text-warm-secondary">These topics are already in use. For a new one, write a line such as "Topic {Math.max(...chosen.topics.map((t) => t.topic_no)) + 1}: Name" above its questions.</p>}
             </div>
@@ -477,8 +517,9 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
             <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} autoFix={autoFix} />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={btn('card')} onClick={() => replaceAll(EXAMPLE, 'Example loaded', true)}>Try an example</button>
-            <button type="button" className={btn('card')} onClick={() => replaceAll('', 'Cleared')} disabled={!raw}>Clear</button>
+            <button type="button" ref={exampleBtn} className={btn('card')} onClick={() => (own.length ? setAskExample(true) : loadExample())}>Try an example</button>
+            <button type="button" className={btn('card')} onClick={(e) => steady(e.currentTarget, clearAll)} disabled={raw.trim() === headOf(raw).trim()}
+              title="Removes the questions. The chapter lines stay.">Clear</button>
           </div>
 
           <div className="flex flex-col gap-2 rounded-2xl bg-card p-4">
@@ -557,10 +598,22 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
             </p>
           )}
           {sent && raw.trim() && (
-            <button type="button" className={btn('card', 'w-fit')} onClick={() => { replaceAll('', 'Cleared'); setSent(null); box.current?.focus({ preventScroll: true }); }}>Start a new batch</button>
+            <button type="button" className={btn('card', 'w-fit')} onClick={() => { clearAll(); setSent(null); box.current?.focus({ preventScroll: true }); }}>Start a new batch</button>
           )}
           {sendError && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">Couldn't send: {sendError}</p>}
         </form>
+        <Dialog open={askExample} onOpenChange={setAskExample}>
+          <DialogContent className="max-w-md rounded-2xl bg-card">
+            <DialogTitle>Replace your questions with the example?</DialogTitle>
+            <DialogDescription>
+              The {plural(own.length, 'question')} in the Questions box will be replaced by the example. You can undo it for a few seconds afterwards.
+            </DialogDescription>
+            <div className="flex flex-col gap-2 sm:flex-row-reverse">
+              <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={loadExample}>Replace with the example</button>
+              <button type="button" className={btn('card', 'w-full sm:w-auto')} onClick={() => setAskExample(false)}>Keep my questions</button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={stopped} onOpenChange={setStopped}>
           <DialogContent className="max-w-lg rounded-2xl bg-card">
             <DialogTitle>There are errors in the questions</DialogTitle>
