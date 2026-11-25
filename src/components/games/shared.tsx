@@ -2,7 +2,7 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Row } from '@/lib/games/rows';
-import { LINKISH } from './helpers';
+import { LINKISH, lineKind, type LineKind } from './helpers';
 
 /* What the games pages share on screen: the grouped table of rows, loading, failure and empty states, and the icon that
    becomes a check mark. The plain helpers (button looks, dates, saving a file, "Undo") are in helpers.ts. */
@@ -138,4 +138,18 @@ export function LoadFailed({ what, error, onRetry }: { what: string; error: stri
 /** A plain note for "nothing here yet". */
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="rounded-2xl bg-muted px-4 py-8 text-center text-[14px] text-warm-secondary">{children}</div>;
+}
+
+/** A line's label ("Q:", "Chapter 4:") and the rest, the label a little lighter, as the Questions box shows it. */
+export function Labelled({ body, kind }: { body: string; kind: LineKind | null }) {
+  const label = kind ? body.match(/^[^:]{1,24}:/)?.[0] ?? '' : '';
+  return <>{label && <span className="gl-label">{label}</span>}{body.slice(label.length)}</>;
+}
+
+/** Lines of the question format in the Questions box's colours (the guide's example, labels in its text). */
+export function Coloured({ text }: { text: string }) {
+  return <>{text.split('\n').map((l, i) => {
+    const kind = lineKind(l);
+    return <span key={i} className={kind ? `gl-${kind}` : undefined}>{i > 0 && '\n'}<Labelled body={l} kind={kind} /></span>;
+  })}</>;
 }

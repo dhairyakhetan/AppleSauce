@@ -1,13 +1,40 @@
 import type { ReactNode } from 'react';
 import { MAX_ALSO, MAX_ANSWER_WORDS, MAX_OPTIONS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MIN_OPTIONS } from '@/lib/games/format';
 import { cn } from '@/lib/utils';
+import { lineKind } from './helpers';
+import { Coloured } from './shared';
 import './games.css';
 
 /* "How to write your questions": the guide for people, at the bottom of Write questions. The same rules the checker
    applies and the chatbot prompt states (src/lib/games/prompt.ts), said for people; the limits come from the code, so
    they can't drift, and prompt.test.ts checks that the sample reads with no problems. */
 
-const CODE = 'rounded-md bg-muted px-1 py-0.5 font-mono text-[13px] text-foreground';
+/** The example: the checker reads it with no problems (prompt.test.ts). */
+const SAMPLE = `Board: CBSE
+Class: 10
+Subject: Science
+Chapter 1: Chemical Reactions and Equations
+Topic 2: Types of Chemical Reactions
+
+Q: Reaction in which a single reactant breaks down into simpler products
+A: Decomposition reaction
+Also: Decomposition
+Fill: A reaction in which a single reactant breaks down into simpler products is called a ___.
+Wrong: Combination reaction; Displacement reaction; Neutralisation reaction
+Level: easy
+
+Q: Gas given off when zinc reacts with dilute sulphuric acid
+A: Hydrogen
+Also: H2
+Fill: Zinc reacts with dilute sulphuric acid to give off ___ gas.
+Wrong: Oxygen; Chlorine; Nitrogen
+Level: medium
+
+Q: Rusting of iron is a chemical change
+A: True
+Level: easy`;
+
+const CODE = 'rounded-md bg-muted px-1 py-0.5 font-mono text-[13px]';
 
 function Card({ title, span = 1, children }: { title: string; span?: 1 | 2 | 3; children: ReactNode }) {
   return (
@@ -19,7 +46,11 @@ function Card({ title, span = 1, children }: { title: string; span?: 1 | 2 | 3; 
 }
 
 const B = ({ children }: { children: ReactNode }) => <b className="text-foreground">{children}</b>;
-const C = ({ children }: { children: ReactNode }) => <code className={CODE}>{children}</code>;
+/** Text as written in the Questions box; a label ("Q:", "A: True", "Topic") in that line's colour there. */
+const C = ({ children }: { children: ReactNode }) => {
+  const kind = typeof children === 'string' ? lineKind(/:/.test(children) ? children : `${children}: x`) : null;
+  return <code className={cn(CODE, kind ? `gl-${kind}` : 'text-foreground')}>{children}</code>;
+};
 
 export function Guide() {
   return (
@@ -45,29 +76,7 @@ export function Guide() {
             answer, and Ctrl+Z undoes it. If you delete a chapter line, it comes back at the top once you move on. Each kind of
             line has its own colour, and Clear removes the questions but keeps the chapter lines.
           </p>
-          <pre data-testid="guide-sample" className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
-Class: 10
-Subject: Science
-Chapter 1: Chemical Reactions and Equations
-Topic 2: Types of Chemical Reactions
-
-Q: Reaction in which a single reactant breaks down into simpler products
-A: Decomposition reaction
-Also: Decomposition
-Fill: A reaction in which a single reactant breaks down into simpler products is called a ___.
-Wrong: Combination reaction; Displacement reaction; Neutralisation reaction
-Level: easy
-
-Q: Gas given off when zinc reacts with dilute sulphuric acid
-A: Hydrogen
-Also: H2
-Fill: Zinc reacts with dilute sulphuric acid to give off ___ gas.
-Wrong: Oxygen; Chlorine; Nitrogen
-Level: medium
-
-Q: Rusting of iron is a chemical change
-A: True
-Level: easy`}</pre>
+          <pre data-testid="guide-sample" className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed"><Coloured text={SAMPLE} /></pre>
         </Card>
 
         <Card title="Writing good questions">
