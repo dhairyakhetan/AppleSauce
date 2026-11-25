@@ -28,7 +28,7 @@ export function Guide() {
       <div className="grid grid-cols-1 gap-3 text-[14px] leading-relaxed text-warm-prose lg:grid-cols-3">
         <Card title="The format" span={2}>
           <ol className="flex list-decimal flex-col gap-1.5 pl-5">
-            <li><B>Fill in Board, Class, Subject and Chapter,</B> then a <C>Topic</C> line above each part's questions: one of the chapter's own topics, or, when the list leaves them open, your own, numbered from 1.</li>
+            <li><B>Choose Board, Class, Subject and Chapter</B> in the boxes above the Questions box (they go in as its first lines), then put a <C>Topic</C> line above each part's questions: press one of the chapter's topic buttons, or, when the list leaves the topics open, write your own, numbered from 1.</li>
             <li>
               <B>Write each question as a block of lines,</B> each starting with its label, with a blank line between questions:{' '}
               <C>Q:</C> the question, <C>A:</C> the answer, <C>Also:</C> another answer that counts (one per line, only if there is one),{' '}
@@ -38,6 +38,13 @@ export function Guide() {
             <li><B>True/False:</B> only <C>Q:</C> with a statement, <C>A: True</C> or <C>A: False</C>, and <C>Level:</C>.</li>
             <li><B>Fix every red or amber line,</B> then send. A question with a problem isn't sent.</li>
           </ol>
+          <p>
+            <B>The box tidies small things for you</B> a second after you stop typing: capitals in labels and in Board, Class and
+            Subject (<C>cbse</C> becomes <C>CBSE</C>), the chapter's and topics' names as the list writes them, <C>;</C> for
+            commas in a Wrong line, and a blank line before each question. It never changes the words of a question or an
+            answer, and Ctrl+Z undoes it. If you delete a chapter line, it comes back at the top once you move on. Each kind of
+            line has its own colour, and Clear removes the questions but keeps the chapter lines.
+          </p>
           <pre data-testid="guide-sample" className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[13px] leading-relaxed text-foreground">{`Board: CBSE
 Class: 10
 Subject: Science
@@ -72,6 +79,15 @@ Level: easy`}</pre>
             <li><B>Wrong options</B> ({MIN_OPTIONS} to {MAX_OPTIONS}): believable, and the same kind as the answer (a year for a year). Never <i>All of the above</i>.</li>
             <li><B>Any symbol is fine</B> in a question. If an answer needs one a keyboard doesn't have (<C>x²</C>), add an Also line typed with ordinary keys (<C>x^2</C>).</li>
             <li><B>At most {MAX_PER_TOPIC} questions per topic</B> and {MAX_PER_CHAPTER} per chapter, no two the same.</li>
+          </ul>
+        </Card>
+
+        <Card title="Writing them with a chatbot" span={3}>
+          <ul className="flex list-disc flex-col gap-1.5 pl-5">
+            <li><B>Copy chatbot prompt</B> gives ChatGPT, Gemini or Claude your chapter, its topics and a link to Shikshaq's rules. Add your notes at the end of it.</li>
+            <li><B>Your notes come first.</B> The chatbot checks them against the chapter before it writes anything: if part of them is from another chapter, or says something the textbook doesn't, it asks you whether to use it, leave it out or correct it, and waits for your answer.</li>
+            <li><B>Its reply says where the facts came from</B> on a line starting <C>Source:</C> after its questions: your notes, or its general knowledge of the textbook. Check facts that come from general knowledge before you send them.</li>
+            <li><B>Paste its whole reply</B> into the Questions box. The page reads only the questions and leaves out the chatbot's own sentences.</li>
           </ul>
         </Card>
       </div>
