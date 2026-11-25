@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 
-import { createFakeGamesApi, DUMMY_LIST, DUMMY_TEXTS } from '@/dummy/games-fake-api';
+import { createFakeGamesApi, DUMMY_LIST, DUMMY_MADE_UP, DUMMY_TEXTS } from '@/dummy/games-fake-api';
+import SAMPLE_JSON from '@/dummy/games-sample-chapters.json?raw';
 import { sameName } from '@/lib/games/catalog';
 import { checkList } from '@/lib/games/catalog';
 import { GAME_TYPES, makeGame } from '@/lib/games/engine';
@@ -26,7 +27,7 @@ describe('the made-up questions', () => {
   it.each(Object.entries(DUMMY_TEXTS))('%s passes the checker and the list, and makes every game', (_name, text) => {
     const { rows: rs, issues } = format(text);
     expect(issues).toEqual([]);
-    expect(checkList(text, rs, DUMMY_LIST).issues).toEqual([]);
+    expect(checkList(text, rs, DUMMY_MADE_UP).issues).toEqual([]);
     if (text.includes('Level: hard')) {
       const items = rs.map((r, i) => ({ id: String(i), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }));
       if (rs.length >= 8) for (const t of GAME_TYPES) expect(makeGame(t, items, 1), t).not.toBeNull();
@@ -205,7 +206,24 @@ describe('the dummy games database', () => {
     const bySubject = new Map<string, string[]>();
     for (const c of list) bySubject.set(`${c.board}|${c.class}|${c.subject}`, [...(bySubject.get(`${c.board}|${c.class}|${c.subject}`) ?? []), c.name]);
     for (const names of bySubject.values()) expect(names.filter((n, i) => names.findIndex((m) => sameName(m, n)) !== i)).toEqual([]);
-    expect(list.find((c) => c.chapter_id === 'CBSE07SCI04')?.topics.map((x) => x.name)).toEqual(['Hot and Cold', 'Transfer of Heat', 'Sea and Land Breezes']);
+    // every sample chapter is there, under its own number and name (none left out for the made-up ones)
+    const sample = (JSON.parse(SAMPLE_JSON) as { groups: { board: string; class: number; subject: string; chapters: [number, string][] }[] }).groups;
+    const has = new Set(list.map((c) => `${c.board}|${c.class}|${c.subject}|${c.chapter_no}|${c.name}`));
+    expect(sample.flatMap((g) => g.chapters.map(([n, name]) => `${g.board}|${g.class}|${g.subject}|${n}|${name}`)).filter((k) => !has.has(k))).toEqual([]);
+    // the made-up Heat moved past the sample's Class 7 Science chapters, with its topics, and its questions with it
+    const heat = list.find((c) => c.board === 'CBSE' && c.class === 7 && c.subject === 'Science' && c.name === 'Heat')!;
+    expect(heat.chapter_no).toBeGreaterThan(12);
+    expect(heat.topics.map((x) => x.name)).toEqual(['Hot and Cold', 'Transfer of Heat', 'Sea and Land Breezes']);
+    expect(list.find((c) => c.chapter_id === 'CBSE07SCI04')?.name).toBe('The World of Metals and Non-metals');
     expect(list.some((c) => c.board === 'CBSE' && c.class === 11 && c.subject === 'Web Applications')).toBe(true);
+  });
+
+  it('puts the made-up questions on the sample list in dummy mode, each under its chapter', async () => {
+    const api = createFakeGamesApi(false);
+    const list = await api.loadCatalog();
+    const qs = (await api.loadForHod()).questions;
+    expect(qs.length).toBeGreaterThan(0);
+    for (const q of qs) expect(list.find((c) => c.chapter_id === q.chapter_id)?.name).toBe(q.chapter);
+    expect(qs.some((q) => q.chapter === 'Heat')).toBe(true);
   });
 });

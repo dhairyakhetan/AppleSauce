@@ -52,7 +52,8 @@ export function Picker({ label, value, options, onPick, searchable = options.len
   const searchRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   /** In a dialog, the panel opens inside it: a dialog blocks scrolling (wheel and touch) everywhere outside itself,
-   * so a long list opened outside it couldn't be scrolled. */
+   * so a long list opened outside it couldn't be scrolled. The panel is never taller than the room the screen has
+   * (Radix's available height), so the end of a long list is never off screen. */
   const [inside, setInside] = useState<HTMLElement | null>(null);
   const id = useId();
 
@@ -121,12 +122,12 @@ export function Picker({ label, value, options, onPick, searchable = options.len
       <PopoverPrimitive.Portal container={inside ?? undefined}>
         <PopoverPrimitive.Content align="start" sideOffset={8} collisionPadding={16}
           onOpenAutoFocus={(e) => { e.preventDefault(); (searchRef.current ?? listRef.current)?.focus({ preventScroll: true }); }}
-          className={cn('z-50 flex max-w-[calc(100vw-32px)] flex-col rounded-[24px] bg-card p-1.5 text-foreground outline-none',
+          className={cn('z-50 flex max-h-[var(--radix-popover-content-available-height)] max-w-[calc(100vw-32px)] flex-col rounded-[24px] bg-card p-1.5 text-foreground outline-none',
             look === 'field' ? 'w-[var(--radix-popover-trigger-width)] min-w-[14rem]' : 'w-[20rem]',
             /* Tactile pass: the shared popover edge and arrival (150ms from scale .97 + fade, out 120ms, origin at the trigger). */
             'overlay-menu shadow-popover origin-[var(--radix-popper-transform-origin)]')}>
           {searchable && (
-            <div className="relative mb-1.5">
+            <div className="relative mb-1.5 shrink-0">
               <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-warm-meta" />
               <input ref={searchRef} value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} onKeyDown={onKey}
                 role="combobox" aria-expanded aria-controls={`${id}-list`} aria-activedescendant={shown[active] ? optionId(active) : undefined}
@@ -136,7 +137,7 @@ export function Picker({ label, value, options, onPick, searchable = options.len
           )}
           <div ref={listRef} id={`${id}-list`} role="listbox" aria-label={label} tabIndex={searchable ? -1 : 0} onKeyDown={searchable ? undefined : onKey}
             aria-activedescendant={!searchable && shown[active] ? optionId(active) : undefined}
-            className="scrollbar-slim max-h-[min(50vh,320px)] overflow-y-auto overscroll-contain outline-none">
+            className="scrollbar-slim max-h-[min(50vh,320px)] min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none">
             {sections.map((s) => (
               <div key={s.title || 'rest'} role="group" aria-label={s.title || undefined}>
                 {s.title && <p aria-hidden className="px-3 pb-1 pt-2 text-[12px] font-semibold text-warm-meta">{s.title}</p>}

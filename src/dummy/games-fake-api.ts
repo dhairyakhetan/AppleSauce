@@ -664,15 +664,30 @@ const SAMPLE: ListChapter[] = (JSON.parse(SAMPLE_JSON) as { groups: SampleGroup[
   .flatMap((g) => g.chapters.map(([no, name]) => listed(g.board, g.class, g.subject, no, name, [])));
 
 /**
- * The list dummy mode starts with: the made-up chapters, then the sample list around them (a sample chapter whose
- * number or name a made-up one already has in its subject is left out, as the database allows neither twice). The real
- * list comes from the database.
+ * The list dummy mode starts with: every sample chapter, with the made-up chapters among them. A made-up chapter the
+ * sample has under the same name gives it its topics; one whose number the sample already uses in its subject moves to
+ * the end of that subject, and its questions move with it (`MOVED`: the made-up texts' Chapter lines, old and new). The
+ * real list comes from the database.
  */
-export const DUMMY_LIST: ListChapter[] = [
-  ...MADE_UP,
-  ...SAMPLE.filter((c) => !MADE_UP.some((m) => m.chapter_id === c.chapter_id
-    || (m.board === c.board && m.class === c.class && m.subject === c.subject && sameName(m.name, c.name)))),
-];
+const { list: SAMPLE_LIST, moved: MOVED } = (() => {
+  const list = [...SAMPLE];
+  const moved: [string, string][] = [];
+  const inGroup = (a: ListChapter, b: ListChapter) => a.board === b.board && a.class === b.class && a.subject === b.subject;
+  for (const m of MADE_UP) {
+    const same = list.findIndex((c) => inGroup(c, m) && sameName(c.name, m.name));
+    if (same >= 0) { list[same] = listed(m.board, m.class, m.subject, list[same].chapter_no, list[same].name, m.topics.map((t) => t.name)); continue; }
+    if (!list.some((c) => inGroup(c, m) && c.chapter_no === m.chapter_no)) { list.push(m); continue; }
+    const no = Math.max(...list.filter((c) => inGroup(c, m)).map((c) => c.chapter_no)) + 1;
+    list.push(listed(m.board, m.class, m.subject, no, m.name, m.topics.map((t) => t.name)));
+    moved.push([`Chapter ${m.chapter_no}: ${m.name}`, `Chapter ${no}: ${m.name}`]);
+  }
+  return { list, moved };
+})();
+export const DUMMY_LIST: ListChapter[] = SAMPLE_LIST;
+/** The made-up chapters only, as the tests start with them. */
+export const DUMMY_MADE_UP: ListChapter[] = MADE_UP;
+/** A made-up text with its Chapter lines where the sample list has those chapters. */
+const onSample = (text: string) => MOVED.reduce((t, [from, to]) => t.split(from).join(to), text);
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 /** How the database compares two questions: case, extra spaces and punctuation at the end don't matter. */
@@ -689,6 +704,7 @@ const indiaDay = (iso: string) =>
 
 function seed(sample: boolean): State {
   const list = sample ? DUMMY_LIST : MADE_UP;
+  const textOf = (t: string) => (sample ? onSample(t) : t);
   const s: State = {
     team: [
       { ...MODERATOR, role: 'admin', moderator: true, added_at: hoursAgo(24 * 30), last_seen_at: hoursAgo(5), name: MODERATOR.name },
@@ -703,7 +719,7 @@ function seed(sample: boolean): State {
     log: [{ at: hoursAgo(24 * 30), by: MODERATOR.name, action: 'add', detail: `Added ${list.length} chapters and ${list.reduce((n, c) => n + c.topics.length, 0)} topics.` }],
   };
   const put = (text: string, who: { email: string; name: string }, sentAt: string, status: Status, reviewedAt: string | null, note = '') => {
-    const ids = add(s, format(text).rows, who, sentAt).ids;
+    const ids = add(s, format(textOf(text)).rows, who, sentAt).ids;
     for (const q of s.questions) {
       if (!ids.includes(q.id)) continue;
       q.status = status;
