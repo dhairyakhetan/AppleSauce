@@ -2,7 +2,7 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Row } from '@/lib/games/rows';
-import { LINKISH, lineKind, type LineKind } from './helpers';
+import { GAME_NAMES, LINKISH, lineKind, type LineKind } from './helpers';
 
 /* What the games pages share on screen: the grouped table of rows, loading, failure and empty states, and the icon that
    becomes a check mark. The plain helpers (button looks, dates, saving a file, "Undo") are in helpers.ts. */
@@ -25,7 +25,7 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
   /** Buttons or a note shown under a row (the HoD desk). */
   extra?: (r: R) => ReactNode;
   rowClass?: (r: R) => string;
-  /** The games a row can go in, shown under it (Write questions). */
+  /** The games a row can go in (Write questions): the ones it is left out of show under it. */
   games?: (r: R, i: number) => string[];
   /** A row that needs fixing: marked red (or amber), and not sent. */
   problem?: (r: R, i: number) => 'error' | 'warn' | undefined;
@@ -73,6 +73,8 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
     }
     const bad = problem?.(r, i);
     const plays = games?.(r, i);
+    // only what it is left out of: a line under every question naming all five games says nothing
+    const notIn = plays && Object.values(GAME_NAMES).filter((g) => !plays.includes(g));
     const unsure = bad ? [] : doubts?.(r) ?? [];
     out.push(
       <div
@@ -98,10 +100,10 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
             {r.difficulty}
           </span>
         ) : <span className="hidden sm:block" />}
-        {(bad || plays) && (
+        {(bad || (notIn && notIn.length > 0)) && (
           <p className="col-span-full pl-9 text-[12px] text-warm-meta sm:col-start-2">
             {bad ? <span className={bad === 'error' ? 'font-semibold text-destructive' : 'font-semibold text-brand-deep'}>Needs fixing: not sent as it is</span>
-              : plays!.length ? <>Plays in: {plays!.join(' · ')}</> : 'Plays in no game'}
+              : plays!.length ? <>Not in: {notIn!.join(' · ')}</> : 'Plays in no game'}
           </p>
         )}
         {unsure.length > 0 && (

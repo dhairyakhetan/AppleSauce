@@ -116,6 +116,14 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   lines; Try an example asks first when the box has questions of your own (Undo works either way); both keep the
   pressed button where it was on screen (`steady`), so the page never jumps. Topic buttons show a tick and how many
   questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs.
+- **Write questions, the layout pass (unslop):** a cross on each sent-back question removes it from the list for good
+  on that device (kept in `localStorage` under `games.sentBack.dismissed` by `pages/Games.tsx`, which leaves them out
+  of the list and the tab's count; the database has no place for it). The problem list has one entry per line, the
+  line number coloured red or amber and the text dark; clicking it centres the whole question in the box (measured on
+  the copy behind the box, as lines wrap). Under each result only the games it is left out of ("Not in: Word search").
+  Step 3 has the same card colour as the others, with a Full screen button by its heading; the small preview's
+  crossword uses at most 8 answers. Send for approval stays in view (sticky) beside the preview. The phone's "problems
+  to fix" button shows only while the results are still below.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.

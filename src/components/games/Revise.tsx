@@ -1,6 +1,9 @@
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
-import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
+import { GAME_TYPES, makeGame, poolFor, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
+
+/** The most answers the small preview's crossword uses. */
+const COMPACT_CROSSWORD = 8;
 import type { BankQuestion } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { GameView } from './GameView';
@@ -85,9 +88,20 @@ export function Revise({ questions, compact = false, written = false, heading, e
   // every game these questions can make (each one already checked), so the player can switch between them
   const games = useMemo(() => {
     const out: Partial<Record<GameType, Game>> = {};
-    for (const t of GAME_TYPES) { const g = makeGame(t, items, seed); if (g) out[t] = g; }
+    for (const t of GAME_TYPES) {
+      // the small preview's crossword uses at most a few of the answers, so it stays a size that fits beside the page
+      // (New puzzle picks others); full size uses them all
+      let g = null;
+      const pool = compact && t === 'crossword' ? poolFor(t, items) : [];
+      if (pool.length > COMPACT_CROSSWORD) {
+        const few = [...pool].sort((a, b) => seedOf(`${a.id}|${seed}`) - seedOf(`${b.id}|${seed}`)).slice(0, COMPACT_CROSSWORD);
+        g = makeGame(t, few, seed);
+      }
+      g = g ?? makeGame(t, items, seed);
+      if (g) out[t] = g;
+    }
     return out;
-  }, [items, seed]);
+  }, [items, seed, compact]);
   const type = want && games[want] ? want : GAME_TYPES.find((t) => games[t]);
   const game = type && games[type];
 
@@ -99,7 +113,8 @@ export function Revise({ questions, compact = false, written = false, heading, e
 
   const pill = cn('rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', compact ? 'min-h-9 px-3 text-[12px]' : 'min-h-11 md:min-h-10 px-3.5 text-[13px]');
   const label = cn('font-semibold text-warm-secondary', compact ? 'text-[11px]' : 'text-[12px]');
-  const box = cn('flex flex-col rounded-[24px] bg-muted', compact ? 'gap-3 p-3 sm:p-4' : 'gap-4 p-4 sm:p-6');
+  // the small preview sits on a muted step card of Write questions, so its boxes are white there
+  const box = cn('flex flex-col rounded-[24px]', compact ? 'gap-3 bg-card p-3 sm:p-4' : 'gap-4 bg-muted p-4 sm:p-6');
 
   if (!chapter) return heading ? <div className="flex flex-col gap-3">{heading}</div> : null;
 
@@ -185,7 +200,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
             <button type="button" className={chip('card')} onClick={() => setRound((r) => r + 1)}><Shuffle aria-hidden /> New puzzle</button>
           </div>
         </div>
-        <div className={cn('rounded-2xl bg-card', compact ? 'p-3' : 'p-4 sm:p-6')}>
+        <div className={cn('rounded-2xl', compact ? '' : 'bg-card p-4 sm:p-6')}>
           {game ? <GameView key={`${type}|${seed}|${made}`} game={game} compact={compact} onNext={() => setRound((r) => r + 1)} />
             : <p className="py-6 text-center text-[14px] text-warm-secondary">These topics don't have enough questions for a puzzle yet. {written ? 'Add a few more.' : 'Pick more topics.'}</p>}
         </div>

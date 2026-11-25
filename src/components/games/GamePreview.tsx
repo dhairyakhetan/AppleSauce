@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Maximize2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import type { Row } from '@/lib/games/rows';
-import { cn } from '@/lib/utils';
-import { LINKISH } from './helpers';
+import { btn } from './helpers';
 import { Revise, type ReviseQuestion } from './Revise';
 
 /* "See how it plays": Try the games, scaled down, made from the questions in the Questions box as they are written
    (the same view and the same engine, so it is exactly what a student would get from these questions). Every topic is
-   in to start with; tap a topic to leave it out. Nothing here is saved or sent. "Open full size", beside the heading, opens it as students see it. */
+   in to start with; tap a topic to leave it out. Nothing here is saved or sent. "Full screen", beside the heading (apart from the buttons that change the puzzle), opens it as students see it. */
 
 /** The value, once it has stopped changing for `ms`: the games aren't rebuilt on every key press. */
 function useSettled<T>(value: T, key: string, ms = 450): T {
@@ -41,8 +40,8 @@ export function GamePreview({ rows }: { rows: Row[] }) {
         <h2 id="preview-h" className="text-[15px] font-bold text-foreground">3. See how it plays</h2>
         {/* how the preview is viewed, apart from the buttons that change the puzzle */}
         {questions.length > 0 && (
-          <button type="button" className={cn(LINKISH, 'inline-flex items-center gap-1.5 px-1 text-[13px]')} onClick={() => setBig(true)}>
-            <Maximize2 aria-hidden className="h-3.5 w-3.5" /> Open full size
+          <button type="button" className={btn('card')} onClick={() => setBig(true)}>
+            <Maximize2 aria-hidden /> Full screen
           </button>
         )}
       </div>
@@ -53,7 +52,7 @@ export function GamePreview({ rows }: { rows: Row[] }) {
       <Dialog open={big} onOpenChange={setBig}>
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl bg-card">
           <DialogTitle>See how it plays</DialogTitle>
-          <DialogDescription className="sr-only">Full size, as students see it.</DialogDescription>
+          <DialogDescription className="sr-only">Full screen, as students see it.</DialogDescription>
           {big && <Revise written questions={questions} />}
         </DialogContent>
       </Dialog>

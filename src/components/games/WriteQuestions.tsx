@@ -1,6 +1,6 @@
 import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDown, Check, Copy, Send, Trash2 } from 'lucide-react';
+import { ArrowDown, Check, Copy, Send, Trash2, X } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
 import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
@@ -64,7 +64,7 @@ export interface Alerts { list?: SentBack[]; error?: string }
 /** The fixed list of chapters, with their topics (no list while loading). */
 export interface Catalog { list?: ListChapter[]; error?: string }
 
-export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
+export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
   api: GamesApi;
   /** An HoD or admin, who can open Approve questions. */
   canApprove: boolean;
@@ -72,6 +72,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   alerts: Alerts;
   /** The sent-back list was opened: these are now seen. */
   onSeen: (ids: string[]) => void;
+  /** Removes sent-back questions from the list for good (`gone` false puts them back: Undo). */
+  onDismiss: (ids: string[], gone?: boolean) => void;
   onRetryAlerts: () => void;
   /** Questions were sent: the counts elsewhere on the page go up. */
   onSent: () => void;
@@ -121,7 +123,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   useEffect(() => {
     const el = results.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([e]) => setResultsInView(e.isIntersecting), { rootMargin: '0px 0px -30% 0px' });
+    // "in view" also once scrolled past them: the button only points down, to results still below
+    const io = new IntersectionObserver(([e]) => setResultsInView(e.isIntersecting || e.boundingClientRect.top < 0), { rootMargin: '0px 0px -30% 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -189,6 +192,12 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) }, rows);
   const errors = issues.filter((x) => x.level === 'error').length;
   const toFix = issues.length;
+  /** The problems to fix, one entry per line (a line can have more than one). */
+  const byLine = useMemo(() => {
+    const m = new Map<number, Issue[]>();
+    for (const x of issues) m.set(x.line, [...(m.get(x.line) ?? []), x]);
+    return [...m];
+  }, [issues]);
 
   /**
    * Which questions need fixing, from every problem (shown or still waiting for the cursor to move on): a problem on its
@@ -375,7 +384,26 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     ta.scrollIntoView({ behavior: motion(), block: 'center' });
     ta.focus({ preventScroll: true });
     ta.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
-    ta.scrollTop = Math.max(0, (line - 3) * (parseFloat(getComputedStyle(ta).lineHeight) || 24));
+    /*
+     * The whole question in the middle of the box, measured on the copy behind it (it wraps exactly as the box does):
+     * a line number alone can't say where a line is once long lines wrap. A question taller than the box starts near
+     * its top, with the problem line in view.
+     */
+    const copy = ta.parentElement?.querySelector<HTMLElement>('.games-backdrop-in');
+    const at = (n: number) => copy?.querySelector<HTMLElement>(`[data-l="${n}"]`);
+    const q = rows.find((x) => line >= x.line && line <= (x.end ?? x.line));
+    const first = at(q?.line ?? line);
+    const last = at(q?.end ?? line);
+    const here = at(line);
+    if (copy && first && last && here) {
+      const base = copy.getBoundingClientRect().top;
+      const top = first.getBoundingClientRect().top - base;
+      const bottom = last.getBoundingClientRect().bottom - base;
+      const view = ta.clientHeight;
+      ta.scrollTop = Math.max(0, bottom - top <= view - 48 ? (top + bottom) / 2 - view / 2 : here.getBoundingClientRect().top - base - view / 3);
+    } else {
+      ta.scrollTop = Math.max(0, (line - 3) * (parseFloat(getComputedStyle(ta).lineHeight) || 24));
+    }
     moveCaret(line);
   };
 
@@ -430,7 +458,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   return (
     <div className="flex flex-col gap-4">
 
-      <SentBackPanel panelRef={backPanel} alerts={alerts} open={backOpen} setOpen={setBackOpen} focus={backFocus} onSeen={onSeen} onRetry={onRetryAlerts} onFix={fix} />
+      <SentBackPanel panelRef={backPanel} alerts={alerts} open={backOpen} setOpen={setBackOpen} focus={backFocus} onSeen={onSeen} onDismiss={onDismiss} onRetry={onRetryAlerts} onFix={fix} />
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <section className={SECTION} aria-labelledby="in-h">
@@ -544,14 +572,33 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
           {issues.length > 0 && (
             <div className={cn('rounded-2xl px-4 py-3 text-[14px]', errors ? 'bg-destructive/10' : 'bg-brand-subtle')}>
-              <b className="text-foreground">{plural(toFix, 'problem')} to fix</b>
-              <ul className="mt-1 flex flex-col gap-0.5">
-                {issues.slice(0, 50).map((x) => (
-                  <li key={`${x.line}\u0000${x.text}`} className={x.level === 'error' ? 'text-destructive' : 'text-brand-deep'}>
-                    <button type="button" className={LINKISH} onClick={() => goTo(x.line)}>Line {x.line}</button>: {x.text}
-                  </li>
-                ))}
-                {issues.length > 50 && <li className="text-warm-secondary">and {issues.length - 50} more</li>}
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <b className="text-foreground">{plural(toFix, 'problem')} to fix</b>
+                {errors > 0 && <span className="flex items-center gap-1.5 text-[13px] text-warm-secondary"><span className="size-2 rounded-full bg-destructive" aria-hidden />{errors} red</span>}
+                {toFix - errors > 0 && <span className="flex items-center gap-1.5 text-[13px] text-warm-secondary"><span className="size-2 rounded-full bg-brand" aria-hidden />{toFix - errors} amber</span>}
+              </p>
+              <ul className="mt-2 flex flex-col gap-2">
+                {byLine.slice(0, 50).map(([line, xs]) => {
+                  const worst = xs.some((x) => x.level === 'error') ? 'error' : 'warn';
+                  return (
+                    <li key={line} className="flex items-start gap-2.5">
+                      <button type="button" onClick={() => goTo(line)} aria-label={`Line ${line}: go to it`}
+                        className={cn('mt-px shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold tabular-nums transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                          worst === 'error' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/85' : 'bg-brand text-foreground hover:bg-brand/85')}>
+                        Line {line}
+                      </button>
+                      <div className="flex flex-col gap-1 text-foreground">
+                        {xs.map((x) => (
+                          <p key={x.text} className="flex items-start gap-1.5">
+                            {xs.length > 1 && <span className={cn('mt-2 size-1.5 shrink-0 rounded-full', x.level === 'error' ? 'bg-destructive' : 'bg-brand')} aria-hidden />}
+                            <span>{x.text}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </li>
+                  );
+                })}
+                {byLine.length > 50 && <li className="text-warm-secondary">and problems on {byLine.length - 50} more lines</li>}
               </ul>
             </div>
           )}
@@ -567,10 +614,10 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
       </div>
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="rounded-[24px] bg-card p-4 shadow-border sm:p-6">
+        <div className={SECTION}>
           <GamePreview rows={playable} />
         </div>
-        <form className={SECTION} onSubmit={(e) => { e.preventDefault(); trySend(); }}>
+        <form className={cn(SECTION, 'lg:sticky lg:top-24')} onSubmit={(e) => { e.preventDefault(); trySend(); }}>
           <h2 className="text-[15px] font-bold text-foreground">4. Send for approval</h2>
           {examples > 0 && (
             <p className="rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] text-foreground" role="status">
@@ -651,10 +698,10 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 }
 
 /** Questions an HoD sent back to this person, with why. Opening the list marks them seen. */
-function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onRetry, onFix }: {
+function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismiss, onRetry, onFix }: {
   panelRef: RefObject<HTMLElement>;
   alerts: Alerts; open: boolean; setOpen: (o: boolean) => void; focus: string[];
-  onSeen: (ids: string[]) => void; onRetry: () => void; onFix: (a: SentBack) => void;
+  onSeen: (ids: string[]) => void; onDismiss: (ids: string[], gone?: boolean) => void; onRetry: () => void; onFix: (a: SentBack) => void;
 }) {
   const list = alerts.list ?? [];
   const unseen = list.filter((a) => !a.seen);
@@ -686,15 +733,26 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onRetry
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="back-h" className="flex flex-wrap items-center gap-2 text-[15px] font-bold text-foreground">
           {plural(list.length, 'question was', 'questions were')} sent back to you
-          {unseen.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[12px] font-bold text-foreground">{unseen.length} new</span>}
+          {unseen.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[12px] font-bold text-foreground">{unseen.length === list.length ? 'New' : `${unseen.length} new`}</span>}
         </h2>
         <button type="button" className={btn('card')} aria-expanded={open} aria-controls="back-list" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'See why'}</button>
       </div>
-      {!open && <p className="mt-1 text-[14px] text-warm-prose">{waitingFix ? `${plural(waitingFix, 'needs', 'need')} fixing.` : 'All of them have been sent again.'}</p>}
+      {!open && (
+        <p className="mt-1 text-[14px] text-warm-prose">
+          {!waitingFix ? (list.length === 1 ? 'It has been sent again.' : 'All of them have been sent again.')
+            : waitingFix === list.length ? (list.length === 1 ? 'It needs fixing.' : list.length === 2 ? 'Both need fixing.' : `All ${list.length} need fixing.`)
+            : `${waitingFix} of ${list.length} ${waitingFix === 1 ? 'needs' : 'need'} fixing.`}
+        </p>
+      )}
       {open && (
         <ul id="back-list" className="mt-3 flex flex-col gap-2">
           {list.map((a) => (
-            <li key={a.id} className={cn('flex flex-col gap-1 rounded-2xl bg-card p-4 text-[14px]', pointAt.has(a.id) && 'ring-2 ring-brand')}>
+            <li key={a.id} className={cn('relative flex flex-col gap-1 rounded-2xl bg-card p-4 pr-12 text-[14px]', pointAt.has(a.id) && 'ring-2 ring-brand')}>
+              <button type="button" aria-label="Remove from this list" title="Remove from this list"
+                className="absolute right-2 top-2 flex size-9 items-center justify-center rounded-full text-warm-secondary transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                onClick={() => { onSeen([a.id]); onDismiss([a.id]); offerUndo('Removed from the list', () => onDismiss([a.id], false)); }}>
+                <X className="size-4" aria-hidden />
+              </button>
               <p className="text-[12px] text-warm-meta">
                 {[a.chapter_no !== null && `Chapter ${a.chapter_no}`, a.chapter].filter(Boolean).join(': ')}{a.topic && ` · ${a.topic}`}
                 {fresh.has(a.id) && <span className="ml-2 rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold text-foreground">New</span>}
