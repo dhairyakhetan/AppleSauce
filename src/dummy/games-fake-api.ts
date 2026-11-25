@@ -1,6 +1,8 @@
 import { APPROVED_PAGE, BATCH_MAX, type GamesApi, type SaveResult, type SendResult } from '@/lib/games/api';
 import { ALL_BOARDS, chapterId, checkBoard, checkSubject, pad2, SUBJECTS, topicId } from '@/lib/games/details';
+import { sameName } from '@/lib/games/catalog';
 import { format } from '@/lib/games/format';
+import SAMPLE_JSON from './games-sample-chapters.json?raw';
 import { TOPIC_QUESTIONS_MAX, type AdminList, type Bank, type BankQuestion, type Batch, type ListChange, type ListChapter, type ListSave, type Person, type RoleCheck, type Row, type SavedChapter, type SentBack, type Status } from '@/lib/games/rows';
 
 /* The games pages in dummy mode (D75): an in-memory stand-in for the `games` schema, with no sign-in. It keeps the
@@ -642,10 +644,9 @@ function listed(board: string, cls: number, subject: string, no: number, name: s
   const id = chapterId(checkBoard(board).code, cls, checkSubject(subject).code, no)!;
   return { chapter_id: id, board, class: cls, subject, chapter_no: no, name, topics: topics.map((t, i) => ({ topic_id: topicId(id, i + 1)!, topic_no: i + 1, name: t })), open: !topics.length };
 }
-/** The made-up list of chapters and topics: the ones the made-up questions use, the formatter's example, one with no
- * questions yet, and one the list gives no topics (its questions may go under topics of their own). The real list comes
- * from the database. */
-export const DUMMY_LIST: ListChapter[] = [
+/** The made-up chapters with topics: the ones the made-up questions use, the formatter's example, one with no
+ * questions yet, and one the list gives no topics (its questions may go under topics of their own). */
+const MADE_UP: ListChapter[] = [
   listed('ICSE', 6, 'Geography', 2, 'Landforms of the Earth', ['Mountains', 'Plateaus and Plains']),
   listed('CBSE', 6, 'Mathematics', 4, 'Basic Geometrical Ideas', ['Points, Lines and Rays', 'Polygons', 'Circles']),
   listed('CBSE', 8, 'History', 2, 'From Trade to Territory', ['The East India Company Comes East', 'From Trade to Wars', 'Company Rule Expands']),
@@ -655,6 +656,22 @@ export const DUMMY_LIST: ListChapter[] = [
   listed('CBSE', 7, 'Science', 2, 'Nutrition in Animals', []),
   listed('CBSE', 9, 'Science', 5, 'The Fundamental Unit of Life', ['The Cell', 'Cell Organelles']),
   listed('CBSE', 10, 'Science', 1, 'Chemical Reactions and Equations', ['Chemical Equations', 'Types of Chemical Reactions', 'Effects of Oxidation in Everyday Life']),
+];
+
+/** The sample list of chapters (games-sample-chapters.json: the games list as it is, with CBSE's electives), with no topics. */
+interface SampleGroup { board: string; class: number; subject: string; chapters: [number, string][] }
+const SAMPLE: ListChapter[] = (JSON.parse(SAMPLE_JSON) as { groups: SampleGroup[] }).groups
+  .flatMap((g) => g.chapters.map(([no, name]) => listed(g.board, g.class, g.subject, no, name, [])));
+
+/**
+ * The list dummy mode starts with: the made-up chapters, then the sample list around them (a sample chapter whose
+ * number or name a made-up one already has in its subject is left out, as the database allows neither twice). The real
+ * list comes from the database.
+ */
+export const DUMMY_LIST: ListChapter[] = [
+  ...MADE_UP,
+  ...SAMPLE.filter((c) => !MADE_UP.some((m) => m.chapter_id === c.chapter_id
+    || (m.board === c.board && m.class === c.class && m.subject === c.subject && sameName(m.name, c.name)))),
 ];
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
@@ -670,7 +687,8 @@ const canon = (cs: SavedChapter[]) => JSON.stringify([...cs].sort((a, b) => a.ch
 const indiaDay = (iso: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)).replace(/-/g, '');
 
-function seed(): State {
+function seed(sample: boolean): State {
+  const list = sample ? DUMMY_LIST : MADE_UP;
   const s: State = {
     team: [
       { ...MODERATOR, role: 'admin', moderator: true, added_at: hoursAgo(24 * 30), last_seen_at: hoursAgo(5), name: MODERATOR.name },
@@ -681,8 +699,8 @@ function seed(): State {
     ],
     batches: [],
     questions: [],
-    catalog: structuredClone(DUMMY_LIST),
-    log: [{ at: hoursAgo(24 * 30), by: MODERATOR.name, action: 'add', detail: `Added ${DUMMY_LIST.length} chapters and ${DUMMY_LIST.reduce((n, c) => n + c.topics.length, 0)} topics.` }],
+    catalog: structuredClone(list),
+    log: [{ at: hoursAgo(24 * 30), by: MODERATOR.name, action: 'add', detail: `Added ${list.length} chapters and ${list.reduce((n, c) => n + c.topics.length, 0)} topics.` }],
   };
   const put = (text: string, who: { email: string; name: string }, sentAt: string, status: Status, reviewedAt: string | null, note = '') => {
     const ids = add(s, format(text).rows, who, sentAt).ids;
@@ -815,9 +833,10 @@ export type FakeGamesApi = GamesApi & {
 };
 
 /** `slow`: each call takes a moment, like the real database, so loading states show (tests pass false). */
-export function createFakeGamesApi(slow = true): FakeGamesApi {
+/** `sample`: start with the sample list of chapters around the made-up ones (dummy mode), or the made-up ones only (tests). */
+export function createFakeGamesApi(slow = true, sample = true): FakeGamesApi {
   const wait = (ms = 250) => (slow ? new Promise((done) => setTimeout(done, ms)) : Promise.resolve());
-  let s = seed();
+  let s = seed(sample);
   /** Signed in with a password: on the team or not, nothing counts until they sign in with Google or a link. */
   let password = false;
   const me = () => s.team.find((p) => p.email === DUMMY_ME.email) ?? null;
@@ -952,7 +971,7 @@ export function createFakeGamesApi(slow = true): FakeGamesApi {
   const waiting = () => s.questions.filter((q) => q.status === 'pending').length;
 
   return {
-    reset() { s = seed(); password = false; },
+    reset() { s = seed(sample); password = false; },
     setRole(role) {
       password = role === 'reauth';
       if (role === 'reauth') return;

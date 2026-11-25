@@ -73,7 +73,11 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   the Chapter dropdown showing how many approved questions each chapter has; the topics become buttons.
 - **Dummy mode:** `?dummy=1` on any `/games` page, or the preview toggle's
   "Games team" buttons, runs the real pages against
-  `dummy/games-fake-api.ts`, which keeps the database's rules (list included).
+  `dummy/games-fake-api.ts`, which keeps the database's rules (list included). Its list of chapters is the made-up
+  chapters with topics (the made-up questions use them) and, around them, the sample list in
+  `dummy/games-sample-chapters.json` (the games list as of 25 November 2026 with CBSE's Classes 9 to 12 electives and
+  skill subjects, about 1,880 chapters); the tests start with the made-up chapters only (`createFakeGamesApi(false, false)`).
+  Dummy mode is in its own chunk loaded only in the test build, so none of this reaches the live site.
   Its banner switches between admin, HoD, member, not on the team, and signed
   in with a password.
 - **Files:** `lib/games/` (rows and exports, `format.ts` the formatter,
