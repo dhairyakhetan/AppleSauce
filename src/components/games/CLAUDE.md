@@ -53,6 +53,11 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   Bulk add, at the bottom (`components/games/BulkAdd.tsx`, `readBulk`), takes
   Board, Class and Subject lines with chapters under them, for any number of
   subjects, and saves them all in one call (a list of saves, all or none).
+  Its red button switches it to Bulk remove (`readBulkRemove`): the same lines, then the chapters to delete by number,
+  name or both, or a subject with no chapters under it to delete all of them; chapters with questions are kept (the
+  database's rule), anything not on the list is a problem on its line, and the red bar asks twice. In both modes a
+  Board line starts afresh and a Class line forgets the subject, so nothing goes to a subject left over from the
+  block above.
   Until it is installed on the live database, every call in
   `lib/games/api.ts` (`realGamesApi`) fails and the pages say so. The site calls functions only; no role can read the tables.
   `lib/games/database.test.ts` runs the script on PGlite.

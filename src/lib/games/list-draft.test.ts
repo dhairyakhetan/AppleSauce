@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addChapter, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
-  nextNumber, readBulk, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged,
+  nextNumber, readBulk, readBulkRemove, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged,
 } from './list-draft';
 import type { AdminChapter } from './rows';
 
@@ -186,3 +186,45 @@ describe('the draft of a subject\'s chapters', () => {
     expect(problems.map((p) => [p.line, p.text])).toEqual([[4, 'A number must be from 1 to 99.']]);
   });
 });
+
+describe('Bulk remove', () => {
+  const LIST = [...LOADED, { ...ch(1, 'The Earth', 0), subject: 'Geography', chapter_id: 'CBSE08GEO01' }, { ...ch(2, 'Maps', 0), subject: 'Geography', chapter_id: 'CBSE08GEO02' }];
+
+  it('removes chapters named by number, name or both, and keeps those with questions', () => {
+    const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: History\n1\nFrom Trade to Territory\n3. Ruling the Countryside', LIST);
+    expect(r.problems).toEqual([]);
+    expect(r.groups).toHaveLength(1);
+    expect(r.groups[0].removed.map((c) => c.name)).toEqual(['How, When and Where']);
+    expect(r.groups[0].kept).toEqual([{ chapter_no: 2, name: 'From Trade to Territory', questions: 17 }, { chapter_no: 3, name: 'Ruling the Countryside', questions: 3 }]);
+    expect(toSave(G, r.groups[0].loaded, r.groups[0].draft).after.map((c) => c.chapter_no)).toEqual([2, 3]);
+  });
+
+  it('removes every chapter of a subject with no chapter lines under it', () => {
+    const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: Geography', LIST);
+    expect(r.problems).toEqual([]);
+    expect(r.groups[0].removed.map((c) => c.chapter_no)).toEqual([1, 2]);
+    expect(changeCount(r.groups[0].draft)).toBe(2);
+  });
+
+  it('never takes a subject left over from the block above for a new board or class', () => {
+    const list = [...LIST, { ...ch(1, 'Numbers', 0), class: 7, subject: 'History', chapter_id: 'CBSE07HIS01' }];
+    // the second block's Board and Class lines come before its Subject line: CBSE class 7 History (the leftover subject)
+    // must not be read, or it would lose every chapter
+    const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: Geography\n\nBoard: CBSE\nClass: 8\nSubject: History\n1', list);
+    expect(r.problems).toEqual([]);
+    expect(r.groups.map((g) => `${g.group.class} ${g.group.subject}`)).toEqual(['8 Geography', '8 History']);
+    expect(readBulkRemove('Board: CBSE\nClass: 7\n1', list).problems.map((p) => p.text)).toEqual(['Put Board, Class and Subject lines above the chapters.']);
+  });
+
+  it('names every line it cannot do, so nothing is removed by mistake', () => {
+    const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: History\n7\nPlassey\n1. From Trade to Territory\n- A topic\nSubject: Civics', LIST);
+    expect(r.problems.map((p) => [p.line, p.text])).toEqual([
+      [4, 'There is no chapter 7 in CBSE class 8 History.'],
+      [5, 'There is no chapter called "Plassey" in CBSE class 8 History.'],
+      [6, 'Chapter 1 is "How, When and Where", not "From Trade to Territory".'],
+      [7, 'Bulk remove takes whole chapters. Delete a topic in the list above.'],
+      [8, 'Nothing is on the list for CBSE class 8 Civics.'],
+    ]);
+  });
+});
+
