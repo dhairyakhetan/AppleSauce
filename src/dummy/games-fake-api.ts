@@ -663,23 +663,41 @@ interface SampleGroup { board: string; class: number; subject: string; chapters:
 const SAMPLE: ListChapter[] = (JSON.parse(SAMPLE_JSON) as { groups: SampleGroup[] }).groups
   .flatMap((g) => g.chapters.map(([no, name]) => listed(g.board, g.class, g.subject, no, name, [])));
 
+/** Where a made-up chapter the sample has no chapter of the same name for goes in dummy mode: onto a real chapter of the
+ * list (its board, class, subject and number), so the list is exactly the sample and the demo's questions sit under it. */
+const HOMES: Record<string, { board: string; class: number; subject: string; no: number }> = {
+  CBSE07SCI04: { board: 'CBSE', class: 7, subject: 'Science', no: 7 }, // Heat -> Heat Transfer in Nature
+  CBSE07SCI05: { board: 'CBSE', class: 7, subject: 'Science', no: 2 }, // Acids, Bases and Salts -> Exploring Substances
+  CBSE07SCI02: { board: 'CBSE', class: 7, subject: 'Science', no: 9 }, // Nutrition in Animals -> Life Processes in Animals
+  CBSE08SCI06: { board: 'CBSE', class: 7, subject: 'Science', no: 5 }, // Combustion and Flame -> Changes Around Us
+  CBSE09SCI05: { board: 'CBSE', class: 9, subject: 'Science', no: 2 }, // The Fundamental Unit of Life -> Cell
+  CBSE06MAT04: { board: 'CBSE', class: 6, subject: 'Mathematics', no: 2 }, // Basic Geometrical Ideas -> Lines and Angles
+  CBSE08HIS02: { board: 'CBSE', class: 8, subject: 'Social Science', no: 4 }, // From Trade to Territory -> The Colonial Era in India
+  ICSE06GEO02: { board: 'CBSE', class: 6, subject: 'Social Science', no: 3 }, // Landforms of the Earth -> Landforms and Life
+};
+
 /**
- * The list dummy mode starts with: every sample chapter, with the made-up chapters among them. A made-up chapter the
- * sample has under the same name gives it its topics; one whose number the sample already uses in its subject moves to
- * the end of that subject, and its questions move with it (`MOVED`: the made-up texts' Chapter lines, old and new). The
- * real list comes from the database.
+ * The list dummy mode starts with: exactly the sample list. A made-up chapter the sample has under the same name gives
+ * it its topics; any other made-up chapter goes onto the real chapter `HOMES` names, giving it its topics, and the
+ * made-up questions' header lines (Board to Chapter) are rewritten to match (`MOVED`). The real list comes from the
+ * database.
  */
 const { list: SAMPLE_LIST, moved: MOVED } = (() => {
   const list = [...SAMPLE];
   const moved: [string, string][] = [];
   const inGroup = (a: ListChapter, b: ListChapter) => a.board === b.board && a.class === b.class && a.subject === b.subject;
+  const head = (c: { board: string; class: number; subject: string; chapter_no: number; name: string }) =>
+    `Board: ${c.board}\nClass: ${c.class}\nSubject: ${c.subject}\nChapter ${c.chapter_no}: ${c.name}`;
   for (const m of MADE_UP) {
+    const topics = m.topics.map((t) => t.name);
     const same = list.findIndex((c) => inGroup(c, m) && sameName(c.name, m.name));
-    if (same >= 0) { list[same] = listed(m.board, m.class, m.subject, list[same].chapter_no, list[same].name, m.topics.map((t) => t.name)); continue; }
-    if (!list.some((c) => inGroup(c, m) && c.chapter_no === m.chapter_no)) { list.push(m); continue; }
-    const no = Math.max(...list.filter((c) => inGroup(c, m)).map((c) => c.chapter_no)) + 1;
-    list.push(listed(m.board, m.class, m.subject, no, m.name, m.topics.map((t) => t.name)));
-    moved.push([`Chapter ${m.chapter_no}: ${m.name}`, `Chapter ${no}: ${m.name}`]);
+    if (same >= 0) { list[same] = listed(m.board, m.class, m.subject, list[same].chapter_no, list[same].name, topics); continue; }
+    const home = HOMES[m.chapter_id];
+    const at = home ? list.findIndex((c) => c.board === home.board && c.class === home.class && c.subject === home.subject && c.chapter_no === home.no) : -1;
+    if (at < 0) throw new Error(`The made-up chapter ${m.chapter_id} has no chapter to sit on in the sample list.`);
+    const to = list[at];
+    list[at] = listed(to.board, to.class, to.subject, to.chapter_no, to.name, topics);
+    moved.push([head(m), head(to)]);
   }
   return { list, moved };
 })();
