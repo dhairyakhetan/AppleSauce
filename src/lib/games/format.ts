@@ -527,6 +527,20 @@ Q: An equation with the same number of atoms of each element on both sides
 A: Balanced equation
 Fill: An equation with the same number of atoms of each element on both sides is called a ___.
 Wrong: Skeletal equation; Word equation; Ionic equation
+Level: easy
+
+Q: Physical state shown by the symbol (g) in a chemical equation
+A: Gas
+Also: Gaseous
+Fill: In a chemical equation, the symbol (g) shows that a substance is a ___.
+Wrong: Liquid; Solid; Solution
+Level: easy
+
+Q: Gas given off when zinc reacts with dilute sulphuric acid
+A: Hydrogen
+Also: H2
+Wrong: Oxygen; Chlorine; Nitrogen
+Level: easy
 
 Topic 2: Types of Chemical Reactions
 
@@ -537,16 +551,64 @@ Fill: A reaction in which a single reactant breaks down into simpler products is
 Wrong: Combination reaction; Displacement reaction; Neutralisation reaction
 Level: easy
 
-Q: Gas given off when zinc reacts with dilute sulphuric acid
-A: Hydrogen
-Also: H2
-Wrong: Oxygen; Chlorine; Nitrogen
+Q: Reaction in which two or more reactants form a single product
+A: Combination reaction
+Also: Combination
+Fill: When two or more reactants form a single product, the reaction is called a ___.
+Wrong: Decomposition reaction; Displacement reaction; Double displacement reaction
+Level: easy
 
-Q: Rusting of iron is a chemical change
-A: True
+Q: Reaction in which heat is given out
+A: Exothermic reaction
+Also: Exothermic
+Fill: A reaction in which heat is given out is called an ___.
+Wrong: Endothermic reaction; Decomposition reaction; Displacement reaction
+Level: easy
+
+Q: Colour of the precipitate formed when lead nitrate and potassium iodide solutions are mixed
+A: Yellow
+Fill: Mixing lead nitrate and potassium iodide solutions gives a ___ precipitate.
+Wrong: White; Blue; Green
+Level: medium
+
+Q: Metal that displaces copper from copper sulphate solution, turning the blue solution light green
+A: Iron
+Also: Fe
+Fill: When ___ displaces copper from copper sulphate solution, the blue colour changes to light green.
+Wrong: Silver; Gold; Mercury
+Level: hard
 
 Q: Which of the following is a combination reaction?
 A: Burning of magnesium
+
+Topic 3: Effects of Oxidation in Everyday Life
+
+Q: Slow eating away of a metal by air, moisture or acids around it
+A: Corrosion
+Fill: The slow eating away of a metal by air, moisture or acids is called ___.
+Wrong: Rancidity; Sublimation; Distillation
+Level: easy
+
+Q: Change in the smell and taste of oily food when its fats are oxidised
+A: Rancidity
+Fill: When the fats in food are oxidised, the change in its smell and taste is called ___.
+Wrong: Corrosion; Fermentation; Neutralisation
+Level: medium
+
+Q: Gas often filled in packets of chips to keep their fats from being oxidised
+A: Nitrogen
+Also: N2
+Fill: Packets of chips are often filled with ___ gas so that the fats are not oxidised.
+Wrong: Oxygen; Hydrogen; Chlorine
+Level: medium
+
+Q: Rusting of iron is a chemical change
+A: True
+Level: easy
+
+Q: Keeping food in airtight containers speeds up rancidity
+A: False
+Level: medium
 `;
 
 /**
