@@ -78,6 +78,15 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   /** Send was pressed with questions that need fixing. */
   const [stopped, setStopped] = useState(false);
   const boxTimer = useRef(0);
+  /** How many approved questions each chapter has (shown in the Chapter dropdown); null until loaded, or if it can't be. */
+  const [inBank, setInBank] = useState<Map<string, number> | null>(null);
+  useEffect(() => {
+    api.loadQuestionBank().then((qs) => {
+      const m = new Map<string, number>();
+      for (const q of qs) if (q.chapter_id) m.set(q.chapter_id, (m.get(q.chapter_id) ?? 0) + 1);
+      setInBank(m);
+    }, () => setInBank(null));
+  }, [api]);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
   /** The list of questions on the right, which scrolls by itself (side by side only). */
@@ -327,6 +336,54 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     moveCaret(line);
   };
 
+  // ---- the four detail boxes as dropdowns of what is on the list of chapters
+  const list = catalog.list ?? [];
+  const lists = list.length > 0;
+  const boardName = checkBoard(details.board).name;
+  const classNo = checkClass(details.class).value;
+  const subjectName = checkSubject(details.subject).name;
+  const boardsOn = [...new Set(list.map((c) => c.board))].sort();
+  const boardOk = boardsOn.includes(boardName);
+  const classesOn = boardOk ? [...new Set(list.filter((c) => c.board === boardName).map((c) => c.class))].sort((a, b) => a - b) : [];
+  const classOk = classNo !== null && classesOn.includes(classNo);
+  const subjectsOn = classOk ? [...new Set(list.filter((c) => c.board === boardName && c.class === classNo).map((c) => c.subject))].sort() : [];
+  const subjectOk = subjectsOn.includes(subjectName);
+
+  /** A pick goes into the text; the boxes after it that no longer fit (another board's class, say) are emptied. */
+  const pickDetail = (k: DetailKey, v: string) => setRaw((r) => {
+    let t = k === 'chapter'
+      ? writeDetail(r, 'chapter', (() => { const c = listed.find((x) => String(x.chapter_no) === v); return c ? `${c.chapter_no}: ${c.name}` : ''; })())
+      : writeDetail(r, k, v);
+    if (k === 'chapter') return t;
+    const fits = (d: Record<DetailKey, string>, upTo: 'class' | 'subject') => list.some((c) => c.board === checkBoard(d.board).name
+      && c.class === checkClass(d.class).value && (upTo === 'class' || c.subject === checkSubject(d.subject).name));
+    let d = readDetails(t);
+    if (k === 'board' && d.class && !fits(d, 'class')) t = writeDetail(t, 'class', '');
+    d = readDetails(t);
+    if (d.subject && !fits(d, 'subject')) t = writeDetail(t, 'subject', '');
+    d = readDetails(t);
+    const typedCh = parseNumbered(d.chapter, 'chapter');
+    if (d.chapter && !chaptersFor(list, d.board, d.class, d.subject).some((c) => c.chapter_no === typedCh.no && sameName(c.name, typedCh.name))) t = writeDetail(t, 'chapter', '');
+    return t;
+  });
+
+  /** One dropdown. `needs`: the box to fill in first (it says so, and on hover), or null when it can be used. */
+  const listField = (k: DetailKey, options: { value: string; label: string; meta?: string }[], value: string, needs: string | null, wide?: string) => {
+    const off = !needs && !!details[k].trim() && !value; // something in the text that isn't on the list
+    const problem = off ? (checkDetail(k, details[k]) ?? { level: 'warn' as const, text: `"${details[k]}" isn't on the list of chapters.` }) : undefined;
+    return (
+      <div className={cn('flex flex-col gap-1', wide)} key={k}>
+        <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
+        <div title={needs ? `Select ${needs} first` : undefined} className={needs ? 'cursor-not-allowed' : undefined}>
+          <Picker id={`d-${k}`} look="field" label={LABEL[k]} value={value} options={options} disabled={!!needs} invalid={off}
+            placeholder={needs ? `Select ${needs} first` : off ? `${details[k]} (not on the list)` : `Choose a ${LABEL[k].toLowerCase()}`}
+            onPick={(v) => pickDetail(k, v)} />
+        </div>
+        {problem && <span className={cn('text-[12px]', problem.level === 'error' ? 'text-destructive' : 'text-brand-deep')}>{problem.text}</span>}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
 
@@ -335,51 +392,64 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <section className={SECTION} aria-labelledby="in-h">
           <h2 id="in-h" className="text-[15px] font-bold text-foreground">1. Write</h2>
-          {/* Chapter gets a row of its own: its names are long */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {DETAIL_KEYS.map((k) => {
-              const problem = typingBox === k ? undefined : k === 'chapter' && listHasNone
-                ? { level: 'warn' as const, text: `The list has no chapters for this board, class and subject yet.` }
-                : checkDetail(k, details[k]);
-              if (k === 'chapter' && listed.length) {
+          {/* Chapter gets a row of its own: its names are long. With the list of chapters loaded, the four are dropdowns of
+              what is on it, each waiting for the one before; without it, boxes to type in. */}
+          {lists ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {listField('board', boardsOn.map((b) => ({ value: b, label: b })), boardOk ? boardName : '', null)}
+              {listField('class', classesOn.map((n) => ({ value: String(n), label: String(n) })), classOk ? String(classNo) : '', boardOk ? null : 'Board')}
+              {listField('subject', subjectsOn.map((x) => ({ value: x, label: x })), subjectOk ? subjectName : '', !boardOk ? 'Board' : !classOk ? 'Class' : null, 'col-span-2 sm:col-span-1')}
+              {listField('chapter', listed.map((c) => {
+                const n = inBank?.get(c.chapter_id) ?? 0;
+                return { value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}`, meta: inBank ? (n ? `${n} approved` : 'No questions yet') : undefined };
+              }), chosen ? String(chosen.chapter_no) : '', !boardOk ? 'Board' : !classOk ? 'Class' : !subjectOk ? 'Subject' : null, 'col-span-full')}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {DETAIL_KEYS.map((k) => {
+                const problem = typingBox === k ? undefined : k === 'chapter' && listHasNone
+                  ? { level: 'warn' as const, text: `The list has no chapters for this board, class and subject yet.` }
+                  : checkDetail(k, details[k]);
+                if (k === 'chapter' && listed.length) {
+                  return (
+                    <div className="col-span-full flex flex-col gap-1" key={k}>
+                      <label htmlFor="d-chapter" className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
+                      <Picker id="d-chapter" look="field" label={LABEL[k]} value={chosen ? String(chosen.chapter_no) : ''} invalid={!!details.chapter && !chosen}
+                        placeholder={details.chapter && !chosen ? `${details.chapter} (not on the list)` : 'Choose a chapter'}
+                        options={listed.map((c) => ({ value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}` }))}
+                        onPick={(v) => {
+                          const c = listed.find((x) => String(x.chapter_no) === v);
+                          setRaw((r) => writeDetail(r, 'chapter', c ? `${c.chapter_no}: ${c.name}` : ''));
+                        }} />
+                    </div>
+                  );
+                }
                 return (
-                  <div className="col-span-full flex flex-col gap-1" key={k}>
-                    <label htmlFor="d-chapter" className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
-                    <Picker id="d-chapter" look="field" label={LABEL[k]} value={chosen ? String(chosen.chapter_no) : ''} invalid={!!details.chapter && !chosen}
-                      placeholder={details.chapter && !chosen ? `${details.chapter} (not on the list)` : 'Choose a chapter'}
-                      options={listed.map((c) => ({ value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}` }))}
-                      onPick={(v) => {
-                        const c = listed.find((x) => String(x.chapter_no) === v);
-                        setRaw((r) => writeDetail(r, 'chapter', c ? `${c.chapter_no}: ${c.name}` : ''));
+                  <div className={cn('flex flex-col gap-1', k === 'subject' && 'col-span-2 sm:col-span-1', k === 'chapter' && 'col-span-full')} key={k}>
+                    <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
+                    <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${HINT[k]}`} autoComplete="off"
+                      className={cn(FIELD, 'h-11', problem?.level === 'error' && 'ring-2 ring-destructive', problem?.level === 'warn' && 'ring-2 ring-brand')}
+                      aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setRaw((r) => writeDetail(r, k, v));
+                        // a box's warning waits until it is left, or until typing pauses
+                        setTypingBox(k);
+                        clearTimeout(boxTimer.current);
+                        boxTimer.current = window.setTimeout(() => setTypingBox(null), 1500);
+                      }}
+                      onBlur={(e) => {
+                        clearTimeout(boxTimer.current);
+                        setTypingBox(null);
+                        const std = standardDetail(k, e.target.value);
+                        if (std !== e.target.value) setRaw((r) => writeDetail(r, k, std));
                       }} />
+                    {problem && <span id={`d-${k}-msg`} className={cn('text-[12px]', problem.level === 'error' ? 'text-destructive' : 'text-brand-deep')}>{problem.text}</span>}
                   </div>
                 );
-              }
-              return (
-                <div className={cn('flex flex-col gap-1', k === 'subject' && 'col-span-2 sm:col-span-1', k === 'chapter' && 'col-span-full')} key={k}>
-                  <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
-                  <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${HINT[k]}`} autoComplete="off"
-                    className={cn(FIELD, 'h-11', problem?.level === 'error' && 'ring-2 ring-destructive', problem?.level === 'warn' && 'ring-2 ring-brand')}
-                    aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setRaw((r) => writeDetail(r, k, v));
-                      // a box's warning waits until it is left, or until typing pauses
-                      setTypingBox(k);
-                      clearTimeout(boxTimer.current);
-                      boxTimer.current = window.setTimeout(() => setTypingBox(null), 1500);
-                    }}
-                    onBlur={(e) => {
-                      clearTimeout(boxTimer.current);
-                      setTypingBox(null);
-                      const std = standardDetail(k, e.target.value);
-                      if (std !== e.target.value) setRaw((r) => writeDetail(r, k, std));
-                    }} />
-                  {problem && <span id={`d-${k}-msg`} className={cn('text-[12px]', problem.level === 'error' ? 'text-destructive' : 'text-brand-deep')}>{problem.text}</span>}
-                </div>
-              );
-            })}
-          </div>
+              })}
+            </div>
+          )}
           {chosen && (chosen.topics.length ? (
             <div className="flex flex-col gap-1.5">
               <p className="text-[12px] font-semibold text-warm-secondary">Add a topic</p>

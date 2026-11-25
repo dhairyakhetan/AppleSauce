@@ -68,8 +68,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   the chapter is open, and the first question sent under a new topic adds it
   (one number and one name per topic). `lib/games/catalog.ts` checks the
   Questions box against it as people write (the database refuses the rest
-  anyway); the Chapter box becomes a picker and the topics become buttons
-  once board, class and subject match the list.
+  anyway); Board, Class, Subject and Chapter are dropdowns of what is on
+  the list (typing boxes only if the list can't load), each waiting for the one before ("Select Board first"),
+  the Chapter dropdown showing how many approved questions each chapter has; the topics become buttons.
 - **Dummy mode:** `?dummy=1` on any `/games` page, or the preview toggle's
   "Games team" buttons, runs the real pages against
   `dummy/games-fake-api.ts`, which keeps the database's rules (list included).
