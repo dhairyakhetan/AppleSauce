@@ -368,7 +368,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   });
 
   /** One dropdown. `needs`: the box to fill in first (it says so, and on hover), or null when it can be used. */
-  const listField = (k: DetailKey, options: { value: string; label: string; meta?: string }[], value: string, needs: string | null, wide?: string) => {
+  const listField = (k: DetailKey, options: { value: string; label: string; meta?: string; tone?: 'good' }[], value: string, needs: string | null, wide?: string) => {
     const off = !needs && !!details[k].trim() && !value; // something in the text that isn't on the list
     const problem = off ? (checkDetail(k, details[k]) ?? { level: 'warn' as const, text: `"${details[k]}" isn't on the list of chapters.` }) : undefined;
     return (
@@ -401,7 +401,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
               {listField('subject', subjectsOn.map((x) => ({ value: x, label: x })), subjectOk ? subjectName : '', !boardOk ? 'Board' : !classOk ? 'Class' : null, 'col-span-2 sm:col-span-1')}
               {listField('chapter', listed.map((c) => {
                 const n = inBank?.get(c.chapter_id) ?? 0;
-                return { value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}`, meta: inBank ? (n ? `${n} approved` : 'No questions yet') : undefined };
+                return { value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}`, meta: inBank ? (n ? `${n} approved` : 'No questions yet') : undefined, tone: n ? 'good' as const : undefined };
               }), chosen ? String(chosen.chapter_no) : '', !boardOk ? 'Board' : !classOk ? 'Class' : !subjectOk ? 'Subject' : null, 'col-span-full')}
             </div>
           ) : (

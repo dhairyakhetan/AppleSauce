@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
-import { ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* The games pages' dropdown, in place of the browser's own: a pill (or, in a form, a field) that opens an anchored panel,
@@ -13,6 +13,8 @@ export interface PickerOption {
   label: string;
   /** Shown on the right, e.g. "12 chapters". */
   meta?: string;
+  /** `good`: the note on the right in green (a chapter that already has questions). */
+  tone?: 'good';
   /** On the list: shown first, under its own heading. */
   on?: boolean;
 }
@@ -139,10 +141,11 @@ export function Picker({ label, value, options, onPick, searchable = options.len
                   return (
                     <div key={o.value} id={optionId(i)} data-i={i} role="option" aria-selected={picked} onPointerMove={() => active !== i && setActive(i)} onClick={() => choose(o)}
                       className={cn('flex min-h-11 md:min-h-10 cursor-pointer select-none items-center gap-2 rounded-[18px] px-3 text-[14px] transition-colors duration-150',
-                        /* Tactile pass: the highlighted option is one step above the list, the chosen one two steps, no tick. */
-                        picked ? 'bg-accent font-semibold text-foreground' : cn(i === active ? 'bg-muted' : 'bg-transparent', 'text-warm-prose'))}>
+                        /* the chosen option in blue with a tick, the one under the pointer (or keys) in light orange */
+                        picked ? 'bg-brand-blue-subtle font-semibold text-brand-blue-deep' : i === active ? 'bg-brand-subtle text-foreground' : 'bg-transparent text-warm-prose')}>
+                      {picked ? <Check className="size-4 shrink-0" aria-hidden /> : <span className="size-4 shrink-0" aria-hidden />}
                       <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                      {o.meta && <span className="shrink-0 text-[12px] font-normal tabular-nums text-warm-meta">{o.meta}</span>}
+                      {o.meta && <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[12px] tabular-nums', o.tone === 'good' ? 'bg-success-subtle-bg font-semibold text-success-subtle-text' : 'font-normal text-warm-meta')}>{o.meta}</span>}
                     </div>
                   );
                 })}
