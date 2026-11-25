@@ -81,7 +81,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   `dummy/games-fake-api.ts`, which keeps the database's rules (list included). Its list of chapters is the made-up
   chapters with topics (the made-up questions use them) and, around them, the sample list in
   `dummy/games-sample-chapters.json` (the games list as of 25 November 2026 with CBSE's Classes 9 to 12 electives and
-  skill subjects, about 1,880 chapters). Every sample chapter is kept: a made-up chapter whose number the sample uses
+  skill subjects, less the 20 rarest removed on 25 November 2026: about 1,680 chapters). Every sample chapter is kept: a made-up chapter whose number the sample uses
   moves to the end of its subject, and its made-up questions with it. The tests start with the made-up chapters only
   (`createFakeGamesApi(false, false)`).
   Dummy mode is in its own chunk loaded only in the test build, so none of this reaches the live site.

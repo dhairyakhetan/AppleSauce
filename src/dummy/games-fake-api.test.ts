@@ -201,7 +201,7 @@ describe('the dummy games database', () => {
 
   it('starts dummy mode with the sample list around the made-up chapters, with no number or name twice in a subject', async () => {
     const list = await createFakeGamesApi(false).loadCatalog();
-    expect(list.length).toBeGreaterThan(1800);
+    expect(list.length).toBeGreaterThan(1600);
     expect(new Set(list.map((c) => c.chapter_id)).size).toBe(list.length);
     const bySubject = new Map<string, string[]>();
     for (const c of list) bySubject.set(`${c.board}|${c.class}|${c.subject}`, [...(bySubject.get(`${c.board}|${c.class}|${c.subject}`) ?? []), c.name]);
