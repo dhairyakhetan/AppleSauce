@@ -37,6 +37,8 @@ export interface FakeCheckerApi extends CheckerApi {
   simulate: DummySimulation;
   /** Every fix the fake accepted, newest last. */
   fixes: FakeFixRecord[];
+  /** Every change of the answer options the fake accepted, newest last. */
+  optionSaves: { id: string; options: CheckerQuestion['options'] }[];
   /** Put every fixture back and clear counters and picks. */
   reset(): void;
   /** Serve nothing, to see the end-of-queue state. */
@@ -70,7 +72,15 @@ interface FakeAction {
   /** Where the question sat in the queue before it left it. */
   queueIndex: number;
   /** What a fix replaced, kept exactly as it was. */
-  prev?: { body: string; display_number: string | null; marks: number | null | undefined; version: number | null | undefined };
+  prev?: {
+    body: string;
+    display_number: string | null;
+    marks: number | null | undefined;
+    version: number | null | undefined;
+    /** The options a fix replaced (only kept when the fix changed them). */
+    options?: CheckerQuestion['options'];
+    optionsChanged?: boolean;
+  };
   /** The skip clock value a skip replaced, so an undo puts the order back. */
   prevSkip?: number;
 }
@@ -156,6 +166,7 @@ export function createFakeCheckerApi(): FakeCheckerApi {
   const api: FakeCheckerApi = {
     simulate: 'none',
     fixes: [],
+    optionSaves: [],
     returns: [],
     clock: () => Date.now(),
 
@@ -190,6 +201,7 @@ export function createFakeCheckerApi(): FakeCheckerApi {
 
     reset() {
       api.fixes = [];
+      api.optionSaves = [];
       api.returns = [];
       queue = dummyQuestions();
       seedPapers();
@@ -530,6 +542,7 @@ export function createFakeCheckerApi(): FakeCheckerApi {
           kept.body = last.prev.body;
           kept.display_number = last.prev.display_number;
           kept.marks = last.prev.marks;
+          if (last.prev.optionsChanged) kept.options = last.prev.options ?? null;
           kept.version = (kept.version ?? 1) + 1; // a new version holding the old words
         }
         outcome.delete(last.id);
@@ -713,11 +726,39 @@ export function createFakeCheckerApi(): FakeCheckerApi {
       await api.passQuestion(input.questionId, input.version);
       verdictVersion = typeof input.version === 'number' ? input.version : null;
     } else if (input.action === 'fix') {
+      // Like the real verdictAndNext: a fix that changes the options saves them first (verifier_set_options) and
+      // the verdict then runs on the version that returned.
+      let fixVersion = input.version;
+      let replacedOptions: { options: CheckerQuestion['options'] } | null = null;
+      if (input.patch?.options) {
+        const q = find(input.questionId);
+        checkVersion(q, input.version);
+        const kept = allQuestions.find((x) => x.id === input.questionId);
+        const next = input.patch.options as CheckerQuestion['options'];
+        if (JSON.stringify(q.options ?? null) !== JSON.stringify(next ?? null)) {
+          replacedOptions = { options: kept?.options ?? null };
+          q.options = next;
+          q.version = (q.version ?? 1) + 1;
+          if (kept) {
+            kept.options = next;
+            kept.version = q.version;
+          }
+          api.optionSaves.push({ id: input.questionId, options: next });
+        }
+        fixVersion = q.version;
+      }
       await api.fixQuestion(input.questionId, input.patch ?? {}, {
-        version: input.version,
+        version: fixVersion,
         printedTypo: input.printedTypo,
         typoNote: input.typoNote,
       });
+      if (replacedOptions) {
+        const last = [...actions].reverse().find((a) => a.id === input.questionId && a.kind === 'fix');
+        if (last?.prev) {
+          last.prev.options = replacedOptions.options;
+          last.prev.optionsChanged = true;
+        }
+      }
       verdictVersion = allQuestions.find((x) => x.id === input.questionId)?.version ?? null;
     } else if (input.action === 'skip') {
       await api.skipQuestion(input.questionId);

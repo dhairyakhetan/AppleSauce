@@ -52,8 +52,11 @@ describe('verify screen wiring (QA 2026-10-11)', () => {
     expect(screen).toContain('{ hasPicture: canCompare }');
   });
 
-  it('finding 10: Fix it says the options cannot be changed, and who can', () => {
-    expect(screen).toContain('You cannot change the options here. If one is wrong or missing, press Ask the HOD.');
+  it('finding 10 (changed 25 Nov 2026): Fix it lets a checker change the options, and the old "cannot change" note is gone', () => {
+    expect(screen).toContain('<OptionsEditor value={optionsDraft} onChange={setOptionsDraft} disabled={submitting} />');
+    expect(screen).not.toContain('You cannot change the options here');
+    // Check mode keeps the read-only list; fix mode shows the editor instead, never both.
+    expect(screen).toContain("options={mode === 'fix' ? null : question.options}");
   });
 
   it('a closed paper never sends a signed-in verifier to sign in again (Nov 2026)', () => {

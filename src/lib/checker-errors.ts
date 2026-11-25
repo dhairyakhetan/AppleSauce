@@ -67,6 +67,9 @@ export function checkerErrorAdvice(err: unknown): CheckerErrorAdvice {
       moveOn: true,
     };
   }
+  if (/changing options is not switched on/i.test(text)) {
+    return { message: 'Changing options is not switched on yet. Ask the HOD. Your typing is kept.', moveOn: false };
+  }
   if (/typo corrections are not switched on/i.test(text)) {
     return {
       message: 'Typo corrections are not switched on yet. Fix only reading mistakes for now, or press Ask the HOD.',

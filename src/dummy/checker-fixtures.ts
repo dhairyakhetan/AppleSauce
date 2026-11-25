@@ -162,6 +162,8 @@ export function dummyQuestions(): CheckerQuestion[] {
       marks: 2,
       version: 3,
       body: 'Factorise compleetly: $3x^2 - 12$ [2]',
+      // Answer options, so the checker's option boxes can be tried here (owner, 25 Nov 2026).
+      options: ['3(x - 2)(x + 2)', '3(x - 4)', '3(x^2 - 4)', '(3x - 6)(x + 2)'],
       flag_reasons: ['spelling_suspect'],
       flag_detail: JSON.stringify({ spelling_suspect: 'Computer check: "compleetly" may be misspelt on the paper itself.' }),
       // The marks are still inside the text ("[2]"), so the screen offers Move marks out.

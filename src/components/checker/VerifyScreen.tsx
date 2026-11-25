@@ -3,7 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MathText } from '@/components/papers/math-text';
-import { OptionList } from '@/components/checker/OptionList';
+import { OptionsEditor } from '@/components/checker/OptionsEditor';
 import { PartCard } from '@/components/checker/PartCard';
 import { FIX_RULE_LINE, RulesInfo, ShortcutsPopover } from '@/components/checker/CheckerPopovers';
 import { PaperPageFlip } from '@/components/checker/PaperPageFlip';
@@ -54,7 +54,7 @@ import {
   BIG_EDIT_WARNING,
 } from '@/lib/checker-body';
 import { checkerErrorAdvice, nextLoadProblem, reopenErrorMessage, type NextLoadProblem, undoErrorMessage, UNDONE_NOTE, LOAD_FAILED_TITLE, LOAD_FAILED_NOTE, PAPER_GONE_TITLE, PAPER_GONE_NOTE } from '@/lib/checker-errors';
-import { normaliseOptions } from '@/lib/checker-options';
+import { type EditableOption } from '@/lib/option-editing';
 import {
   clearDraft,
   draftOwnerKey,
@@ -462,6 +462,7 @@ export function VerifyScreen({
   const [bodyDraft, setBodyDraft] = useState('');
   const [numberDraft, setNumberDraft] = useState('');
   const [marksDraft, setMarksDraft] = useState('');
+  const [optionsDraft, setOptionsDraft] = useState<EditableOption[]>([]);
   const [splitAt, setSplitAt] = useState<number | null>(null);
   const [printedTypo, setPrintedTypo] = useState(false);
   const [typoNote, setTypoNote] = useState('');
@@ -523,6 +524,7 @@ export function VerifyScreen({
       setBodyDraft(start.body);
       setNumberDraft(start.number);
       setMarksDraft(start.marks);
+      setOptionsDraft(start.options ?? []);
       setPrintedTypo(start.printedTypo);
       setTypoNote(start.typoNote);
       setMode(kept?.current ? 'fix' : 'check');
@@ -547,11 +549,11 @@ export function VerifyScreen({
   // question again, and after every successful answer.
   useEffect(() => {
     if (!question || draftFor !== ownerNow) return;
-    const now = { body: bodyDraft, number: numberDraft, marks: marksDraft, printedTypo, typoNote };
+    const now = { body: bodyDraft, number: numberDraft, marks: marksDraft, printedTypo, typoNote, options: optionsDraft };
     if (sameDrafts(now, draftsFromQuestion(question, lost))) clearDraft(scope, question.id);
     else saveDraft(scope, question, now);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bodyDraft, numberDraft, marksDraft, printedTypo, typoNote, draftFor, ownerNow]);
+  }, [bodyDraft, numberDraft, marksDraft, optionsDraft, printedTypo, typoNote, draftFor, ownerNow]);
 
   useEffect(() => {
     if (!notice) return;
@@ -833,7 +835,7 @@ export function VerifyScreen({
   // an OR between two questions is not always flagged.
   const splitOffered = question ? !blank : false;
   const orOnly = question ? isOrOnlyBody(question.body) : false;
-  const edited = question ? isEdited(question, { body: bodyDraft, number: numberDraft, marks: marksDraft }) : false;
+  const edited = question ? isEdited(question, { body: bodyDraft, number: numberDraft, marks: marksDraft, options: optionsDraft }) : false;
   // An empty question can never be "right" as it is; only after the checker
   // typed its words in from the picture.
   // A row that is only the word OR is not a question either: use the OR action.
@@ -841,7 +843,7 @@ export function VerifyScreen({
   const marksInvalid = marksDraft.trim() !== '' && !(Number.isFinite(Number(marksDraft)) && Number(marksDraft) >= 0);
   // Anything typed that Cancel would throw away (the same boxes the autosaved draft holds).
   const unsavedEdit = question
-    ? !sameDrafts({ body: bodyDraft, number: numberDraft, marks: marksDraft, printedTypo, typoNote }, draftsFromQuestion(question, lost))
+    ? !sameDrafts({ body: bodyDraft, number: numberDraft, marks: marksDraft, printedTypo, typoNote, options: optionsDraft }, draftsFromQuestion(question, lost))
     : false;
   const escArmedRef = useRef<number | null>(null);
   const showBigEditWarning = mode === 'fix' && question ? bigEdit(question.body ?? '', bodyDraft) : false;
@@ -894,7 +896,7 @@ export function VerifyScreen({
     // words that were not touched are never sent, and drafts that belong to
     // another question are refused.
     const plan = planAnswer(
-      { question, drafts: { body: bodyDraft, number: numberDraft, marks: marksDraft, printedTypo, typoNote }, draftsFor: draftFor, mode },
+      { question, drafts: { body: bodyDraft, number: numberDraft, marks: marksDraft, printedTypo, typoNote, options: optionsDraft }, draftsFor: draftFor, mode },
       ownerNow,
     );
     if (plan.kind === 'refuse') {
@@ -1008,6 +1010,7 @@ export function VerifyScreen({
     setBodyDraft(start.body);
     setNumberDraft(start.number);
     setMarksDraft(start.marks);
+    setOptionsDraft(start.options ?? []);
     setSplitAt(null);
     setPrintedTypo(false);
     setTypoNote('');
@@ -1595,11 +1598,9 @@ export function VerifyScreen({
                 />
               </label>
             ) : null}
-            {normaliseOptions(question.options).length > 0 ? (
-              <p className="text-[13px] leading-snug text-warm-secondary" data-testid="options-cannot-edit">
-                You cannot change the options here. If one is wrong or missing, press Ask the HOD.
-              </p>
-            ) : null}
+            {/* Owner, 25 Nov 2026 ("for checkers as well"): the options can be changed, added, removed and moved here
+                too. They are sent only when they really changed. */}
+            <OptionsEditor value={optionsDraft} onChange={setOptionsDraft} disabled={submitting} />
             {showBigEditWarning ? (
               <p role="status" className="text-[13px] leading-snug text-destructive">
                 {BIG_EDIT_WARNING}
@@ -1631,7 +1632,7 @@ export function VerifyScreen({
             <PartCard
               mode={mode === 'fix' ? 'edit' : mode === 'split' ? 'split' : 'read'}
               body={bodyDraft}
-              options={question.options}
+              options={mode === 'fix' ? null : question.options}
               lostHeading={lost ? LOST_TEXT_HEADING : null}
               disabled={submitting}
               focused={focusId === question.id}
