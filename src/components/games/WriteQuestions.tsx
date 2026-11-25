@@ -2,7 +2,7 @@ import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef
 import { Link } from 'react-router-dom';
 import { ArrowDown, Check, Copy, Send, Trash2, X } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
-import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
+import { bySubject, checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
 import { usableIn } from '@/lib/games/engine';
 import { asText, doubts, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
@@ -417,7 +417,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   const boardOk = boardsOn.includes(boardName);
   const classesOn = boardOk ? [...new Set(list.filter((c) => c.board === boardName).map((c) => c.class))].sort((a, b) => a - b) : [];
   const classOk = classNo !== null && classesOn.includes(classNo);
-  const subjectsOn = classOk ? [...new Set(list.filter((c) => c.board === boardName && c.class === classNo).map((c) => c.subject))].sort() : [];
+  const subjectsOn = classOk ? [...new Set(list.filter((c) => c.board === boardName && c.class === classNo).map((c) => c.subject))].sort(bySubject) : [];
   const subjectOk = subjectsOn.includes(subjectName);
 
   /** A pick goes into the text; the boxes after it that no longer fit (another board's class, say) are emptied. */
@@ -802,7 +802,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
   const board = fit(pick.board, boards);
   const classes = uniq(list.filter((c) => c.board === board).map((c) => c.class)).sort((a, b) => a - b);
   const cls = fit(Number(pick.cls), classes);
-  const subjects = uniq(list.filter((c) => c.board === board && c.class === cls).map((c) => c.subject)).sort();
+  const subjects = uniq(list.filter((c) => c.board === board && c.class === cls).map((c) => c.subject)).sort(bySubject);
   const subject = fit(pick.subject, subjects);
   const chapters = list.filter((c) => c.board === board && c.class === cls && c.subject === subject).sort((a, b) => a.chapter_no - b.chapter_no);
   const ch = chapters.find((c) => String(c.chapter_no) === pick.chapter) ?? (chapters.length === 1 ? chapters[0] : undefined);

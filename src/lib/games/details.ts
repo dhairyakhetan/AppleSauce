@@ -387,6 +387,23 @@ export const SUBJECTS: { name: string; code: string; also: string[] }[] = [
 const SUBJECT_NAMES = SUBJECTS.flatMap((x) => [key(x.name), ...x.also].map((a) => ({ a, name: x.name })));
 
 /** The subject named in a box or a line, or an error: only subjects on the list above can be used. */
+/*
+ * The order subjects are listed in everywhere on the games pages: the subjects nearly everyone takes first, then the
+ * popular electives, then the rest (subjects few people take). Alphabetical within each group; the groups aren't shown.
+ */
+export const CORE_SUBJECTS = new Set(['Mathematics', 'Science', 'Social Science', 'English', 'English Language', 'English Literature', 'Hindi',
+  'Physics', 'Chemistry', 'Biology', 'History', 'Geography', 'Civics', 'History & Civics', 'Political Science', 'Economics',
+  'Accountancy', 'Business Studies', 'Environmental Studies']);
+export const POPULAR_SUBJECTS = new Set(['Computer Science', 'Computer Applications', 'Informatics Practices', 'Information Technology',
+  'Artificial Intelligence', 'Data Science', 'Web Applications', 'Applied Mathematics', 'Statistics', 'Physical Education',
+  'Psychology', 'Sociology', 'Home Science', 'Biotechnology', 'Entrepreneurship', 'Legal Studies', 'Engineering Graphics',
+  'Painting', 'Environmental Science', 'Commercial Studies', 'Commercial Applications', 'Economic Applications', 'Commerce',
+  'Sanskrit', 'Bengali', 'Elective English', 'Hindi Elective']);
+/** 0 for the subjects nearly everyone takes, 1 for popular electives, 2 for the rest. */
+export const subjectRank = (name: string) => (CORE_SUBJECTS.has(name) ? 0 : POPULAR_SUBJECTS.has(name) ? 1 : 2);
+/** Sorts subject names: by group, then alphabetically. */
+export const bySubject = (a: string, b: string) => subjectRank(a) - subjectRank(b) || a.localeCompare(b);
+
 export function checkSubject(raw: string): { name: string; code: string | null; problem?: Problem } {
   const k = key(raw);
   if (!k) return { name: '', code: null };

@@ -5,6 +5,7 @@ import { GAME_TYPES, makeGame, poolFor, seedOf, type Game, type GameType, type I
 /** The most answers the small preview's crossword uses. */
 const COMPACT_CROSSWORD = 8;
 import type { BankQuestion } from '@/lib/games/rows';
+import { bySubject } from '@/lib/games/details';
 import { cn } from '@/lib/utils';
 import { GameView } from './GameView';
 import { chip, GAME_NAMES, plural, whyNot } from './helpers';
@@ -43,7 +44,7 @@ function chaptersOf(questions: ReviseQuestion[]): Chapter[] {
       id, questions: qs, cls: q0.class, subject: q0.subject, no: q0.chapter_no, name: q0.chapter,
       topics: [...topics.values()].sort((a, b) => (a.no ?? 99) - (b.no ?? 99)),
     };
-  }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || a.subject.localeCompare(b.subject) || (a.no ?? 0) - (b.no ?? 0));
+  }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || bySubject(a.subject, b.subject) || (a.no ?? 0) - (b.no ?? 0));
 }
 
 export function Revise({ questions, compact = false, written = false, heading, extra }: {

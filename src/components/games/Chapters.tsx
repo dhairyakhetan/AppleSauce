@@ -4,7 +4,7 @@ import * as Accordion from '@radix-ui/react-accordion';
 import { ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GamesApi } from '@/lib/games/api';
-import { ALL_BOARDS, SUBJECTS } from '@/lib/games/details';
+import { ALL_BOARDS, bySubject, SUBJECTS } from '@/lib/games/details';
 import {
   addChapter, addTopic, changeCount, changedInside, chapterChanged, chaptersOf, deleteChapter, deleteTopic, draftOf, isOpen, keepChapter, keepTopic,
   liveTopics, nextNumber, renameChapter, renameTopic, renumberChapter, renumberTopic, setOpen, toSave, topicChanged, type DraftChapter, type DraftTopic,
@@ -50,12 +50,12 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
   const count = (f: (c: AdminChapter) => boolean) => chapters.filter(f).length;
   const meta = (n: number) => (n ? plural(n, 'chapter') : undefined);
   const classesOn = (b: string) => [...new Set(chapters.filter((c) => c.board === b).map((c) => c.class))].sort((x, y) => x - y);
-  const subjectsOn = (b: string, k: number) => [...new Set(chapters.filter((c) => c.board === b && c.class === k).map((c) => c.subject))].sort();
+  const subjectsOn = (b: string, k: number) => [...new Set(chapters.filter((c) => c.board === b && c.class === k).map((c) => c.subject))].sort(bySubject);
 
   const boardOptions: PickerOption[] = ALL_BOARDS.map((b) => { const n = count((c) => c.board === b.name); return { value: b.name, label: b.name, meta: meta(n), on: n > 0 }; });
   const classOptions: PickerOption[] = Array.from({ length: 12 }, (_, i) => i + 1)
     .map((k) => { const n = count((c) => c.board === group.board && c.class === k); return { value: String(k), label: `Class ${k}`, meta: meta(n), on: n > 0 }; });
-  const subjectOptions: PickerOption[] = SUBJECTS.map((s) => s.name).sort((a, b) => a.localeCompare(b))
+  const subjectOptions: PickerOption[] = SUBJECTS.map((s) => s.name).sort(bySubject)
     .map((s) => { const n = count((c) => c.board === group.board && c.class === group.class && c.subject === s); return { value: s, label: s, meta: meta(n), on: n > 0 }; });
 
   /** After a save (here or in Bulk add): says so, and shows the list as it is now. */
