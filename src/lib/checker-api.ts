@@ -245,6 +245,25 @@ export async function checkerMyStats(): Promise<CheckerStats> {
   return rpcRow<CheckerStats>(data) ?? { today_count: 0, total_count: 0 };
 }
 
+/** Papers this checker has finished (verdicts given and nothing left for students to do), today and ever. */
+export interface CheckerPaperStats {
+  papers_today: number;
+  papers_total: number;
+}
+
+/**
+ * The papers count next to the questions count (owner, 25 Nov 2026: "tasks are given on number of papers").
+ * Null when the database function (20261125100000_checker_papers_verified.sql) is not pasted yet or the call fails:
+ * the screen then shows the questions count only, never a made-up 0.
+ */
+export async function checkerMyPaperStats(): Promise<CheckerPaperStats | null> {
+  const { data, error } = await supabase.rpc('checker_my_paper_stats' as never);
+  if (error) return null;
+  const row = rpcRow<CheckerPaperStats>(data);
+  if (!row) return null;
+  return { papers_today: Number(row.papers_today) || 0, papers_total: Number(row.papers_total) || 0 };
+}
+
 export interface LeaderboardRow {
   rank: number;
   first_name: string;
@@ -623,6 +642,7 @@ export interface CheckerApi {
   markOrSeparator: typeof checkerMarkOrSeparator;
   checkedTodayCount: typeof checkerCheckedTodayCount;
   myStats: typeof checkerMyStats;
+  myPaperStats: typeof checkerMyPaperStats;
   leaderboard: typeof checkerLeaderboard;
   getPreferences: typeof checkerGetPreferences;
   setPreferences: typeof checkerSetPreferences;
@@ -658,6 +678,7 @@ export const realCheckerApi: CheckerApi = {
   markOrSeparator: checkerMarkOrSeparator,
   checkedTodayCount: checkerCheckedTodayCount,
   myStats: checkerMyStats,
+  myPaperStats: checkerMyPaperStats,
   leaderboard: checkerLeaderboard,
   getPreferences: checkerGetPreferences,
   setPreferences: checkerSetPreferences,

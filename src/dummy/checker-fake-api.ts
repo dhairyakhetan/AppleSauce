@@ -627,6 +627,12 @@ export function createFakeCheckerApi(): FakeCheckerApi {
       return { today_count: today, total_count: total };
     },
 
+    async myPaperStats() {
+      await gate();
+      // Made-up numbers for the preview: a paper is finished roughly every ten questions.
+      return { papers_today: Math.floor(today / 10), papers_total: Math.floor(total / 10) };
+    },
+
     async leaderboard(): Promise<LeaderboardRow[]> {
       await gate();
       const rows = [

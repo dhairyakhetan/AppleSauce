@@ -31,6 +31,7 @@ interface FQ {
   parent_id: string | null;
   display_number: string | null;
   instructions: string | null;
+  section_label?: string | null;
   body: string;
   options: unknown[] | null;
   marks: number | null;
@@ -541,7 +542,7 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
     ord: x.ord,
     kind: x.kind,
     parent_id: x.parent_id,
-    section_label: null,
+    section_label: x.section_label ?? null,
     number_path: x.display_number,
     display_number: x.display_number,
     instructions: x.instructions,
@@ -652,6 +653,9 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
       if (typeof changes.body === 'string') x.body = changes.body;
       if (typeof changes.display_number === 'string') x.display_number = changes.display_number;
       if ('marks' in changes) x.marks = (changes.marks as number | null) ?? null;
+      // The real hod_edit_question also takes a question's own instructions and its section heading (null clears).
+      if ('instructions' in changes) x.instructions = (changes.instructions as string | null) ?? null;
+      if ('section_label' in changes) x.section_label = (changes.section_label as string | null) ?? null;
       // A fixed question loses its scanner-junk mark when the junk words are gone.
       if (typeof changes.body === 'string' && !/camscanner|scanned with|scanned by/i.test(changes.body)) x.scanner_junk = false;
       x.version += 1;

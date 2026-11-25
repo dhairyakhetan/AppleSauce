@@ -165,6 +165,15 @@ export function CheckerPage({
     refetchOnMount: 'always',
   });
 
+  // Papers finished, next to the questions count. Null (shown as nothing) until the database function is pasted.
+  const paperStatsQuery = useQuery({
+    queryKey: ['checker-my-paper-stats', scope],
+    queryFn: api.myPaperStats,
+    enabled: allowed === true,
+    staleTime: 30 * 1000,
+    refetchOnMount: 'always',
+  });
+
   if (accessFailed) {
     return (
       <BentoStack className="min-h-screen bg-muted">
@@ -220,14 +229,26 @@ export function CheckerPage({
   // the page's small controls moved into the screen's top tile.
   const verifyView = Boolean(paperId && verifying);
 
-  const countsText = statsQuery.data ? `Today ${statsQuery.data.today_count} · Total ${statsQuery.data.total_count}` : 'Counting...';
+  const countsText = statsQuery.data ? `${paperStatsQuery.data ? 'Questions: ' : ''}Today ${statsQuery.data.today_count} · Total ${statsQuery.data.total_count}` : 'Counting...';
+  const paperCounts = paperStatsQuery.data;
   const counts = statsQuery.isError && !statsQuery.data ? null : (
-    <span
-      className={cn('rounded-full bg-muted px-3 py-1 text-[13px] font-semibold', statsQuery.data ? 'tabular-nums text-warm-secondary' : 'text-warm-meta')}
-      data-testid="my-counts"
-    >
-      {countsText}
-    </span>
+    <>
+      <span
+        className={cn('rounded-full bg-muted px-3 py-1 text-[13px] font-semibold', statsQuery.data ? 'tabular-nums text-warm-secondary' : 'text-warm-meta')}
+        data-testid="my-counts"
+      >
+        {countsText}
+      </span>
+      {paperCounts ? (
+        <span
+          className="rounded-full bg-muted px-3 py-1 text-[13px] font-semibold tabular-nums text-warm-secondary"
+          data-testid="my-paper-counts"
+          title="Papers you have finished: you gave your answers and nothing is left on them for students"
+        >
+          Papers: Today {paperCounts.papers_today} · Total {paperCounts.papers_total}
+        </span>
+      ) : null}
+    </>
   );
 
   // The verify screen's top tile holds one Menu button and nothing else (owner, 12 Oct 2026:
