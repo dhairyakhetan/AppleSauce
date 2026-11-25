@@ -16,7 +16,7 @@ import { chip, GAME_NAMES, plural, whyNot } from './helpers';
    it). */
 
 /** What a puzzle needs to know about a question. */
-export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'also' | 'fill' | 'wrong_options'>;
+export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'also' | 'fill' | 'wrong_options' | 'difficulty'>;
 
 interface Topic { key: string; no: number | null; name: string; count: number }
 interface Chapter { id: string; cls: number | null; subject: string; no: number | null; name: string; topics: Topic[]; questions: ReviseQuestion[] }
@@ -76,7 +76,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
   const chosen = left.length ? left : known;
   const chosenKey = chosen.join('\u0000');
   const items: Item[] = useMemo(
-    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map((q) => ({ id: q.id, question: q.question, answer: q.answer, also: q.also ?? [], fill: q.fill ?? null, wrong: q.wrong_options ?? [] })),
+    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map((q) => ({ id: q.id, question: q.question, answer: q.answer, also: q.also ?? [], fill: q.fill ?? null, wrong: q.wrong_options ?? [], level: q.difficulty })),
     [chapter, chosenKey],
   );
   const seed = seedOf(`${chapter?.id}|${chosenKey}|${round}`);
@@ -115,7 +115,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
               <span className={label} id={`${uid}-class`}>Class</span>
               <div className="flex flex-wrap gap-1" role="radiogroup" aria-labelledby={`${uid}-class`}>
                 {classes.map((n) => (
-                  <button key={n} type="button" role="radio" aria-checked={n === chapter.cls} onClick={() => open(chapters.find((c) => c.cls === n))}
+                  <button key={n} type="button" role="radio" aria-checked={n === chapter.cls} onClick={() => open(chapters.find((c) => c.cls === n && c.subject === chapter.subject) ?? chapters.find((c) => c.cls === n))}
                     className={cn(pill, n === chapter.cls ? 'bg-panel text-background' : 'bg-card text-warm-secondary hover:text-foreground')}>Class {n}</button>
                 ))}
               </div>
@@ -164,6 +164,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
               </label>
             ))}
           </div>
+          {chosen.length === 1 && chapter.topics.length > 1 && <p className={cn('text-warm-secondary', compact ? 'text-[11px]' : 'text-[12px]')}>At least one topic stays ticked.</p>}
         </fieldset>
       </section>
 

@@ -4,7 +4,7 @@ import { enumeration, gridForm, gridWord, rng, type Item } from './shared';
 import { checkCrossword, CROSSWORD, makeCrossword, type Crossword } from './crossword';
 import { checkFill, type FillIn } from './fill';
 import { checkChoice, type Choice } from './choice';
-import { checkGame, makeGame, makePuzzle, seedOf, usableIn } from './index';
+import { balanced, checkGame, makeGame, makePuzzle, seedOf, usableIn } from './index';
 import { checkMatching, makeMatching, type Matching } from './matching';
 import { checkWordSearch, makeWordSearch, occurrences, RUDE, rudeWords, type WordSearch } from './wordsearch';
 
@@ -318,5 +318,48 @@ describe('checkers catch every kind of broken puzzle', () => {
 
   it('checkGame sends each puzzle to its own checker', () => {
     for (const type of ['matching', 'fill', 'wordsearch', 'crossword', 'choice'] as const) expect(checkGame(makeGame(type, CHEM, 11)!, CHEM)).toEqual([]);
+  });
+});
+
+describe('matching counts Also answers as the same answer', () => {
+  const items: Item[] = [
+    { id: 'zinc', question: 'Gas given off when zinc reacts with dilute acid', answer: 'H2', also: ['Hydrogen'] },
+    { id: 'light', question: 'Lightest gas', answer: 'Hydrogen' },
+    { id: 'plants', question: 'Gas plants give out', answer: 'Oxygen' },
+    { id: 'rust', question: 'Process that eats away iron', answer: 'Rusting' },
+    { id: 'salt', question: 'Common salt', answer: 'Sodium chloride' },
+  ];
+  it('never puts two questions whose answers count the same in one game', () => {
+    for (let s = 1; s < 60; s++) {
+      const g = makeMatching(items, rng(s))!;
+      const ids = g.left.map((x) => x.id);
+      expect(ids.includes('zinc') && ids.includes('light'), `seed ${s}`).toBe(false);
+    }
+  });
+  it('and the checker catches it if one does', () => {
+    const g: Matching = { type: 'matching', left: [items[0], items[1], items[2]].map((it) => ({ id: it.id, text: it.question })), right: [items[1], items[2], items[0]].map((it) => ({ id: it.id, text: it.answer })) };
+    expect(checkMatching(g, items)).toContain('answer light is also right for question zinc');
+  });
+});
+
+describe('not too many hard questions at once', () => {
+  const q = (id: string, level: string): Item => ({ id, question: `Question ${id}`, answer: `Answer ${id}`, level });
+  it('keeps hard questions to a third of what a puzzle draws from, varying which by the seed', () => {
+    const items = [...'abcd'.split('').map((x) => q(x, 'easy')), ...'efghijkl'.split('').map((x) => q(x, 'hard'))];
+    const picked = new Set<string>();
+    for (let s = 1; s < 40; s++) {
+      const b = balanced(items, rng(s));
+      const hard = b.filter((it) => it.level === 'hard');
+      expect(hard.length * 2).toBeLessThanOrEqual(b.length - hard.length);
+      expect(b.filter((it) => it.level === 'easy').length).toBe(4);
+      hard.forEach((it) => picked.add(it.id));
+    }
+    expect(picked.size).toBeGreaterThan(2); // "New puzzle" brings other hard questions
+  });
+  it('keeps everything when there are few hard questions, or only hard ones', () => {
+    const few = [q('a', 'easy'), q('b', 'medium'), q('c', 'hard')];
+    expect(balanced(few, rng(1))).toEqual(few);
+    const allHard = [q('a', 'hard'), q('b', 'hard'), q('c', 'hard')];
+    expect(balanced(allHard, rng(1))).toEqual(allHard);
   });
 });

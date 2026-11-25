@@ -4,7 +4,7 @@ import {
   SUBJECTS, titleCase, writeDetail,
 } from './details';
 import {
-  asText, baseName, blockOf, EXAMPLE, format, lineLevels, MAX_ANSWER_WORDS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, missing, NO_ANSWER, NO_FILL,
+  asText, baseName, blockOf, doubts, EXAMPLE, format, lineLevels, MAX_ANSWER_WORDS, MAX_PER_CHAPTER, MAX_PER_TOPIC, MAX_QUESTION, missing, NO_ANSWER, NO_FILL,
   problemsByRow, visibleIssues,
 } from './format';
 import { counts, setStatus, toCSV, toJSON, toRecord, toTSV, type Bank } from './rows';
@@ -98,8 +98,6 @@ describe('the checks, each on the line to fix', () => {
     ['the old [optional] notation', 'Q: Splitting of a compound\nA: Decomposition [reaction]', 2, 'error', /type the brackets/],
     ['a symbol nobody can type', 'Q: Square root of 2, written with the root sign\nA: √2', 2, 'error', /can't type "√"/],
     ['a blank in the answer', 'Q: Powerhouse of the cell\nA: Mito___', 2, 'error', /No ___ in the answer/],
-    ['Also same as the answer', 'Q: Highest mountain range in the world\nA: Himalayas\nAlso: The Himalayas', 3, 'error', /same as the answer/],
-    ['Also twice', 'Q: Brain of the computer\nA: Central Processing Unit\nAlso: CPU\nAlso: cpu', 4, 'error', /written twice/],
     ['two answers on one Also line', 'Q: Capital of West Bengal\nA: Kolkata\nAlso: Calcutta; Calcutta city', 3, 'error', /One answer per Also/],
     ['Fill with no blank', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: Plants take in carbon gas.', 3, 'error', /needs ___/],
     ['Fill with two blanks', 'Q: Gas plants take in\nA: Carbon dioxide\nFill: Plants take in ___ and give out ___.', 3, 'error', /Only one ___/],
@@ -529,5 +527,171 @@ describe('the question bank (behind the HoD desk)', () => {
     const back = setStatus(next, [c], 'pending', '', at);
     expect(back.questions.find((q) => q.id === c)).toMatchObject({ status: 'pending', note: '', reviewedAt: null });
     expect(bank.questions.every((q) => q.status === 'pending')).toBe(true); // the original is untouched (so undo works)
+  });
+});
+
+describe('what a pasted chatbot reply needs', () => {
+  const head = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n';
+  const good = 'Q: Instrument that measures temperature\nA: Thermometer\nFill: A ___ measures how hot something is.\nWrong: Barometer; Ammeter; Hygrometer\nLevel: easy';
+  const texts = (t: string) => format(t).issues.map((x) => x.text);
+
+  it("leaves out the chatbot's own sentences around its code block, and still reads what is in it", () => {
+    const reply = `Here are your questions for the chapter:\n\n\`\`\`\n${head}${good}\n\`\`\`\n\nI wrote these from general knowledge, so please check them before using them.`;
+    const { rows, issues } = format(reply);
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => r.answer)).toEqual(['Thermometer']);
+  });
+
+  it('without a code block, a stray sentence is still a problem', () => {
+    expect(texts(`${head}${good}\n\nI wrote these from general knowledge.`)).toEqual(['Start each question with Q:, and its answer on the next line with A:.']);
+  });
+
+  it('catches Yes, No, True and False with a full stop after them', () => {
+    expect(texts(`${head}Q: Does heat flow from hot to cold\nA: Yes.\nLevel: easy`)).toContain('Yes or No can\'t be an answer. Write a statement after Q: and "A: True" or "A: False".');
+    expect(texts(`${head}Q: Heat flows from hot to cold\nA: True.\nLevel: easy`)).toContain('Write the answer as True, with nothing after it.');
+  });
+
+  it('catches "(True/False)" anywhere in a question', () => {
+    expect(texts(`${head}Q: Heat flows from hot to cold (True/False)\nA: True\nLevel: easy`)).toEqual(['Write only the statement after Q:. "A: True" or "A: False" says the rest.']);
+  });
+
+  it('finds a repeated question the way the database does: a ? or a full stop at the end, or extra spaces, make no difference', () => {
+    const again = good.replace('temperature', 'temperature?').replace('Instrument that', 'Instrument  that');
+    expect(texts(`${head}${good}\n\n${again}`)).toEqual(['Same question as line 7. Leave one of them out.']);
+  });
+
+  it('says to use ";" when the wrong options are separated by commas', () => {
+    expect(texts(`${head}${good.replace('Barometer; Ammeter; Hygrometer', 'Barometer, Ammeter, Hygrometer')}`)).toEqual(['Separate the wrong options with ";", not commas.']);
+  });
+
+  it('says the labels must be in English when they are written in Hindi', () => {
+    expect(texts(`${head}प्रश्न: तापमान मापने का यंत्र\nउत्तर: थर्मामीटर`)[0]).toMatch(/^Write the labels in English/);
+  });
+});
+
+describe('a question that needs a picture', () => {
+  it('is caught when it says "look at the figure" or names a labelled part', () => {
+    const head = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n';
+    const rest = '\nA: Bulb\nFill: The ___ of a thermometer holds the mercury.\nWrong: Stem; Cap; Scale\nLevel: easy';
+    for (const q of ['Look at the figure and name the bulb', 'Name the part labelled A in a thermometer', 'According to the table, name the hottest place']) {
+      expect(format(`${head}Q: ${q}${rest}`).issues.map((x) => x.text), q).toContain("The question can't use a figure, diagram, map, table or passage: the games show only text.");
+    }
+  });
+});
+
+describe('an Also line that only repeats the answer', () => {
+  it('is left out quietly instead of stopping a good question: "s" for "(s)", "The Himalayas" for "Himalayas", a second "cpu"', () => {
+    const head = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Chemical Reactions and Equations\nTopic 1: Chemical Equations\n\n';
+    const { rows, issues } = format(`${head}Q: Symbol indicating that a substance is in solid state\nA: (s)\nAlso: s\nFill: The symbol ___ indicates that a substance is in solid state.\nWrong: (l); (g); (aq)\nLevel: easy\n\n`
+      + 'Q: Highest mountain range in the world\nA: Himalayas\nAlso: The Himalayas\nFill: Mount Everest is in the ___ range.\nWrong: Andes; Alps; Rockies\nLevel: easy\n\n'
+      + 'Q: Brain of the computer\nA: Central Processing Unit\nAlso: CPU\nAlso: cpu\nFill: The part that does a computer\'s thinking is the ___.\nWrong: Hard disk; Monitor; Keyboard\nLevel: easy');
+    expect(issues).toEqual([]);
+    expect(rows.map((r) => r.also)).toEqual([[], [], ['CPU']]);
+  });
+});
+
+describe('fixes from the review', () => {
+  const head = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Chemical Reactions and Equations\n';
+  const q = 'Q: Gas given off when zinc reacts with dilute sulphuric acid\nA: Hydrogen\nFill: Zinc reacts with dilute acid to give off ___ gas.\nWrong: Oxygen; Chlorine; Nitrogen\nLevel: easy';
+
+  it('refuses a long dash in a topic name', () => {
+    const { issues } = format(`${head}Topic 2: Euclid — Division Lemma\n\n${q}`);
+    expect(issues.map((x) => x.text)).toContain('No long dashes in a topic name: use a colon or a comma.');
+  });
+
+  it('finds a repeated question that differs only by an invisible character', () => {
+    const { issues } = format(`${head}Topic 1: Chemical Equations\n\n${q}\n\n${q.replace('Gas given', 'Gas​ given')}`);
+    expect(issues.map((x) => x.text)).toEqual(['Same question as line 7. Leave one of them out.']);
+  });
+
+  it('downloads a CSV whose cells a spreadsheet reads as text, never as a formula', () => {
+    const { rows } = format(`${head}Topic 1: Chemical Equations\n\nQ: =HYPERLINK("http://x","y")\nA: -5\nFill: The value here is ___ for sure.\nWrong: 5; 4; 3\nLevel: easy`);
+    const csv = toCSV(rows);
+    expect(csv).toContain(`"'=HYPERLINK(""http://x"",""y"")"`);
+    expect(csv).toContain(",'-5,");
+    expect(csv).not.toMatch(/,=|,\+|,@/);
+  });
+});
+
+describe('fixes from the second review', () => {
+  const head = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Chemical Reactions and Equations\nTopic 1: Chemical Equations\n\n';
+  const rest = '\nFill: Zinc reacts with dilute acid to give off ___ gas.\nWrong: Oxygen; Chlorine; Nitrogen\nLevel: easy';
+  const texts = (t: string) => format(t).issues.map((x) => x.text);
+
+  it('reads "Q1:", "Q 2." and "Q3)" as Q: labels', () => {
+    for (const label of ['Q1:', 'Q 2.', 'Q3)']) {
+      const { rows, issues } = format(`${head}${label} Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest}`);
+      expect(issues, label).toEqual([]);
+      expect(rows[0].question).toBe('Gas given off when zinc reacts with dilute acid');
+    }
+  });
+
+  it('reads Markdown-escaped underscores as the blank', () => {
+    const { rows, issues } = format(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest.replace('___', '\\_\\_\\_')}`);
+    expect(issues).toEqual([]);
+    expect(rows[0].fill).toBe('Zinc reacts with dilute acid to give off ___ gas.');
+  });
+
+  it('reads "Level: Medium." and "Level: medium (understanding)" as medium', () => {
+    for (const lv of ['Medium.', 'medium (understanding)']) {
+      const { rows, issues } = format(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest.replace('Level: easy', `Level: ${lv}`)}`);
+      expect(issues, lv).toEqual([]);
+      expect(rows[0].difficulty).toBe('medium');
+    }
+  });
+
+  it('says to move the answer when it is written on the Q: line', () => {
+    expect(texts(`${head}Q: Gas given off when zinc reacts with dilute acid? A: Hydrogen${rest}`)).toEqual(['The answer is on the Q: line. Put "A:" and the answer on a line of its own, under the question.']);
+  });
+
+  it('gives a number with a unit one error (move the unit), not a second one about the options', () => {
+    expect(texts(`${head}Q: Normal body temperature\nA: 37 °C\nFill: Normal body temperature is about ___ for a healthy person.\nWrong: 35; 39; 40\nLevel: easy`).filter((t) => /same kind/.test(t))).toEqual([]);
+  });
+
+  it('does not read a line starting "Subject-verb" as a Subject line', () => {
+    const { rows } = format(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen${rest}\n\nSubject-verb agreement is a stray note\n\nQ: Lightest gas of all\nA: Hydrogen${rest.replace('Zinc reacts with dilute acid to give off ___ gas.', 'The lightest gas of all is ___ here.')}`);
+    expect(rows.map((r) => r.subject)).toEqual(['Science', 'Science']);
+  });
+
+  it('counts only the Also lines that count towards the limit of 5', () => {
+    const also = ['Hydrogen gas', 'H2', 'H₂', 'Dihydrogen', 'Protium', 'hydrogen'].map((x) => `Also: ${x}`).join('\n');
+    expect(texts(`${head}Q: Gas given off when zinc reacts with dilute acid\nA: Hydrogen\n${also}${rest}`).filter((t) => /At most 5/.test(t))).toEqual([]);
+  });
+
+  it('allows "the passage of time"', () => {
+    expect(texts(`${head}Q: Change that happens with the passage of time in iron left in moist air\nA: Rusting${rest.replace('Zinc reacts with dilute acid to give off ___ gas.', 'Iron left in moist air slowly undergoes ___ over months.')}`)).toEqual([]);
+  });
+});
+
+describe('what the page is unsure of goes to the HoD, without stopping the question', () => {
+  const head = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 1: Hot and Cold\n\n';
+  const block = (q: string, a: string, wrong = 'Mumbai; Chennai; Delhi', fill = 'The answer to this one is ___ here.') => `${head}Q: ${q}\nA: ${a}\nFill: ${fill}\nWrong: ${wrong}\nLevel: easy`;
+  const read = (t: string) => { const { rows, issues } = format(t); return { issues: issues.map((x) => x.text), doubts: doubts(rows[0]) }; };
+
+  it('two answers joined by "or" or a slash', () => {
+    for (const a of ['Kolkata or Calcutta', 'Kolkata/Calcutta']) {
+      const r = read(block('Capital of West Bengal', a));
+      expect(r.issues, a).toEqual([]);
+      expect(r.doubts[0], a).toMatch(/may be two answers/);
+    }
+    expect(read(block('Speed is measured in', 'km/h', '1/2; m/s; kg/m')).doubts).toEqual([]);
+  });
+
+  it('"in the map" is flagged, while "look at the figure" is still refused', () => {
+    const map = read(block('Ratio of a distance in the map to the real distance', 'Scale', 'Legend; Grid; Key'));
+    expect(map.issues).toEqual([]);
+    expect(map.doubts[0]).toMatch(/"in the map"/);
+    expect(read(block('Look at the figure and name the bulb', 'Bulb', 'Stem; Cap; Scale')).issues[0]).toMatch(/can't use a figure/);
+  });
+
+  it('a full stop on only some of the answer and options', () => {
+    expect(read(block('Lightest gas', 'Hydrogen.', 'Oxygen; Nitrogen; Helium')).doubts[0]).toMatch(/full stop/);
+    expect(read(block('Lightest gas', 'Hydrogen', 'Oxygen; Nitrogen; Helium')).doubts).toEqual([]);
+  });
+
+  it('a wrong option that contains the answer', () => {
+    const r = read(block('Lightest gas', 'Hydrogen', 'Hydrogen gas; Nitrogen; Helium'));
+    expect(r.issues).toEqual([]);
+    expect(r.doubts).toEqual(['The wrong option "Hydrogen gas" contains the answer "Hydrogen": check that it isn\'t partly right.']);
   });
 });

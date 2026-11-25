@@ -2,6 +2,15 @@
   "trailingSlash": false,
   "headers": [
     {
+      "source": "/games/instructions.md",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        }
+      ]
+    },
+    {
       "source": "/assets/(.*)",
       "headers": [
         {

@@ -89,6 +89,11 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   problem is on the line to fix and says what to change, and a question with
   any problem (red or amber) isn't sent. Send then offers "Remove those and
   send" or "Copy prompt to fix them" (`fixPrompt` in `prompt.ts`).
+- **What the page can't be sure of goes to the HoD** (`doubts` in `format.ts`): an answer that may be two
+  answers ("Kolkata or Calcutta"), "in the map" or "from the table", a full stop on only some of the answer and
+  options, a wrong option that contains the answer. These don't stop a question: Write questions shows "Sent with
+  a note for the HoD", and Approve questions works out the same notes from the question and shows "Please check".
+  Nothing is stored, so it needs no database change. Clear mistakes stay errors.
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options
@@ -98,10 +103,23 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
-- **The chatbot prompt is made for one chapter** on the list (its lines and
-  topics, nothing else; for an open chapter it asks the chatbot to divide the
-  questions into topics, keeping those already in use) and states every rule
-  the checker applies.
-  `lib/games/prompt.test.ts` fails if the labels, limits, levels or examples
-  drift from the checker. Change `prompt.ts`, `Guide.tsx` and `format.ts`
-  together.
+- **The chatbot prompt is short and made for one chapter** on the list: it
+  sends the chatbot to the rules at `https://www.shikshaq.in/games/instructions.md`
+  (`INSTRUCTIONS_URL` in `prompt.ts`) and gives what that page can't know: the
+  chapter's lines, its topics (fixed, already in use, or none given, in the
+  page's own words) and a place for the teacher's material.
+  `lib/games/prompt.test.ts` fails if the prompt, the page, the labels, limits,
+  levels or examples drift from the checker. Change `prompt.ts`,
+  `public/games/instructions.md`, `Guide.tsx` and `format.ts` together.
+- **The rules page (the question-writing skill):** `public/games/instructions.md`, served at
+  `/games/instructions.md` as plain text (`vercel.json` sets `text/plain`). One set of rules for any
+  chatbot, for every way it is used: the copied prompt links to it, and teachers can paste it whole into
+  ChatGPT, Gemini or Claude. Its top line has the date it was last updated and a version number (with any change, update both
+  and add the change to the list in `docs/GAMES_SKILL_TEST_KIT.md`). Replies start with "Written with Shikshaq's
+  question guide", the number of questions and the chapter, which shows the chatbot read the page, ends with an empty "End of instructions" heading
+  that the copied prompt names as the end of the page, and covers when to use it, the 5 steps, a question-by-question check, long chapters over several replies,
+  fixing rejected questions, and parts A (choosing questions), B (trimming answers) and C (good and bad
+  examples with the page's messages). `prompt.test.ts` checks its limits, its worked example and every
+  good block in part C against the checker. `docs/GAMES_SKILL_TEST_KIT.md` is the test to rerun in
+  fresh chats after a change. The checker leaves out a chatbot's own sentences around its code block,
+  so a whole reply can be pasted.

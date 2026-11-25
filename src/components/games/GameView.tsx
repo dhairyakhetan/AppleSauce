@@ -5,7 +5,7 @@ import type { Choice } from '@/lib/games/engine/choice';
 import type { Crossword } from '@/lib/games/engine/crossword';
 import type { FillIn } from '@/lib/games/engine/fill';
 import type { Matching } from '@/lib/games/engine/matching';
-import { mark, type Mark } from '@/lib/games/engine/answers';
+import { mark, sameAnswer, type Mark } from '@/lib/games/engine/answers';
 import { loose } from '@/lib/games/engine/shared';
 import type { WordSearch } from '@/lib/games/engine/wordsearch';
 import { cn } from '@/lib/utils';
@@ -116,12 +116,17 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
   /** right: a point; almost: a spelling slip, half a point; shown: the answer was revealed, no point. */
   const [state, setState] = useState<Record<string, Mark | 'shown'>>({});
   const [tries, setTries] = useState<Record<string, number>>({});
+  /** The answers already marked wrong for each question: the same answer again (Enter twice, Check all) is not a new try. */
+  const wrongSeen = useRef<Record<string, string[]>>({});
   const check = (r: FillIn['rows'][number]) => {
     const v = typed[r.id] ?? '';
     if (!v.trim() || (state[r.id] && state[r.id] !== 'wrong')) return;
+    // compared the way answers are marked, so "5" then "-5" (or "x 2" then "x^2") are two different answers
+    const seen = (wrongSeen.current[r.id] ??= []);
+    if (seen.some((p) => sameAnswer(v, p))) { setState((s) => ({ ...s, [r.id]: 'wrong' })); return; }
     const m = mark(v, r, g.rows.filter((o) => o.id !== r.id));
     setState((s) => ({ ...s, [r.id]: m }));
-    if (m === 'wrong') setTries((t) => ({ ...t, [r.id]: (t[r.id] ?? 0) + 1 }));
+    if (m === 'wrong') { seen.push(v); setTries((t) => ({ ...t, [r.id]: (t[r.id] ?? 0) + 1 })); }
   };
   const solved = g.rows.filter((r) => state[r.id] && state[r.id] !== 'wrong').length;
   const score = g.rows.reduce((n, r) => n + (state[r.id] === 'right' ? 1 : state[r.id] === 'almost' ? 0.5 : 0), 0);
@@ -296,6 +301,7 @@ function WordSearchGame({ g, onNext, compact }: { g: WordSearch } & Required<Pro
               drag.current = c;
               setPath([c]);
             }}
+            onPointerCancel={() => { drag.current = null; moved.current = false; setPath([]); }}
             onPointerMove={(e) => {
               if (!drag.current) return;
               const c = cellAt(e.clientX, e.clientY);
@@ -355,6 +361,8 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
   const clue = clueAt(cur.r, cur.c, cur.dir) ?? clueAt(cur.r, cur.c, cur.dir === 'across' ? 'down' : 'across')!;
   const inWord = new Set(cellsOfClue(clue).map(([y, x]) => `${y},${x}`));
   const done = g.grid.every((row, r) => [...row].every((ch, c) => ch === '#' || letters[r][c] === ch));
+  /** After Check: how many filled squares are wrong, said aloud for screen readers (the grid shows them in red). */
+  const wrongLetters = g.grid.reduce((n, row, r) => n + [...row].filter((ch, c) => ch !== '#' && letters[r][c] && letters[r][c] !== ch).length, 0);
 
   useEffect(() => { if (active) input.current?.focus({ preventScroll: true }); }, [cur, active]);
 
@@ -414,8 +422,9 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
     <>
       <How compact={compact}>Tap a square and type. Tap it again to switch between across and down.</How>
       <Progress done={filled} total={g.clues.length}>
-        <button type="button" className={chip('quiet')} onClick={() => setChecked(true)}>Check</button>
-        <button type="button" className={chip('quiet')} onClick={() => reveal(cellsOfClue(clue))}>Reveal word</button>
+        <button type="button" className={chip('quiet')} onClick={() => { setChecked(true); input.current?.focus({ preventScroll: true }); }}>Check</button>
+        <span className="sr-only" aria-live="polite">{checked ? (wrongLetters ? `${plural(wrongLetters, 'letter is', 'letters are')} wrong.` : 'No wrong letters.') : ''}</span>
+        <button type="button" className={chip('quiet')} onClick={() => { reveal(cellsOfClue(clue)); input.current?.focus({ preventScroll: true }); }}>Reveal word</button>
       </Progress>
       <p className={cn('rounded-2xl bg-panel px-4 py-3 text-background shadow-pill', compact ? 'text-[13px]' : 'sticky top-20 z-10 text-[15px]')} aria-live="polite">
         <b className="text-brand">{clue.n} {clue.dir}</b> {clue.clue} <span className="text-background/60">{clue.enumeration}</span>
@@ -429,7 +438,7 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
               const v = letters[r][c];
               const bad = checked && v && v !== ch;
               return (
-                <button key={k} type="button" data-r={r} data-c={c} aria-label={`Row ${r + 1}, column ${c + 1}${v ? `, ${v}` : ''}`}
+                <button key={k} type="button" tabIndex={-1} data-r={r} data-c={c} aria-label={`Row ${r + 1}, column ${c + 1}${v ? `, ${v}` : ''}`}
                   className={cn('games-cw-cell', inWord.has(k) && 'word', r === cur.r && c === cur.c && 'cur', bad && 'bad', done && 'done')}
                   onClick={(e) => { e.stopPropagation(); select(r, c); }}>
                   {numberAt.has(k) && <span className="games-cw-n">{numberAt.get(k)}</span>}

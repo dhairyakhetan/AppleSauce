@@ -18,7 +18,7 @@ export function ActionIcon({ done, children }: { done: boolean; children: ReactN
 }
 
 /** The rows as they will be stored, grouped under a heading for each chapter and topic. */
-export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, rowClass, games, problem }: {
+export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, rowClass, games, problem, doubts, doubtsLabel = 'Please check', oneChapter = false }: {
   rows: R[];
   /** A stable key per row, so rows that leave or arrive don't disturb the others. */
   keyOf?: (r: R, i: number) => string | number;
@@ -29,6 +29,11 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
   games?: (r: R, i: number) => string[];
   /** A row that needs fixing: marked red (or amber), and not sent. */
   problem?: (r: R, i: number) => 'error' | 'warn' | undefined;
+  /** Things the page can't be sure are wrong, for the HoD to decide (`doubts` in format.ts), and what to call them. */
+  doubts?: (r: R) => string[];
+  doubtsLabel?: string;
+  /** The rows are one chapter, already named above them (Approve questions' chapter rows): no chapter heading. */
+  oneChapter?: boolean;
 }) {
   // rows rise in as they are added: on the first render one after another, briefly; later only a new row
   const first = useRef(true);
@@ -43,6 +48,7 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
     if (ch !== chapter || i === 0) {
       chapter = ch;
       topic = '';
+      if (oneChapter) { /* named above */ } else {
       const title = r.chapter || r.chapter_no !== null ? [r.chapter_no !== null && `Chapter ${r.chapter_no}`, r.chapter].filter(Boolean).join(': ') : 'No chapter';
       const meta = [r.board, r.class && `Class ${r.class}`, r.subject].filter(Boolean).join(' · ');
       out.push(
@@ -51,6 +57,7 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
           {meta && <span className="text-[12px] text-warm-meta">{meta}</span>}
         </div>,
       );
+      }
     }
     const tp = `${r.topic_no}\u0000${r.topic}`;
     if (tp !== topic) {
@@ -66,12 +73,14 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
     }
     const bad = problem?.(r, i);
     const plays = games?.(r, i);
+    const unsure = bad ? [] : doubts?.(r) ?? [];
     out.push(
       <div
         className={cn('animate-fade-slide-up grid grid-cols-[1.75rem_1fr] gap-x-2 gap-y-1 border-b border-border/70 py-2 transition-opacity duration-200 sm:grid-cols-[1.75rem_minmax(0,3fr)_minmax(0,2fr)_auto]',
           bad && 'border-l-4 pl-1', bad === 'error' && 'border-l-destructive', bad === 'warn' && 'border-l-brand', rowClass?.(r))}
         style={delay(shown++)}
         key={keyOf(r, i)}
+        data-line={(r as { line?: number }).line}
       >
         <span className="pt-0.5 text-right text-[12px] tabular-nums text-warm-meta">{r.question_no}</span>
         <span className="min-w-0 break-words text-[14px] text-foreground">
@@ -94,6 +103,11 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
             {bad ? <span className={bad === 'error' ? 'font-semibold text-destructive' : 'font-semibold text-brand-deep'}>Needs fixing: not sent as it is</span>
               : plays!.length ? <>Plays in: {plays!.join(' · ')}</> : 'Plays in no game'}
           </p>
+        )}
+        {unsure.length > 0 && (
+          <div className="col-span-full ml-9 rounded-lg bg-brand-blue-subtle px-2 py-1 text-[12px] text-brand-blue-deep sm:col-start-2 sm:ml-0">
+            <b>{doubtsLabel}:</b> {unsure.join(' ')}
+          </div>
         )}
         {extra && <div className="col-span-full pl-9 sm:col-start-2">{extra(r)}</div>}
       </div>,

@@ -1,8 +1,9 @@
 /**
  * Matching: questions on one side, answers on the other, both shuffled. A pair is correct when both sides have the same id.
- * Two questions with the same answer would make it ambiguous, so only one of them is used.
+ * Two questions with the same answer would make it ambiguous, so only one of them is used. "The same" counts every answer
+ * that is accepted for a question, its Also answers too: "H2" (also "Hydrogen") and "Hydrogen" are the same answer.
  */
-import { loose, shuffle, type Item } from './shared';
+import { answersOf, loose, shuffle, type Item } from './shared';
 
 export const MATCHING = { min: 3, max: 8 } as const;
 
@@ -18,10 +19,10 @@ export function makeMatching(items: Item[], r: () => number): Matching | null {
   const chosen: Item[] = [];
   for (const it of shuffle(items, r)) {
     if (chosen.length === MATCHING.max) break;
-    const a = loose(it.answer);
+    const all = answersOf(it).map(loose).filter(Boolean);
     const q = loose(it.question);
-    if (!a || !q || answers.has(a) || questions.has(q)) continue;
-    answers.add(a);
+    if (!loose(it.answer) || !q || all.some((a) => answers.has(a)) || questions.has(q)) continue;
+    for (const a of all) answers.add(a);
     questions.add(q);
     chosen.push(it);
   }
@@ -52,6 +53,13 @@ export function checkMatching(g: Matching, items: Item[]): string[] {
   for (const x of g.right) { const it = byId.get(x.id); if (!it || it.answer !== x.text) out.push(`answer ${x.id} is not the bank's text`); }
   const shownAnswers = g.right.map((x) => loose(x.text));
   if (new Set(shownAnswers).size !== shownAnswers.length) out.push('two answers are the same, so a question has two right matches');
+  // an answer shown for one question that another question also accepts (as its answer or an Also answer)
+  for (const x of g.right) {
+    for (const y of g.left) {
+      const other = byId.get(y.id);
+      if (y.id !== x.id && other && answersOf(other).some((a) => loose(a) === loose(x.text))) out.push(`answer ${x.id} is also right for question ${y.id}`);
+    }
+  }
   const shownQuestions = g.left.map((x) => loose(x.text));
   if (new Set(shownQuestions).size !== shownQuestions.length) out.push('two questions are the same');
   if (n > 1 && leftIds.every((id, i) => rightIds[i] === id)) out.push('answers are in the same order as the questions');

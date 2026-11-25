@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
-import { Check, Download } from 'lucide-react';
+import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Check, ChevronDown, Download } from 'lucide-react';
 import { nextTabKey } from '@/components/admin/AdminTabs';
 import { APPROVED_PAGE, type GamesApi, type SaveResult } from '@/lib/games/api';
-import { counts, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Status } from '@/lib/games/rows';
+import { counts, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Batch, type Status } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { btn, chip, download, FIELD, offerUndo, plural, when } from './helpers';
 import { Empty, Loading, LoadFailed, RowsTable } from './shared';
+import { doubts } from '@/lib/games/format';
 
 /* Approve questions: batches sent from Write questions wait here until an HoD approves each question or sends it back
-   with a reason the teacher sees. Approved questions go into the question bank the games use. Waiting and sent-back
-   questions load at once; approved ones a page at a time, newest first, as they're needed. Every change is saved at
+   with a reason the teacher sees. Approved questions go into the question bank the games use. Waiting questions show
+   by batch. Approved and sent-back ones show one row per chapter, the most recently changed first, 10 at a time; a row
+   opens to its questions, and (admins, approved) to a download of that chapter. Waiting and sent-back questions load at
+   once; approved ones a page at a time, newest first, as they're needed. Every change is saved at
    once and can be undone for a few seconds. The database checks that the person is an HoD or admin on every call. */
 
 const TABS: { key: Status; label: string }[] = [{ key: 'pending', label: 'Waiting' }, { key: 'approved', label: 'Approved' }, { key: 'rejected', label: 'Sent back' }];
@@ -23,7 +26,7 @@ const merge = (b: Bank, more: Bank): Bank => {
 /** Puts these questions back as they were. */
 const restore = (b: Bank, qs: BankQuestion[]): Bank => ({ ...b, questions: b.questions.map((q) => qs.find((o) => o.id === q.id) ?? q) });
 
-/** `onWaiting` puts the number waiting on the Approve link. `canDownload`: admins can download the question bank. */
+/** `onWaiting` puts the number waiting on the Approve link. `canDownload`: admins can download a chapter's approved questions. */
 export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesApi; onWaiting: (n: number) => void; canDownload: boolean }) {
   const [bank, setBank] = useState<Bank | null>(null); // the page's copy: waiting, sent back, and the approved pages loaded
   const [error, setError] = useState('');
@@ -66,12 +69,15 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
     load();
   };
   const refresh = () => { setBank(null); load(); };
-  /** The whole question bank as a file, straight from the database. */
-  const downloadBank = (csv: boolean) => {
+  /** One chapter's approved questions as a file, straight from the database (so it has all of them, not only the
+   * pages loaded here). */
+  const downloadChapter = (chapterId: string, csv: boolean) => {
     setDownloading(true);
     api.loadQuestionBank()
-      .then((rows) => (csv ? download('approved-questions.csv', toCSV(rows), 'text/csv') : download('approved-questions.json', toJSON(rows), 'application/json')),
-        (e: Error) => setSaveError(`Couldn't download the question bank: ${e.message}`))
+      .then((all) => {
+        const rows = all.filter((q) => q.chapter_id === chapterId);
+        return csv ? download(`${chapterId}-approved.csv`, toCSV(rows), 'text/csv') : download(`${chapterId}-approved.json`, toJSON(rows), 'application/json');
+      }, (e: Error) => setSaveError(`Couldn't download the chapter: ${e.message}`))
       .finally(() => setDownloading(false));
   };
 
@@ -200,7 +206,7 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
             </div>
             {whyBox(`batch:${b.id}`, qs.map((q) => q.id))}
             <div className="rounded-2xl bg-card p-3 sm:p-4">
-              <RowsTable rows={qs} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} />
+              <RowsTable rows={qs} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} doubts={(q) => doubts(q)} />
             </div>
           </section>
         )) : (
@@ -212,16 +218,8 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
 
         {tab !== 'pending' && (shown.length ? (
           <section className="flex flex-col gap-3 rounded-[24px] bg-muted p-4 sm:p-6">
-            {tab === 'approved' && canDownload && (
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={btn('card')} disabled={downloading} onClick={() => downloadBank(true)}><Download aria-hidden /> Download CSV</button>
-                <button type="button" className={btn('card')} disabled={downloading} onClick={() => downloadBank(false)}><Download aria-hidden /> Download JSON</button>
-              </div>
-            )}
-            <div className="rounded-2xl bg-card p-3 sm:p-4">
-              <RowsTable rows={[...shown].sort((x, y) => (x.chapter_id ?? '').localeCompare(y.chapter_id ?? '') || (x.topic_no ?? 0) - (y.topic_no ?? 0) || x.question_no - y.question_no)}
-                keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} />
-            </div>
+            <ChapterList key={tab} questions={shown} batches={bank.batches} rowActions={rowActions} rowClass={rowClass}
+              download={tab === 'approved' && canDownload ? { busy: downloading, run: downloadChapter } : undefined} />
             {tab === 'approved' && !older.done && (
               <button type="button" className={btn('card', 'w-fit')} disabled={older.loading} onClick={loadOlder}>{older.loading ? 'Loading…' : 'Show older approved questions'}</button>
             )}
@@ -233,5 +231,75 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
         ))}
       </div>
     </div>
+  );
+}
+
+/** How many chapters the Approved and Sent back tabs show before "Show more chapters". */
+const CHAPTERS_SHOWN = 10;
+
+/**
+ * Approved or sent-back questions, one row per chapter (board, class, subject and chapter), the chapter changed most
+ * recently first. A row opens to its questions, and, for approved questions, to a download of that chapter.
+ */
+function ChapterList({ questions, batches, rowActions, rowClass, download: dl }: {
+  questions: BankQuestion[];
+  batches: Batch[];
+  rowActions: (q: BankQuestion) => ReactNode;
+  rowClass: (q: BankQuestion) => string;
+  download?: { busy: boolean; run: (chapterId: string, csv: boolean) => void };
+}) {
+  const [open, setOpen] = useState<string | null>(null); // one chapter open at a time
+  const [limit, setLimit] = useState(CHAPTERS_SHOWN);
+  const sentAt = new Map(batches.map((b) => [b.id, b.at]));
+  const groups = new Map<string, BankQuestion[]>();
+  for (const q of questions) {
+    const k = q.chapter_id ?? [q.board, q.class, q.subject, q.chapter_no, q.chapter].join('|');
+    groups.set(k, [...(groups.get(k) ?? []), q]);
+  }
+  // most recent first: when a question in it was last approved or sent back (or else sent)
+  const latest = (qs: BankQuestion[]) => qs.reduce((m, q) => { const t = q.reviewedAt ?? sentAt.get(q.batch) ?? ''; return t > m ? t : m; }, '');
+  const list = [...groups].map(([k, qs]) => ({ k, qs, at: latest(qs) })).sort((x, y) => y.at.localeCompare(x.at));
+  const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
+
+  return (
+    <>
+      <ul className="flex flex-col gap-2">
+        {list.slice(0, limit).map(({ k, qs, at }) => {
+          const q0 = qs[0];
+          const isOpen = open === k;
+          const title = [q0.chapter_no !== null && `Chapter ${q0.chapter_no}`, q0.chapter].filter(Boolean).join(': ') || 'No chapter';
+          const meta = [q0.board, q0.class && `Class ${q0.class}`, q0.subject].filter(Boolean).join(' · ');
+          return (
+            <li key={k} className="rounded-2xl bg-card">
+              <button type="button" aria-expanded={isOpen} onClick={() => toggle(k)}
+                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus sm:p-4">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-[12px] text-warm-meta">{meta}</span>
+                  <b className="text-[15px] text-foreground">{title}</b>
+                </span>
+                <span className="text-[13px] text-warm-secondary">{plural(qs.length, 'question')}{at ? ` · ${when(at)}` : ''}</span>
+                <ChevronDown className={cn('size-4 shrink-0 text-warm-secondary transition-transform duration-200', isOpen && 'rotate-180')} aria-hidden />
+              </button>
+              {isOpen && (
+                <div className="flex flex-col gap-3 border-t border-border px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
+                  {dl && q0.chapter_id && (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={btn('card')} disabled={dl.busy} onClick={() => dl.run(q0.chapter_id!, true)}><Download aria-hidden /> Download this chapter (CSV)</button>
+                      <button type="button" className={btn('card')} disabled={dl.busy} onClick={() => dl.run(q0.chapter_id!, false)}><Download aria-hidden /> JSON</button>
+                    </div>
+                  )}
+                  <RowsTable rows={[...qs].sort((x, y) => (x.topic_no ?? 0) - (y.topic_no ?? 0) || x.question_no - y.question_no)} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} oneChapter />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {list.length > limit && (
+        <button type="button" className={btn('card', 'w-fit')} onClick={() => setLimit((n) => n + CHAPTERS_SHOWN)}>
+          Show more chapters ({list.length - limit} more)
+        </button>
+      )}
+    </>
   );
 }

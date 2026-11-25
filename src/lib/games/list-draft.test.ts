@@ -180,4 +180,9 @@ describe('the draft of a subject\'s chapters', () => {
     expect(problems.find((p) => p.line === 8)!.text).toBe('Chapter 2 is "From Trade to Territory". Give the new one another number.');
     expect(problems.find((p) => p.line === 10)!.text).toBe('No dashes in a name: use a colon or a comma.');
   });
+
+  it('Bulk add refuses a chapter number over 99 instead of reading it as part of the name', () => {
+    const { problems } = readBulk(['Board: CBSE', 'Class: 8', 'Subject: History', '100. Big'].join('\n'), LOADED);
+    expect(problems.map((p) => [p.line, p.text])).toEqual([[4, 'A number must be from 1 to 99.']]);
+  });
 });

@@ -111,9 +111,14 @@ export const realGamesApi: GamesApi = {
     const ready = rows.filter((r) => r.chapter_id && r.chapter).map(toRecord);
     const out: SendResult = { batchIds: [], sent: 0, already: 0, sentBack: 0, sentBackIds: [] };
     for (let i = 0; i < ready.length; i += BATCH_MAX) {
-      const r = await ask<{ batch_id: string | null; sent: number; already: number; sent_back: number; sent_back_ids: string[] }>(
-        db().rpc('submit_batch', { questions: ready.slice(i, i + BATCH_MAX) }),
-      );
+      let r: { batch_id: string | null; sent: number; already: number; sent_back: number; sent_back_ids: string[] };
+      try {
+        r = await ask(db().rpc('submit_batch', { questions: ready.slice(i, i + BATCH_MAX) }));
+      } catch (e) {
+        // more than one batch, and a later one failed: say that the earlier ones went through
+        if (out.sent) throw new Error(`${(e as Error).message} The first ${out.sent} questions were sent before this; send again for the rest (those already sent are skipped).`);
+        throw e;
+      }
       if (r.batch_id) out.batchIds.push(r.batch_id);
       out.sent += r.sent;
       out.already += r.already;

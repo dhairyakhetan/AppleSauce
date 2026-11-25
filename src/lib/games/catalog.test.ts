@@ -124,3 +124,14 @@ describe('the list of chapters and topics', () => {
     expect(check(`Topic 1: Hot and Cold\n${qa('Unit of temperature', 'Celsius')}`).issues).toEqual([]);
   });
 });
+
+describe('an unnumbered topic whose name the list already has', () => {
+  it('is told the number the list gives it, not a new number', () => {
+    const ch = { chapter_id: 'CBSE10SCI01', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1, name: 'Chemical Reactions and Equations', open: true,
+      topics: [{ topic_id: 'CBSE10SCI01T01', topic_no: 1, name: 'Chemical Equations' }, { topic_id: 'CBSE10SCI01T02', topic_no: 2, name: 'Types of Reactions' }, { topic_id: 'CBSE10SCI01T03', topic_no: 3, name: 'Oxidation' }] };
+    const text = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Chemical Reactions and Equations\nTopic: Oxidation\n\nQ: Gain of oxygen by a substance\nA: Oxidation reaction\nFill: The gain of oxygen in a reaction is called ___ here.\nWrong: Reduction; Combination; Decomposition\nLevel: easy';
+    const { rows } = format(text);
+    const { issues } = checkList(text, rows, [ch]);
+    expect(issues.map((x) => x.fix)).toEqual(['Change it to "Topic 3: Oxidation", its number in this chapter.']);
+  });
+});

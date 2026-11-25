@@ -19,6 +19,8 @@ export interface Item {
   fill?: string | null;
   /** Multiple choice: the wrong options, as the writer wrote them. */
   wrong?: readonly string[];
+  /** The writer's level: easy, medium or hard. Puzzles keep hard questions to a third (`balanced` in index.ts). */
+  level?: string | null;
 }
 
 /**
