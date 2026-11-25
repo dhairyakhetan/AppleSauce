@@ -410,6 +410,20 @@ export function parseNumbered(s: string, kind: 'chapter' | 'topic'): { no: numbe
 }
 
 /** A chapter or topic: its number (null when missing or out of range), its name capitalised, and any problem. */
+/**
+ * A board, class or subject written the site's way, when there is one clear answer: its own spelling and capitals
+ * ("cBsE" → CBSE, "maths" → Mathematics, "X" or "10th" → 10), or the one name a typo is a letter or two away from
+ * ("cbsu" → CBSE). Null when there is nothing sure to change it to. The autocorrect in the Questions box uses it.
+ */
+export function fixDetail(k: 'board' | 'class' | 'subject', value: string): string | null {
+  if (!value.trim()) return null;
+  if (k === 'class') { const c = checkClass(value).value; return c === null ? null : String(c); }
+  const r = k === 'board' ? checkBoard(value) : checkSubject(value);
+  if (r.code) return r.name;
+  const near = r.problem?.text.match(/^Did you mean (.+)\?$/)?.[1];
+  return near ?? null;
+}
+
 export function checkNumbered(value: string, kind: 'chapter' | 'topic'): { no: number | null; name: string; problem?: Problem } {
   const { no, name } = parseNumbered(value, kind);
   const Kind = kind === 'chapter' ? 'Chapter' : 'Topic';

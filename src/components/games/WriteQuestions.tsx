@@ -7,6 +7,7 @@ import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
 import { usableIn } from '@/lib/games/engine';
 import { asText, doubts, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
 import { chatbotPrompt, fixPrompt } from '@/lib/games/prompt';
+import { tidyText } from '@/lib/games/tidy';
 import { type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -115,6 +116,14 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     setTypingLine(line);
   };
   const details = readDetails(raw);
+  /**
+   * The chapter lines the text last had: the autocorrect puts one back at the top if it is deleted (once the writer has
+   * moved below the top lines). A pick, Clear or Try an example sets them; typing a new one replaces it.
+   */
+  const keep = useRef<Partial<Record<DetailKey, string>>>({});
+  useEffect(() => { for (const k of DETAIL_KEYS) if (details[k].trim()) keep.current[k] = details[k]; });
+  const remember = (t: string) => { keep.current = { ...readDetails(t) }; return t; };
+  const autoFix = (text: string, at: number | null) => tidyText(text, { list: catalog.list ?? [], caret: at, keep: keep.current });
   const gaps = missing(rows);
   // a chapter whose topics the list leaves open needs no Topic line
   const topicless = new Set(catalog.list?.filter(isOpen).map((c) => c.chapter_id));
@@ -187,7 +196,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
         box.current?.focus({ preventScroll: true });
       });
     }
-    setRaw(next);
+    setRaw(remember(next));
     setExample(isExample);
     setBatch((b) => b + 1);
   };
@@ -354,7 +363,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     let t = k === 'chapter'
       ? writeDetail(r, 'chapter', (() => { const c = listed.find((x) => String(x.chapter_no) === v); return c ? `${c.chapter_no}: ${c.name}` : ''; })())
       : writeDetail(r, k, v);
-    if (k === 'chapter') return t;
+    if (k === 'chapter') return remember(t);
     const fits = (d: Record<DetailKey, string>, upTo: 'class' | 'subject') => list.some((c) => c.board === checkBoard(d.board).name
       && c.class === checkClass(d.class).value && (upTo === 'class' || c.subject === checkSubject(d.subject).name));
     let d = readDetails(t);
@@ -364,7 +373,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     d = readDetails(t);
     const typedCh = parseNumbered(d.chapter, 'chapter');
     if (d.chapter && !chaptersFor(list, d.board, d.class, d.subject).some((c) => c.chapter_no === typedCh.no && sameName(c.name, typedCh.name))) t = writeDetail(t, 'chapter', '');
-    return t;
+    return remember(t);
   });
 
   /** One dropdown. `needs`: the box to fill in first (it says so, and on hover), or null when it can be used. */
@@ -432,6 +441,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
                       aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
                       onChange={(e) => {
                         const v = e.target.value;
+                        keep.current[k] = v;
                         setRaw((r) => writeDetail(r, k, v));
                         // a box's warning waits until it is left, or until typing pauses
                         setTypingBox(k);
@@ -464,7 +474,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
-            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} />
+            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} autoFix={autoFix} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={btn('card')} onClick={() => replaceAll(EXAMPLE, 'Example loaded', true)}>Try an example</button>
@@ -725,7 +735,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
-function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine }: {
+function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine, autoFix }: {
   value: string;
   onChange: (v: string) => void;
   /** A paste; `all` when it replaces all the text (or the box was empty). */
@@ -739,9 +749,56 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
   setCaret: (line: number) => void;
   /** The box was scrolled: the line now at its top. */
   onTopLine?: (line: number) => void;
+  /** The autocorrect: the text with its sure fixes, and where the caret goes (`at` null when the box isn't being typed in). */
+  autoFix?: (text: string, at: number | null) => { text: string; caret: number | null };
 }) {
   const back = useRef<HTMLDivElement>(null);
   const pasted = useRef(false); // a paste is finished text: check all of it at once
+
+  /*
+   * The autocorrect runs a second after typing stops, and when the box is left. While the box is being typed in, the
+   * change goes in as an edit of the box (so Ctrl+Z undoes it, and what was typed before it), only the part that
+   * changed, and the caret's line stays where it was on screen.
+   */
+  const fixing = useRef(false);
+  const fixTimer = useRef(0);
+  const runFix = (focused: boolean) => {
+    const ta = boxRef.current;
+    if (!ta || !autoFix) return;
+    if (focused && ta.selectionStart !== ta.selectionEnd) return; // something is selected: leave it until later
+    const old = ta.value;
+    const at = focused ? ta.selectionStart : null;
+    const fixed = autoFix(old, at);
+    if (fixed.text === old) return;
+    const next = fixed.text;
+    if (!focused) { onChange(next); return; }
+    let a = 0;
+    while (a < old.length && a < next.length && old[a] === next[a]) a++;
+    let b = 0;
+    while (b < old.length - a && b < next.length - a && old[old.length - 1 - b] === next[next.length - 1 - b]) b++;
+    const top = ta.scrollTop;
+    const linesBefore = (t: string, i: number) => t.slice(0, i).split('\n').length;
+    const moved = at !== null && fixed.caret !== null ? linesBefore(next, fixed.caret) - linesBefore(old, at) : 0;
+    fixing.current = true;
+    ta.setSelectionRange(a, old.length - b);
+    const middle = next.slice(a, next.length - b);
+    let ok = false;
+    try { ok = document.execCommand(middle ? 'insertText' : 'delete', false, middle); } catch { ok = false; }
+    fixing.current = false;
+    if (!ok || ta.value !== next) onChange(next);
+    const c = fixed.caret ?? next.length;
+    requestAnimationFrame(() => {
+      ta.setSelectionRange(c, c);
+      ta.scrollTop = top + moved * (parseFloat(getComputedStyle(ta).lineHeight) || 24);
+      sync();
+    });
+  };
+  useEffect(() => {
+    clearTimeout(fixTimer.current);
+    fixTimer.current = window.setTimeout(() => runFix(document.activeElement === boxRef.current), 1000);
+    return () => clearTimeout(fixTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, caret]);
 
   const sync = () => {
     const ta = boxRef.current;
@@ -798,10 +855,11 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
         <textarea id="q" ref={boxRef} spellCheck={false} value={value} aria-invalid={errors > 0} aria-describedby="caret-note"
           onChange={(e) => {
             onChange(e.target.value);
+            if (fixing.current) return; // the autocorrect's own edit, not typing
             if (pasted.current) { pasted.current = false; onCaret(e.target); onTyping(null); } else onTyping(lineOf(e.target));
           }}
           onPaste={(e) => { pasted.current = true; const t = e.currentTarget; onPaste(t.selectionStart === 0 && t.selectionEnd === t.value.length); }}
-          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
+          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => { onTyping(null); clearTimeout(fixTimer.current); runFix(false); }}
           onScroll={() => { sync(); onTopLine?.(topLine()); }} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
           placeholder={'One block per question, like this:\n\nTopic 1: Chemical Equations\n\nQ: The question\nA: The answer\nFill: A sentence with ___ where the answer goes\nWrong: Wrong option; another; another\nLevel: easy'} />
       </div>

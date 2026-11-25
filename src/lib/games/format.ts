@@ -93,7 +93,7 @@ function clean(v: string): string {
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
 /** The level as written, without a full stop or a note in brackets after it: "Medium." and "medium (understanding)" are medium. */
-const levelOf = (v: string) => v.replace(/\s*\([^)]*\)\s*$/, '').replace(/[.!]+$/, '').trim().toLowerCase() as Difficulty;
+export const levelOf = (v: string) => v.replace(/\s*\([^)]*\)\s*$/, '').replace(/[.!]+$/, '').trim().toLowerCase() as Difficulty;
 
 interface Context {
   board: string; boardCode: string | null;

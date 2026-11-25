@@ -101,6 +101,13 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   (`engine/index.ts` `usableIn`). Marking (`engine/answers.ts`) is strict on
   purpose: no synonym, unit, title or number-word lists. The user asked for the
   work to fall on the writer, not on sorting answers.
+- **The autocorrect** (`lib/games/tidy.ts`, run by the Questions box a second after typing stops and when the box is
+  left): only sure fixes, never the words of a question, answer, Fill or option. Board, Class and Subject the site's
+  way ("cbsu", "cBsE" → CBSE), Chapter and Topic lines in the list's wording when the number or name makes it clear,
+  label capitals ("q1:" → "Q:"), levels in lower case, commas to ";" in a Wrong line, a blank line before each Q:, and
+  the four chapter lines put back at the top if deleted, once the writer has moved below them. The caret's own line
+  only gets changes that keep its length; the rest waits until the writer moves on. It goes in as an edit of the box,
+  so Ctrl+Z still works.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
