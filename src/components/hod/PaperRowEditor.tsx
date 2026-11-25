@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { BodyEditor } from '@/components/checker/BodyEditor';
-import { OptionList } from '@/components/checker/OptionList';
+import { OptionsEditor } from '@/components/checker/OptionsEditor';
 import { quietButton } from '@/components/hod/HodShared';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import { marksTextInvalid } from '@/lib/hod-desk';
 import { buildRowChanges, isQuestionRow, type PreviewQuestion } from '@/lib/hod-publish';
-import type { RawOption } from '@/lib/checker-options';
+import { toEditable } from '@/lib/option-editing';
 import { cn } from '@/lib/utils';
 
 /* One editor for ANY line of the paper in the ready-to-go-live flow (owner, 25 Nov 2026: "Any sort of
@@ -48,10 +48,11 @@ export function PaperRowEditor({
   const [marks, setMarks] = useState(row.marks != null ? String(row.marks) : '');
   const [instructions, setInstructions] = useState(row.instructions ?? '');
   const [heading, setHeading] = useState(row.section_label ?? '');
+  const [opts, setOpts] = useState(() => toEditable(row.options_raw));
   const marksInvalid = isQuestion && marksTextInvalid(marks);
 
   function save(draftBody: string = body) {
-    const built = buildRowChanges(row, { body: draftBody, number, marks, instructions, sectionLabel: heading });
+    const built = buildRowChanges({ ...row, options: row.options_raw }, { body: draftBody, number, marks, instructions, sectionLabel: heading, options: opts });
     if ('error' in built) {
       onError(built.error);
       return;
@@ -64,7 +65,7 @@ export function PaperRowEditor({
     <div data-testid="row-editor" data-kind={row.kind}>
       <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-warm-label">{rowKindWords(row.kind)}</p>
       <BodyEditor value={body} onChange={setBody} disabled={busy} />
-      {isQuestion ? <OptionList options={Array.isArray(row.options) ? (row.options as unknown as RawOption[]) : null} /> : null}
+      {isQuestion ? <OptionsEditor value={opts} onChange={setOpts} disabled={busy} /> : null}
 
       {isQuestion ? (
         <div className="mt-3 grid gap-3">

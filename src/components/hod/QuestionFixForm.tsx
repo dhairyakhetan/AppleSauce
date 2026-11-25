@@ -1,17 +1,18 @@
 import { useState, type ReactNode } from 'react';
 import { BodyEditor } from '@/components/checker/BodyEditor';
-import { OptionList } from '@/components/checker/OptionList';
+import { OptionsEditor } from '@/components/checker/OptionsEditor';
 import { quietButton } from '@/components/hod/HodShared';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import { marksTextInvalid } from '@/lib/hod-desk';
 import { buildQuestionChanges } from '@/lib/hod-publish';
-import type { RawOption } from '@/lib/checker-options';
+import { toEditable } from '@/lib/option-editing';
 import { cn } from '@/lib/utils';
 
 /* The Fix form, shared by Needs you and the preview flow: the words, the
-   question number and the marks. It sends only what changed, through the
-   versioned edit (the old text stays in history), and the words go out exactly
-   as typed. Options are shown read-only so a flag about them can be checked. */
+   question number, the marks and the answer options. It sends only what changed,
+   through the versioned edit (the old text stays in history), and the words go out
+   exactly as typed. The options can be changed, added, removed and moved (owner,
+   25 Nov 2026: "I can't edit the options"). */
 
 export interface FixTarget {
   body: string;
@@ -44,10 +45,11 @@ export function QuestionFixForm({
   const [body, setBody] = useState(target.body);
   const [number, setNumber] = useState(target.display_number ?? '');
   const [marks, setMarks] = useState(target.marks != null ? String(target.marks) : '');
+  const [opts, setOpts] = useState(() => toEditable(target.options));
   const marksInvalid = marksTextInvalid(marks);
 
   function build(then: (changes: Record<string, unknown>) => void) {
-    const built = buildQuestionChanges(target, { body, number, marks });
+    const built = buildQuestionChanges(target, { body, number, marks, options: opts });
     if ('error' in built) {
       onError(built.error);
       return;
@@ -59,7 +61,7 @@ export function QuestionFixForm({
   return (
     <div>
       <BodyEditor value={body} onChange={setBody} disabled={busy} />
-      <OptionList options={Array.isArray(target.options) ? (target.options as RawOption[]) : null} />
+      <OptionsEditor value={opts} onChange={setOpts} disabled={busy} />
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-[13px] font-medium text-warm-secondary">
           Question number

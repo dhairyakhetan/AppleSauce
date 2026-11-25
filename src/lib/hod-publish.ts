@@ -13,6 +13,7 @@
 
 import { normaliseOptions, type ReviewOption } from '@/lib/admin-approval-shape';
 import { marksTextInvalid } from '@/lib/hod-desk';
+import { optionsChange, type EditableOption } from '@/lib/option-editing';
 import { isSlowError, SLOW_WORDS } from '@/lib/checker-timeout';
 import { isNotSwitchedOn } from '@/lib/paper-asks';
 
@@ -616,6 +617,8 @@ export interface PreviewQuestion {
   instructions: string | null;
   body: string;
   options: ReviewOption[];
+  /** The options exactly as stored, so an edit sends back what it was given. */
+  options_raw: unknown;
   marks: number | null;
   /** A picture already on the site (paper-figures bucket). */
   figure_path: string | null;
@@ -696,6 +699,7 @@ export function normalisePreviewQuestion(raw: unknown): PreviewQuestion | null {
     instructions: str(r.instructions),
     body: typeof r.body === 'string' ? r.body : '',
     options: normaliseOptions(r.options),
+    options_raw: r.options ?? null,
     marks: numOrNull(r.marks),
     figure_path: str(r.figure_path),
     figure_storage_path: str(r.figure_storage_path),
@@ -1353,6 +1357,8 @@ export interface QuestionDraft {
   body: string;
   number: string;
   marks: string;
+  /** The answer options as edited; left out when the form does not edit them. */
+  options?: EditableOption[];
 }
 
 export type QuestionChangesResult = { error: string } | { changes: Record<string, unknown> };
@@ -1364,7 +1370,7 @@ export type QuestionChangesResult = { error: string } | { changes: Record<string
  * missing key as "keep".
  */
 export function buildQuestionChanges(
-  orig: { body: string; display_number: string | null; marks: number | null },
+  orig: { body: string; display_number: string | null; marks: number | null; options?: unknown },
   draft: QuestionDraft,
 ): QuestionChangesResult {
   if (marksTextInvalid(draft.marks)) return { error: 'Marks must be a number, like 2 or 0.5.' };
@@ -1382,6 +1388,10 @@ export function buildQuestionChanges(
   if (number !== (orig.display_number ?? '').trim()) changes.display_number = number;
   const newMarks = marks === '' ? null : Number(marks);
   if (newMarks !== orig.marks) changes.marks = newMarks;
+  if (draft.options) {
+    const opts = optionsChange(orig.options, draft.options);
+    if (opts) changes.options = opts;
+  }
   return { changes };
 }
 
@@ -1400,6 +1410,8 @@ export interface RowDraft {
   instructions: string;
   /** The heading shown once above the question on the site ("Part I", "Section A"). */
   sectionLabel: string;
+  /** The answer options as edited (questions only). */
+  options?: EditableOption[];
 }
 
 export interface RowOriginal {
@@ -1409,6 +1421,8 @@ export interface RowOriginal {
   marks: number | null;
   instructions: string | null;
   section_label: string | null;
+  /** The options exactly as stored. */
+  options?: unknown;
 }
 
 /**
@@ -1431,6 +1445,7 @@ export function buildRowChanges(orig: RowOriginal, draft: RowDraft): QuestionCha
     // body is already decided above; take only the number and the marks from the question rules.
     if ('display_number' in built.changes) changes.display_number = built.changes.display_number;
     if ('marks' in built.changes) changes.marks = built.changes.marks;
+    if ('options' in built.changes) changes.options = built.changes.options;
   }
   const instructions = draft.instructions.trim();
   if (instructions !== (orig.instructions ?? '').trim()) changes.instructions = instructions === '' ? null : draft.instructions;
