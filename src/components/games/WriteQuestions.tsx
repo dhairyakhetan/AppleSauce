@@ -735,6 +735,15 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
+/** What kind of line it is, for its colour in the Questions box (null: a chatbot's sentence or anything else). */
+function kindOf(line: string): 'detail' | 'topic' | 'q' | 'a' | 'also' | 'fill' | 'wrong' | 'level' | null {
+  const m = line.match(/^\s*(q|a|also|fill|wrong|level)\s*\d*\s*:/i);
+  if (m) return m[1].toLowerCase() as 'q' | 'a' | 'also' | 'fill' | 'wrong' | 'level';
+  const meta = readMeta(line);
+  if (!meta) return null;
+  return meta.key === 'topic' ? 'topic' : meta.key === 'difficulty' ? 'level' : 'detail';
+}
+
 function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine, autoFix }: {
   value: string;
   onChange: (v: string) => void;
@@ -844,9 +853,16 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
               const level = levels.get(i + 1);
               const body = l.trim();
               const nl = i > 0 ? '\n' : '';
-              if (!level || !body) return <Fragment key={i}>{nl}<span data-l={i + 1}>{l}</span></Fragment>;
+              if (!body) return <Fragment key={i}>{nl}<span data-l={i + 1}>{l}</span></Fragment>;
+              const kind = kindOf(l);
               const lead = l.slice(0, l.indexOf(body[0]));
-              return <Fragment key={i}>{nl}<span data-l={i + 1}>{lead}<span className={`games-mark ${level}`}>{body}</span>{l.slice(lead.length + body.length)}</span></Fragment>;
+              const label = kind ? body.match(/^[^:]{1,24}:/)?.[0] ?? '' : '';
+              const inner = <>{label && <span className="gl-label">{label}</span>}{body.slice(label.length)}</>;
+              return (
+                <Fragment key={i}>{nl}<span data-l={i + 1} className={kind ? `gl-${kind}` : undefined}>
+                  {lead}{level ? <span className={`games-mark ${level}`}>{inner}</span> : inner}{l.slice(lead.length + body.length)}
+                </span></Fragment>
+              );
             })}
             {/* keeps an empty last line as tall as the textarea draws it */}
             {'​'}

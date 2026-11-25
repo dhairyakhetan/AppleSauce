@@ -108,6 +108,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   the four chapter lines put back at the top if deleted, once the writer has moved below them. The caret's own line
   only gets changes that keep its length; the rest waits until the writer moves on. It goes in as an edit of the box,
   so Ctrl+Z still works.
+- **Colours in the Questions box:** each kind of line has its own colour (chapter lines grey, Topic purple, Q dark,
+  A green, Also teal, Fill blue, Wrong orange-brown, Level light grey; labels a little lighter). The textarea's text is
+  see-through and the copy behind it (`games-backdrop`, `kindOf` in `WriteQuestions.tsx`) is what shows, so the copy
+  must keep exactly the textarea's font, padding and width: no bold, no other font size.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
