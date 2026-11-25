@@ -50,6 +50,10 @@ export function Picker({ label, value, options, onPick, searchable = options.len
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  /** In a dialog, the panel opens inside it: a dialog blocks scrolling (wheel and touch) everywhere outside itself,
+   * so a long list opened outside it couldn't be scrolled. */
+  const [inside, setInside] = useState<HTMLElement | null>(null);
   const id = useId();
 
   // options on the list first, then the rest, each as given; a search keeps those whose name has it
@@ -73,6 +77,7 @@ export function Picker({ label, value, options, onPick, searchable = options.len
     requestAnimationFrame(() => listRef.current?.querySelector(`[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' }));
   };
   const toggle = (o: boolean) => {
+    if (o) setInside(triggerRef.current?.closest<HTMLElement>('[role="dialog"]') ?? null);
     setOpen(o);
     if (!o) return;
     setQuery('');
@@ -105,7 +110,7 @@ export function Picker({ label, value, options, onPick, searchable = options.len
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={toggle}>
       <PopoverPrimitive.Trigger asChild>
-        <button type="button" id={triggerId} disabled={disabled} aria-haspopup="listbox" aria-label={`${label}: ${current?.label ?? placeholder ?? 'none'}`} aria-invalid={invalid || undefined}
+        <button ref={triggerRef} type="button" id={triggerId} disabled={disabled} aria-haspopup="listbox" aria-label={`${label}: ${current?.label ?? placeholder ?? 'none'}`} aria-invalid={invalid || undefined}
           className={cn('group inline-flex items-center gap-2 text-foreground ring-1 ring-border', LOOK[look],
             `transition-[transform,box-shadow] duration-100 ${EASE} hover:ring-warm-hairline active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus`,
             'data-[state=open]:ring-2 data-[state=open]:ring-brand disabled:opacity-disabled disabled:active:scale-100', invalid && 'ring-2 ring-destructive', className)}>
@@ -113,7 +118,7 @@ export function Picker({ label, value, options, onPick, searchable = options.len
           <ChevronDown aria-hidden className={`size-4 shrink-0 text-warm-meta transition-transform duration-150 ${EASE} group-data-[state=open]:rotate-180`} />
         </button>
       </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal container={inside ?? undefined}>
         <PopoverPrimitive.Content align="start" sideOffset={8} collisionPadding={16}
           onOpenAutoFocus={(e) => { e.preventDefault(); (searchRef.current ?? listRef.current)?.focus({ preventScroll: true }); }}
           className={cn('z-50 flex max-w-[calc(100vw-32px)] flex-col rounded-[24px] bg-card p-1.5 text-foreground outline-none',
