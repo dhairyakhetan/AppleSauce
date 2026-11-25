@@ -376,7 +376,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
         <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
         <div title={needs ? `Select ${needs} first` : undefined} className={needs ? 'cursor-not-allowed' : undefined}>
           <Picker id={`d-${k}`} look="field" label={LABEL[k]} value={value} options={options} disabled={!!needs} invalid={off}
-            placeholder={needs ? `Select ${needs} first` : off ? `${details[k]} (not on the list)` : `Choose a ${LABEL[k].toLowerCase()}`}
+            placeholder={off ? `${details[k]} (not on the list)` : 'Choose'}
             onPick={(v) => pickDetail(k, v)} />
         </div>
         {problem && <span className={cn('text-[12px]', problem.level === 'error' ? 'text-destructive' : 'text-brand-deep')}>{problem.text}</span>}
