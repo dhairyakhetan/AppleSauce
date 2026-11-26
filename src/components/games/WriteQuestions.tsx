@@ -8,7 +8,7 @@ import { usableIn } from '@/lib/games/engine';
 import { asText, doubts, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
 import { chatbotPrompt, fixPrompt } from '@/lib/games/prompt';
 import { tidyText } from '@/lib/games/tidy';
-import { type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
+import { sentTogether, type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { GamePreview } from './GamePreview';
@@ -27,6 +27,8 @@ import './games.css';
 
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 /** The example's questions: they are only for trying the page, so they are never sent while the example is loaded. */
+/** The most line buttons one problem shows before "and N more". */
+const LINE_CHIPS = 12;
 const EXAMPLE_QUESTIONS = new Set(format(EXAMPLE).rows.map((r) => r.question.toLowerCase()));
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 const SECTION = 'flex flex-col gap-4 rounded-[24px] bg-muted p-4 sm:p-6';
@@ -240,11 +242,17 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     [all, typingLine, typingBox, raw, rows]);
   const errors = issues.filter((x) => x.level === 'error').length;
   const toFix = issues.length;
-  /** The problems to fix, one entry per line (a line can have more than one). */
-  const byLine = useMemo(() => {
-    const m = new Map<number, Issue[]>();
-    for (const x of issues) m.set(x.line, [...(m.get(x.line) ?? []), x]);
-    return [...m];
+  /** The problems to fix, one entry per message: the same problem on several lines is listed once, with every line it
+   * is on (in order of the first one). */
+  const byProblem = useMemo(() => {
+    const m = new Map<string, { level: Issue['level']; text: string; lines: number[] }>();
+    for (const x of issues) {
+      const k = `${x.level}\u0000${x.text}`;
+      const g = m.get(k) ?? { level: x.level, text: x.text, lines: [] };
+      if (!g.lines.includes(x.line)) g.lines.push(x.line);
+      m.set(k, g);
+    }
+    return [...m.values()].map((g) => ({ ...g, lines: g.lines.sort((a, b) => a - b) })).sort((a, b) => a.lines[0] - b.lines[0] || (a.level === 'error' ? 0 : 1) - (b.level === 'error' ? 0 : 1));
   }, [issues]);
 
   /**
@@ -293,8 +301,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   const loadExample = () => { setAskExample(false); steady(exampleBtn.current, () => replaceAll(EXAMPLE, 'Example loaded', true)); };
 
   /** "Fix it" on a sent-back question: it goes in the Questions box with its details (the text before it can be had back with Undo). */
-  const fix = (a: SentBack) => {
-    replaceAll(asText([a]), 'Question loaded');
+  const fix = (as: SentBack[]) => {
+    replaceAll(asText(as), as.length === 1 ? 'Question loaded' : `${as.length} questions loaded`);
     setSent(null);
     box.current?.scrollIntoView({ behavior: motion(), block: 'center' });
     box.current?.focus({ preventScroll: true });
@@ -655,27 +663,22 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
                 {toFix - errors > 0 && <span className="flex items-center gap-1.5 text-[13px] text-warm-secondary"><span className="size-2 rounded-full bg-brand" aria-hidden />{toFix - errors} amber</span>}
               </p>
               <ul className="mt-2 flex flex-col gap-2">
-                {byLine.slice(0, 50).map(([line, xs]) => {
-                  const worst = xs.some((x) => x.level === 'error') ? 'error' : 'warn';
-                  return (
-                    <li key={line} className="flex items-start gap-2.5">
-                      <button type="button" onClick={() => goTo(line)} aria-label={`Line ${line}: go to it`}
-                        className={cn('mt-px shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold tabular-nums transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                          worst === 'error' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/85' : 'bg-brand text-foreground hover:bg-brand/85')}>
-                        Line {line}
-                      </button>
-                      <div className="flex flex-col gap-1 text-foreground">
-                        {xs.map((x, j) => (
-                          <p key={`${j}|${x.text}`} className="flex items-start gap-1.5">
-                            {xs.length > 1 && <span className={cn('mt-2 size-1.5 shrink-0 rounded-full', x.level === 'error' ? 'bg-destructive' : 'bg-brand')} aria-hidden />}
-                            <span>{x.text}</span>
-                          </p>
-                        ))}
-                      </div>
-                    </li>
-                  );
-                })}
-                {byLine.length > 50 && <li className="text-warm-secondary">and problems on {byLine.length - 50} more lines</li>}
+                {byProblem.slice(0, 50).map((g) => (
+                  <li key={`${g.level}|${g.text}`} className="flex flex-col gap-1">
+                    <div className="flex flex-wrap gap-1">
+                      {g.lines.slice(0, LINE_CHIPS).map((line) => (
+                        <button key={line} type="button" onClick={() => goTo(line)} aria-label={`Line ${line}: go to it`}
+                          className={cn('rounded-full px-2 py-0.5 text-[12px] font-bold tabular-nums transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                            g.level === 'error' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/85' : 'bg-brand text-foreground hover:bg-brand/85')}>
+                          Line {line}
+                        </button>
+                      ))}
+                      {g.lines.length > LINE_CHIPS && <span className="px-1 py-0.5 text-[12px] font-semibold text-warm-secondary">and {g.lines.length - LINE_CHIPS} more</span>}
+                    </div>
+                    <p className="text-foreground">{g.text}</p>
+                  </li>
+                ))}
+                {byProblem.length > 50 && <li className="text-warm-secondary">and {plural(byProblem.length - 50, 'more problem')}</li>}
               </ul>
             </div>
           )}
@@ -683,7 +686,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
 
           <div ref={tableBox} className="rounded-2xl bg-card p-3 sm:p-4 lg:max-h-[640px] lg:overflow-y-auto lg:overscroll-contain">
             {rows.length ? (
-              <RowsTable key={batch} rows={rows} problem={status} doubts={(r) => doubts(r)} doubtsLabel="Sent with a note for the HoD"
+              <RowsTable key={batch} rows={rows} problem={status} doubts={(r) => doubts(r, rows)} doubtsLabel="Sent with a note for the HoD"
                 games={(r) => usableIn({ id: String(r.line), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }).map((t) => GAME_NAMES[t])} />
             ) : <p className="py-6 text-center text-[14px] text-warm-secondary">Your questions will appear here.</p>}
           </div>
@@ -791,7 +794,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
 function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismiss, onRetry, onFix }: {
   panelRef: RefObject<HTMLElement>;
   alerts: Alerts; open: boolean; setOpen: (o: boolean) => void; focus: string[];
-  onSeen: (ids: string[]) => void; onDismiss: (ids: string[], gone?: boolean) => void; onRetry: () => void; onFix: (a: SentBack) => void;
+  onSeen: (ids: string[]) => void; onDismiss: (ids: string[], gone?: boolean) => void; onRetry: () => void; onFix: (as: SentBack[]) => void;
 }) {
   const list = alerts.list ?? [];
   const unseen = list.filter((a) => !a.seen);
@@ -836,27 +839,53 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismi
       )}
       {open && (
         <ul id="back-list" className="mt-3 flex flex-col gap-2">
-          {list.map((a) => (
-            <li key={a.id} className={cn('relative flex flex-col gap-1 rounded-2xl bg-card p-4 pr-12 text-[14px]', pointAt.has(a.id) && 'ring-2 ring-brand')}>
-              <button type="button" aria-label="Remove from this list" title="Remove from this list"
-                className="absolute right-2 top-2 flex size-9 items-center justify-center rounded-full text-warm-secondary transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                onClick={() => { onSeen([a.id]); onDismiss([a.id]); offerUndo('Removed from the list', () => onDismiss([a.id], false)); }}>
-                <X className="size-4" aria-hidden />
-              </button>
-              <p className="text-[12px] text-warm-meta">
-                {[a.chapter_no !== null && `Chapter ${a.chapter_no}`, a.chapter].filter(Boolean).join(': ')}{a.topic && ` · ${a.topic}`}
-                {fresh.has(a.id) && <span className="ml-2 rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold text-foreground">New</span>}
-              </p>
-              <p className="text-foreground">{a.question}</p>
-              <p className="font-semibold text-foreground">{a.answer}</p>
-              <p className="rounded-xl bg-brand-subtle px-3 py-2 text-foreground"><b>Why:</b> {a.note}</p>
-              <p className="text-[12px] text-warm-meta">
-                Sent back by {a.reviewer}{a.reviewedAt && `, ${day(a.reviewedAt)}`}.
-                {a.now && (a.now === 'approved' ? ' Since sent again, and approved.' : ' Since sent again, and waiting for an HoD.')}
-              </p>
-              {!a.now && <button type="button" className={chip('dark', 'mt-1 w-fit')} onClick={() => onFix(a)}>Fix it in the Questions box</button>}
-            </li>
-          ))}
+          {sentTogether(list).map((g) => {
+            const a = g[0];
+            const ids = g.map((x) => x.id);
+            const toFix = g.filter((x) => !x.now);
+            const remove = () => { onSeen(ids); onDismiss(ids); offerUndo(g.length === 1 ? 'Removed from the list' : `${g.length} questions removed from the list`, () => onDismiss(ids, false)); };
+            const chapters = uniq(g.map((x) => [x.chapter_no !== null && `Chapter ${x.chapter_no}`, x.chapter].filter(Boolean).join(': ')));
+            return (
+              <li key={ids.join(',')} className={cn('relative flex flex-col gap-1 rounded-2xl bg-card p-4 pr-12 text-[14px]', g.some((x) => pointAt.has(x.id)) && 'ring-2 ring-brand')}>
+                <button type="button" aria-label="Remove from this list" title="Remove from this list"
+                  className="absolute right-2 top-2 flex size-9 items-center justify-center rounded-full text-warm-secondary transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  onClick={remove}>
+                  <X className="size-4" aria-hidden />
+                </button>
+                <p className="text-[12px] text-warm-meta">
+                  {chapters.join(' · ')}{g.length === 1 && a.topic && ` · ${a.topic}`}
+                  {g.some((x) => fresh.has(x.id)) && <span className="ml-2 rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold text-foreground">New</span>}
+                </p>
+                {g.length === 1 ? (
+                  <>
+                    <p className="text-foreground">{a.question}</p>
+                    <p className="font-semibold text-foreground">{a.answer}</p>
+                  </>
+                ) : (
+                  <p className="font-semibold text-foreground">{g.length} questions from one batch, sent back together</p>
+                )}
+                <p className="rounded-xl bg-brand-subtle px-3 py-2 text-foreground"><b>Why:</b> {a.note}</p>
+                {g.length > 1 && (
+                  <details className="group text-[13px]">
+                    <summary className="w-fit cursor-pointer rounded font-semibold text-brand-blue underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">Show the {g.length} questions</summary>
+                    <ol className="mt-1 flex list-decimal flex-col gap-0.5 pl-5 text-warm-prose">
+                      {g.map((x) => <li key={x.id}>{x.question} <b className="text-foreground">{x.answer}</b>{x.now && <span className="text-warm-meta"> (sent again)</span>}</li>)}
+                    </ol>
+                  </details>
+                )}
+                <p className="text-[12px] text-warm-meta">
+                  Sent back by {a.reviewer}{a.reviewedAt && `, ${day(a.reviewedAt)}`}.
+                  {g.length === 1 ? (a.now && (a.now === 'approved' ? ' Since sent again, and approved.' : ' Since sent again, and waiting for an HoD.'))
+                    : toFix.length < g.length && ` ${g.length - toFix.length} of them since sent again.`}
+                </p>
+                {toFix.length > 0 && (
+                  <button type="button" className={chip('dark', 'mt-1 w-fit')} onClick={() => onFix(toFix)}>
+                    {toFix.length === 1 ? 'Fix it in the Questions box' : `Fix ${toFix.length === g.length ? 'them' : `the ${toFix.length} still to fix`} in the Questions box`}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -864,6 +893,7 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismi
 }
 
 const uniq = <T,>(xs: T[]) => [...new Set(xs)];
+
 /** The chosen value if it is one of the options; the only option when there is just one. */
 const fit = <T,>(v: T, options: T[]) => (options.includes(v) ? v : options.length === 1 ? options[0] : undefined);
 

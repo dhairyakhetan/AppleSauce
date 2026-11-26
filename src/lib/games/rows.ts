@@ -104,6 +104,19 @@ export const counts = (bank: Bank): Record<Status, number> => ({
  * happened to it since (sent again and waiting or approved), or null. */
 export interface SentBack extends BankQuestion { reviewer: string; seen: boolean; now: 'pending' | 'approved' | null }
 
+/**
+ * Sent-back questions as the HoD sent them back: questions from one batch sent back together with one reason (the same
+ * reason at the same moment) are one entry; any other question is an entry of its own. Newest first, as given.
+ */
+export function sentTogether<T extends Pick<SentBack, 'batch' | 'note' | 'reviewedAt'>>(list: T[]): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const a of list) {
+    const k = `${a.batch}\u0000${a.note}\u0000${a.reviewedAt ?? ''}`;
+    groups.set(k, [...(groups.get(k) ?? []), a]);
+  }
+  return [...groups.values()];
+}
+
 // ---------------------------------------------------------------- the games team
 
 /**

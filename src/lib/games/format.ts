@@ -19,7 +19,7 @@
  * not sent: the page offers to leave those out, or to copy a prompt that asks the chatbot to fix them.
  */
 import { hasContent, sameAnswer } from './engine/answers';
-import { blanks, BLANK, isTrueFalse, shows } from './engine/shared';
+import { blanks, BLANK, isTrueFalse, loose, shows } from './engine/shared';
 import { boardClassProblem, chapterId, checkBoard, checkClass, checkNumbered, checkSubject, readMeta, topicId, type Level, type MetaKey, type Problem } from './details';
 import { DIFFICULTIES, type Difficulty, type Row } from './rows';
 
@@ -620,23 +620,39 @@ Level: medium
 const WORDY = /^[\p{L}\p{M}\s'’-]+$/u;
 
 /**
- * A word right next to the ___ that the answer has too: "becomes ___" with "Becomes one-fourth", or "the ___ of" with
- * "Sum of resistances". Read with the answer in the gap, the sentence says the word twice. Null when it reads cleanly.
+ * A word right next to the ___ that the answer has too: "becomes ___" with "Becomes one-fourth" (the word before the gap
+ * is the answer's first word), "the ___ force" with "Force" (the word after it is the answer's last), or "the ___ of"
+ * with "Sum of resistances". Read with the answer in the gap, the sentence says the word twice. Null when it reads
+ * cleanly.
  */
 export function fillGap(fill: string, answer: string): string | null {
   const m = fill.match(/(?:^|[^\p{L}\p{M}])([\p{L}\p{M}]+)?[^\p{L}\p{M}_]*_{3,}[^\p{L}\p{M}_]*([\p{L}\p{M}]+)?/u);
   if (!m) return null;
   const words: string[] = answer.toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
-  if (words.length < 2) return null;
+  if (!words.length) return null;
   const before = m[1]?.toLowerCase();
   const after = m[2]?.toLowerCase();
-  const twice = before && words[0] === before ? before : after && words.includes(after) ? after : null;
+  const twice = before && words[0] === before ? before
+    : after && (words[words.length - 1] === after || (words.length > 1 && words.includes(after))) ? after : null;
   if (!twice) return null;
   const read = fill.replace(/_{3,}/, answer);
   return `The Fill sentence says "${twice}" twice with the answer in the gap ("${read}"): check that the answer fits the gap.`;
 }
 
-export function doubts(r: Pick<Row, 'question' | 'answer' | 'also' | 'fill' | 'wrong_options'>): string[] {
+/** How an answer or option writes "times" and powers: × or x, ^ or ², so a different style can be spotted. */
+const styleOf = (s: string) => ({
+  times: /×/.test(s) ? '×' : /[\d)]\s*[x*]\s*[\d(]/i.test(s) ? 'x' : null,
+  power: /[²³⁴⁵⁶⁷⁸⁹⁰¹⁻]/.test(s) ? '²' : /\^/.test(s) ? '^' : null,
+});
+/** Words that make a True/False statement true only sometimes, more often than not. */
+const ABSOLUTE = /\b(always|never|all|none|every|only|no one|nothing)\b/i;
+const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+
+export function doubts(
+  r: Pick<Row, 'question' | 'answer' | 'also' | 'fill' | 'wrong_options'> & Partial<Pick<Row, 'chapter_id' | 'chapter' | 'topic_no'>>,
+  /** The other questions sent with it (its batch, or the Questions box), for notes that compare questions. */
+  others: readonly (Pick<Row, 'question' | 'answer'> & Partial<Pick<Row, 'chapter_id' | 'chapter' | 'topic_no'>>)[] = [],
+): string[] {
   const out: string[] = [];
   const picture = [r.question, r.fill ?? ''].map((t) => t.match(MAYBE_PICTURE)?.[0]).find(Boolean);
   if (picture && !NEEDS_PICTURE.test(r.question) && !NEEDS_PICTURE.test(r.fill ?? '')) {
@@ -645,15 +661,36 @@ export function doubts(r: Pick<Row, 'question' | 'answer' | 'also' | 'fill' | 'w
   // (a formula such as "dV/dr" or "kq/r" isn't two answers: words on both sides of the "/" are at least 3 letters)
   const two = r.answer.match(/\S+\s+or\s+\S+/i)?.[0] ?? r.answer.match(/\p{L}{3,}\/\p{L}{3,}/u)?.[0];
   if (two && !/\s\/\s/.test(r.answer)) out.push(`The answer may be two answers ("${two}"). If so, the second belongs on an Also line.`);
-  const all = [r.answer, ...(r.wrong_options ?? [])];
+  const wrong = r.wrong_options ?? [];
+  const all = [r.answer, ...wrong];
   const stops = all.filter((x) => /\p{L}\.$/u.test(x) && !/\..+\.$/.test(x));
   if (stops.length && stops.length < all.length) out.push('Only some of the answer and wrong options end with a full stop, which can give the answer away in multiple choice.');
-  const gap = fillGap(r.fill ?? '', r.answer);
+  const gap = r.fill ? fillGap(r.fill, r.answer) : null;
   if (gap) out.push(gap);
-  for (const o of r.wrong_options ?? []) {
+  // the answer stands out among the options by its length ("Becomes one-fourth" among "Twice", "Half")
+  const n = wordCount(r.answer);
+  if (wrong.length && n >= 3 && wrong.every((o) => wordCount(o) <= n - 2)) {
+    out.push('The answer is much longer than every wrong option, which gives it away in multiple choice.');
+  }
+  // ... or by how it writes "times" or a power (× among x, ² among ^)
+  const mine = styleOf(r.answer);
+  for (const k of ['times', 'power'] as const) {
+    const other = wrong.map((o) => styleOf(o)[k]).find((x) => x && mine[k] && x !== mine[k]);
+    if (other) { out.push(`The answer writes ${mine[k]} and a wrong option writes ${other}, which can give the answer away in multiple choice: write them the same way.`); break; }
+  }
+  for (const o of wrong) {
     // only for answers made of words: a formula option ("kq/r^2") holding the answer's formula ("kq/r") is plainly wrong
     const x = [r.answer, ...(r.also ?? [])].find((a) => WORDY.test(a) && shows(o, { answer: a }));
     if (x) out.push(`The wrong option "${o}" contains the answer "${x}": check that it isn't partly right.`);
   }
+  // a True/False statement with "always" or "never" is often true only sometimes
+  if (isTrueFalse(r.answer)) {
+    const word = r.question.match(ABSOLUTE)?.[0];
+    if (word) out.push(`A True/False statement with "${word}" in it is often true only sometimes: check that it holds every time.`);
+  }
+  // two questions under one topic with the same answer: often the same fact asked twice, and matching can't use both
+  const where = (q: Partial<Pick<Row, 'chapter_id' | 'chapter' | 'topic_no'>>) => `${q.chapter_id ?? q.chapter ?? ''}\u0000${q.topic_no ?? ''}`;
+  const twin = !isTrueFalse(r.answer) && others.find((o) => o !== (r as object) && where(o) === where(r) && loose(o.answer) === loose(r.answer) && loose(o.question) !== loose(r.question));
+  if (twin) out.push(`"${twin.question}" in the same topic has the same answer ("${twin.answer}"): check that they don't test the same fact.`);
   return out;
 }

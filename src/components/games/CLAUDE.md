@@ -109,9 +109,16 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   answers ("Kolkata or Calcutta"), "in the map" or "from the table", a full stop on only some of the answer and
   options, a wrong option that contains the answer (only for answers made of words: a formula option such as "kq/r^2"
   holding "kq/r" is plainly wrong, and "dV/dr" isn't two answers), an answer that repeats a word next to the ___ so it
-  doesn't fit the gap (`fillGap`: "becomes ___" with "Becomes one-fourth"). These don't stop a question: Write questions shows "Sent with
+  doesn't fit the gap (`fillGap`: the word before the ___ is the answer's first word, or the word after it is in the
+  answer), an answer much longer than every wrong option, an answer and options that write × and x (or ² and ^)
+  differently, a True/False statement with "always", "never" or "only", and two questions in one topic with the same
+  answer (`doubts(r, others)`, with the batch or the Questions box as `others`). These don't stop a question: Write questions shows "Sent with
   a note for the HoD", and Approve questions works out the same notes from the question and shows "Please check".
-  Nothing is stored, so it needs no database change. Clear mistakes stay errors.
+  Nothing is stored, so it needs no database change. Clear mistakes stay errors. On Approve questions a cross clears a
+  question's notes until the page is opened again (`cleared`, in memory only); "Approve all" on a batch with flagged
+  questions asks first (View them, Approve all anyway); the flagged box shows only those, with Clear all and Send all
+  back (one typed reason), then what was done, with Approve all the rest and Undo. Each batch has Copy batch (its
+  questions as text, any size: a browser can't put a file on the clipboard).
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options
@@ -148,7 +155,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs, and tapping it says so under the tabs (for phones).
 - **Write questions, the layout pass (unslop):** a cross on each sent-back question removes it from the list for good
   on that device (kept in `localStorage` under `games.sentBack.dismissed` by `pages/Games.tsx`, which leaves them out
-  of the list and the tab's count; the database has no place for it). A removed one comes back only when the same question is sent again unchanged (the send says so, with "See why"). The problem list has one entry per line, the
+  of the list and the tab's count; the database has no place for it). A removed one comes back only when the same question is sent again unchanged (the send says so, with "See why"). Questions of one batch sent back together with one reason (same reason, same moment: `sentTogether` in `rows.ts`)
+  are one entry, with the reason, "Show the N questions" and "Fix them in the Questions box". The list is checked again
+  each time Write questions is opened. The problem list has one entry per line, the
   line number coloured red or amber and the text dark; clicking it centres the whole question in the box (measured on
   the copy behind the box, as lines wrap). Under each result only the games it is left out of ("Not in: Word search").
   Step 3 has the same card colour as the others, with a Full screen button by its heading; the small preview's
@@ -156,7 +165,8 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   to fix" button shows only while the results are still below.
 - **Browser tests:** `npm run e2e` (Playwright, `playwright.config.ts`, files in `e2e/games/*.e2e.ts`) starts the dev
   server with the preview tools on and a placeholder Supabase address, and drives Write questions and Chapters in dummy
-  mode: the autocorrect and its Undo, the dropdowns (typed in, and asking before a change clears questions), sent-back questions, the preview's greyed-out games, Bulk add and
+  mode: the autocorrect and its Undo, the dropdowns (typed in, and asking before a change clears questions), the merged
+  problem list, flagged batches on Approve questions (`flagged.e2e.ts`), sent-back questions, the preview's greyed-out games, Bulk add and
   Bulk remove. No database or keys needed. `@playwright/test` is pinned to the Playwright version whose browser is
   installed. Not in `npm test` or CI (vitest runs in node with no browser); run it after changing these pages.
 - **Questions and answers are never reworded.** Only a bullet or number before

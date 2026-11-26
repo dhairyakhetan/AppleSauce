@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Check, ChevronDown, Download } from 'lucide-react';
+import { Check, ChevronDown, Copy, Download } from 'lucide-react';
 import { nextTabKey } from '@/components/admin/AdminTabs';
 import { APPROVED_PAGE, type GamesApi, type SaveResult } from '@/lib/games/api';
 import { counts, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Batch, type Status } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
-import { btn, chip, download, FIELD, offerUndo, plural, when } from './helpers';
+import { btn, chip, copyText, download, FIELD, offerUndo, plural, when } from './helpers';
 import { Empty, Loading, LoadFailed, RowsTable } from './shared';
-import { doubts } from '@/lib/games/format';
+import { asText, doubts } from '@/lib/games/format';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 /* Approve questions: batches sent from Write questions wait here until an HoD approves each question or sends it back
    with a reason the teacher sees. Approved questions go into the question bank the games use. Waiting questions show
@@ -16,6 +17,15 @@ import { doubts } from '@/lib/games/format';
    once and can be undone for a few seconds. The database checks that the person is an HoD or admin on every call. */
 
 const TABS: { key: Status; label: string }[] = [{ key: 'pending', label: 'Waiting' }, { key: 'approved', label: 'Approved' }, { key: 'rejected', label: 'Sent back' }];
+
+/**
+ * Questions whose "Please check" notes the HoD cleared (the cross): hidden until the page is opened again. Kept in this
+ * page's memory only, never saved, so the notes come back on the next visit.
+ */
+const cleared = new Set<string>();
+
+/** The flagged questions' box for one batch: looking at them, writing why they go back, or what was done. */
+interface Review { batch: string; phase: 'list' | 'why' | 'done'; sent: string[]; cleared: string[]; undoSend?: () => void }
 
 /** Adds questions (and their batches) the page doesn't have yet. */
 const merge = (b: Bank, more: Bank): Bank => {
@@ -39,6 +49,12 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
   const [reason, setReason] = useState('');
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [, setNotesTick] = useState(0);
+  /** "Approve all" on a batch with flagged questions asks first. */
+  const [askFlagged, setAskFlagged] = useState<string | null>(null);
+  const [review, setReview] = useState<Review | null>(null);
+  const [reviewWhy, setReviewWhy] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
 
   const recountApproved = useCallback(() => { api.approvedCount().then(setApprovedTotal, () => {}); }, [api]);
   /** Loads the waiting and sent-back questions afresh (keeping the old ones on screen until they arrive). */
@@ -101,7 +117,8 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
   const recounted = (r: Pick<SaveResult, 'waiting' | 'approved'>) => { onWaiting(r.waiting); setApprovedTotal(r.approved); };
 
   /** Rows fade out, then move, and the change is saved; every action can be undone for a few seconds. */
-  const act = (ids: string[], status: Status, note = '') => {
+  /** `toast`: offer Undo in a toast (not when the flagged box offers its own). */
+  const act = (ids: string[], status: Status, note = '', toast = true) => {
     const before = bank;
     const old = before.questions.filter((q) => ids.includes(q.id));
     setBack(null);
@@ -122,7 +139,7 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
       setSaveError(`${plural(kept.length, 'question')} stayed sent back: the same question was sent again and is already waiting or approved.`);
     }, failed);
     const did = status === 'approved' ? 'approved' : status === 'rejected' ? 'sent back' : 'moved to waiting';
-    offerUndo(`${plural(ids.length, 'question')} ${did}`, () => {
+    const undo = () => {
       setBank(before);
       // put each question back as it was (questions sent back keep their own reason), one group after another, so
       // the counts from the last one are the final counts
@@ -130,7 +147,25 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
       for (const q of old) groups.set(`${q.status}\u0000${q.note}`, [...(groups.get(`${q.status}\u0000${q.note}`) ?? []), q]);
       [...groups.values()].reduce<Promise<SaveResult | null>>((done, qs) => done.then(() => api.saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note)), Promise.resolve(null))
         .then((r) => r && recounted(r), failed);
-    });
+    };
+    if (toast) offerUndo(`${plural(ids.length, 'question')} ${did}`, undo);
+    return undo;
+  };
+
+  /** A question's "Please check" notes, unless the HoD cleared them; `qs` its batch, for notes that compare questions. */
+  const notesOf = (q: BankQuestion, qs: BankQuestion[]) => (cleared.has(q.id) ? [] : doubts(q, qs));
+  const clearNotes = (ids: string[], on = true) => { for (const id of ids) { if (on) cleared.add(id); else cleared.delete(id); } setNotesTick((n) => n + 1); };
+  const waitingIn = (batch: string) => bank.questions.filter((q) => q.batch === batch && q.status === 'pending');
+  const flaggedIn = (batch: string) => { const qs = waitingIn(batch); return qs.filter((q) => notesOf(q, qs).length); };
+  /** "Approve all": straight away, unless some of the batch is flagged. */
+  const approveAll = (batch: string) => {
+    if (flaggedIn(batch).length) setAskFlagged(batch);
+    else act(waitingIn(batch).map((q) => q.id), 'approved');
+  };
+  const copyBatch = async (batch: string, qs: BankQuestion[]) => {
+    if (!(await copyText(asText(qs)))) { setSaveError("Couldn't copy the batch. Select the questions and copy them instead."); return; }
+    setCopied(batch);
+    window.setTimeout(() => setCopied((c) => (c === batch ? null : c)), 1800);
   };
 
   const shown = bank.questions.filter((q) => q.status === tab);
@@ -193,20 +228,25 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
           <section key={b.id} aria-label={`Batch from ${b.by}`} className="animate-fade-slide-up flex flex-col gap-2 rounded-[24px] bg-muted p-4 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-[15px] font-bold text-foreground">{plural(qs.length, 'question')} from {b.by}</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[15px] font-bold text-foreground">{plural(qs.length, 'question')} from {b.by}</h2>
+                  <button type="button" className={chip('card')} onClick={() => void copyBatch(b.id, qs)} aria-live="polite">
+                    {copied === b.id ? <><Check aria-hidden /> Copied</> : <><Copy aria-hidden /> Copy batch</>}
+                  </button>
+                </div>
                 {/* the email can't be changed by its owner, as the name can */}
                 <p className="text-[12px] text-warm-meta">{b.email ? `${b.email} · ` : ''}Sent {when(b.at)}</p>
               </div>
               {back?.where !== `batch:${b.id}` && (
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" className={btn('mint')} onClick={() => act(qs.map((q) => q.id), 'approved')}><Check aria-hidden /> Approve all {qs.length}</button>
+                  <button type="button" className={btn('mint')} onClick={() => approveAll(b.id)}><Check aria-hidden /> Approve all {qs.length}</button>
                   <button type="button" className={btn('card')} onClick={() => { setBack({ where: `batch:${b.id}`, ids: qs.map((q) => q.id) }); setReason(''); }}>Send all back</button>
                 </div>
               )}
             </div>
             {whyBox(`batch:${b.id}`, qs.map((q) => q.id))}
             <div className="rounded-2xl bg-card p-3 sm:p-4">
-              <RowsTable rows={qs} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} doubts={(q) => doubts(q)} />
+              <RowsTable rows={qs} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} doubts={(q) => notesOf(q, qs)} onClearDoubts={(q) => clearNotes([q.id])} />
             </div>
           </section>
         )) : (
@@ -230,6 +270,95 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
             : <Empty><button type="button" className={btn('dark')} onClick={loadOlder}>Try again</button></Empty>
         ))}
       </div>
+      {askFlagged && (() => {
+        const all = waitingIn(askFlagged);
+        const n = flaggedIn(askFlagged).length;
+        return (
+          <Dialog open onOpenChange={(o) => { if (!o) setAskFlagged(null); }}>
+            <DialogContent className="max-w-md rounded-2xl bg-card">
+              <DialogTitle>{n === 1 ? 'There is 1 flagged question' : `There are ${n} flagged questions`} in this batch</DialogTitle>
+              <DialogDescription>
+                The page wasn't sure about something in {n === 1 ? 'it' : 'them'} ("Please check"). Look at {n === 1 ? 'it' : 'them'} first, or approve all {all.length} as they are.
+              </DialogDescription>
+              <div className="flex flex-col gap-2 sm:flex-row-reverse">
+                <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={() => { setReview({ batch: askFlagged, phase: 'list', sent: [], cleared: [] }); setReviewWhy(''); setAskFlagged(null); }}>View {n === 1 ? 'it' : 'them'}</button>
+                <button type="button" className={btn('card', 'w-full sm:w-auto')} onClick={() => { act(all.map((q) => q.id), 'approved'); setAskFlagged(null); }}>Approve all anyway</button>
+                <button type="button" className={btn('quiet', 'w-full sm:w-auto sm:mr-auto')} onClick={() => setAskFlagged(null)}>Cancel</button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+      {review && (() => {
+        const batch = bank.batches.find((x) => x.id === review.batch);
+        const all = waitingIn(review.batch);
+        const flagged = flaggedIn(review.batch).filter((q) => !review.sent.includes(q.id));
+        const done = review.phase === 'done' || (review.phase === 'list' && !flagged.length);
+        const rest = all.filter((q) => !review.sent.includes(q.id));
+        const close = () => setReview(null);
+        const undo = () => {
+          clearNotes(review.cleared, false);
+          review.undoSend?.();
+          setReview({ batch: review.batch, phase: 'list', sent: [], cleared: [] });
+        };
+        return (
+          <Dialog open onOpenChange={(o) => { if (!o) close(); }}>
+            <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col gap-3 rounded-2xl bg-card">
+              {done ? (
+                <>
+                  <DialogTitle>Flagged questions done</DialogTitle>
+                  <DialogDescription asChild>
+                    <div className="flex flex-col gap-1 text-[15px] text-foreground">
+                      {review.sent.length > 0 && <p><b>{plural(review.sent.length, 'question')}</b> sent back</p>}
+                      {review.cleared.length > 0 && <p><b>{plural(review.cleared.length, 'question')}</b> cleared</p>}
+                    </div>
+                  </DialogDescription>
+                  <div className="flex flex-wrap gap-2">
+                    {rest.length > 0
+                      ? <button type="button" className={btn('mint')} onClick={() => { act(rest.map((q) => q.id), 'approved'); close(); }}><Check aria-hidden /> Approve all {rest.length}</button>
+                      : <button type="button" className={btn('dark')} onClick={close}>Done</button>}
+                    <button type="button" className={btn('card')} onClick={undo}>Undo</button>
+                  </div>
+                </>
+              ) : review.phase === 'why' ? (
+                <form className="flex flex-col gap-2" onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!reviewWhy.trim()) return;
+                  const ids = flagged.map((q) => q.id);
+                  const undoSend = act(ids, 'rejected', reviewWhy, false);
+                  setReview({ ...review, phase: 'done', sent: ids, undoSend });
+                  setReviewWhy('');
+                }}>
+                  <DialogTitle>Send {plural(flagged.length, 'question')} back</DialogTitle>
+                  <DialogDescription>They go back to {batch?.by ?? 'the teacher'} together, with one reason.</DialogDescription>
+                  <label htmlFor="review-why" className="text-[13px] font-semibold text-foreground">Why are {flagged.length === 1 ? 'it' : 'they'} going back? The teacher will see this.</label>
+                  <textarea id="review-why" rows={3} maxLength={500} value={reviewWhy} autoFocus onChange={(e) => setReviewWhy(e.target.value)}
+                    className={cn(FIELD, 'resize-y py-2')} placeholder="e.g. The answers don't fit the gap in the Fill sentences." />
+                  <div className="flex flex-wrap gap-2">
+                    <button type="submit" className={btn('danger')} disabled={!reviewWhy.trim()}>Send {flagged.length} back</button>
+                    <button type="button" className={btn('card')} onClick={() => setReview({ ...review, phase: 'list' })}>Back</button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <DialogTitle>{plural(flagged.length, 'flagged question')}</DialogTitle>
+                  <DialogDescription>
+                    From {batch?.by ?? 'this'}'s batch of {all.length}. Clear a note when the question is fine (it comes back when the page is opened again), or send them back.
+                  </DialogDescription>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-2xl bg-muted p-3 sm:p-4">
+                    <RowsTable rows={flagged} keyOf={(q) => q.id} doubts={(q) => notesOf(q, all)}
+                      onClearDoubts={(q) => { clearNotes([q.id]); setReview((r) => r && { ...r, cleared: [...r.cleared, q.id] }); }} />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className={btn('card')} onClick={() => { const ids = flagged.map((q) => q.id); clearNotes(ids); setReview({ ...review, phase: 'done', cleared: [...review.cleared, ...ids] }); }}>Clear all</button>
+                    <button type="button" className={btn('danger')} onClick={() => { setReviewWhy(''); setReview({ ...review, phase: 'why' }); }}>Send all back</button>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Row } from '@/lib/games/rows';
 import { GAME_NAMES, LINKISH, lineKind, type LineKind } from './helpers';
@@ -18,7 +18,7 @@ export function ActionIcon({ done, children }: { done: boolean; children: ReactN
 }
 
 /** The rows as they will be stored, grouped under a heading for each chapter and topic. */
-export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, rowClass, games, problem, doubts, doubtsLabel = 'Please check', oneChapter = false }: {
+export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, rowClass, games, problem, doubts, doubtsLabel = 'Please check', onClearDoubts, oneChapter = false }: {
   rows: R[];
   /** A stable key per row, so rows that leave or arrive don't disturb the others. */
   keyOf?: (r: R, i: number) => string | number;
@@ -32,6 +32,8 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
   /** Things the page can't be sure are wrong, for the HoD to decide (`doubts` in format.ts), and what to call them. */
   doubts?: (r: R) => string[];
   doubtsLabel?: string;
+  /** A cross on the notes that hides them (the HoD desk: until the page is opened again). */
+  onClearDoubts?: (r: R) => void;
   /** The rows are one chapter, already named above them (Approve questions' chapter rows): no chapter heading. */
   oneChapter?: boolean;
 }) {
@@ -107,8 +109,15 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
           </p>
         )}
         {unsure.length > 0 && (
-          <div className="col-span-full ml-9 rounded-lg bg-brand-blue-subtle px-2 py-1 text-[12px] text-brand-blue-deep sm:col-start-2 sm:ml-0">
-            <b>{doubtsLabel}:</b> {unsure.join(' ')}
+          <div className="col-span-full ml-9 flex items-start gap-1 rounded-lg bg-brand-blue-subtle py-1 pl-2 pr-1 text-[12px] text-brand-blue-deep sm:col-start-2 sm:ml-0">
+            <p className="min-w-0 flex-1 py-0.5"><b>{doubtsLabel}:</b> {unsure.join(' ')}</p>
+            {onClearDoubts && (
+              <button type="button" aria-label={`Clear: ${doubtsLabel.toLowerCase()}`} title="Clear this note (it comes back when the page is opened again)"
+                onClick={() => onClearDoubts(r)}
+                className="tap-44 flex size-6 shrink-0 items-center justify-center rounded-full transition-colors duration-150 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                <X className="size-3.5" aria-hidden />
+              </button>
+            )}
           </div>
         )}
         {extra && <div className="col-span-full pl-9 sm:col-start-2">{extra(r)}</div>}

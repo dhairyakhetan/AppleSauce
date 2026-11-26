@@ -72,6 +72,16 @@ test.describe('the autocorrect', () => {
   });
 });
 
+test('the same problem on several lines is listed once, with every line it is on', async ({ page }) => {
+  const box = await writePage(page);
+  const qs = ['Thermometer', 'Kelvin', 'Mercury'].map((a, i) => `Q: Question ${i + 1} about temperature\nA: ${a}\nWrong: One; Two; Three\nLevel: easy`);
+  await box.fill('Board: CBSE\nClass: 7\nSubject: Science\nChapter 7: Heat Transfer in Nature\n\n' + qs.join('\n\n'));
+  await clickAway(page);
+  const entry = page.getByRole('listitem').filter({ hasText: 'No Fill: line' });
+  await expect(entry).toHaveCount(1);
+  await expect(entry.getByRole('button', { name: /^Line \d+: go to it$/ })).toHaveCount(3);
+});
+
 test.describe('the dropdowns', () => {
   test('each waits for the one before, and a pick writes its line', async ({ page }) => {
     const box = await writePage(page);

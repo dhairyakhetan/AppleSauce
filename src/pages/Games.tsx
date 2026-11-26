@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
 import { ApproveQuestions } from '@/components/games/ApproveQuestions';
@@ -142,9 +142,17 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   const recount = useCallback(() => { if (r && r !== 'member') api.waitingCount().then(setWaiting, () => {}); }, [api, r]);
   useEffect(recount, [recount]);
 
-  // questions sent back to this person: loaded with the role, and again after each send
+  // questions sent back to this person: loaded with the role, again after each send, and each time Write questions is
+  // opened (an HoD who writes too may have just sent some of their own back on Approve questions)
   const [alerts, setAlerts] = useState<Alerts>({});
   const [alertsTry, setAlertsTry] = useState(0);
+  const onWrite = part === 'write';
+  const firstWrite = useRef(true);
+  useEffect(() => {
+    if (!onWrite) return;
+    if (firstWrite.current) { firstWrite.current = false; return; } // the first load is the one with the role
+    setAlertsTry((n) => n + 1);
+  }, [onWrite]);
   useEffect(() => {
     if (!r) { setAlerts({}); return; }
     let current = true;

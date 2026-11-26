@@ -707,6 +707,38 @@ describe('what the page is unsure of goes to the HoD, without stopping the quest
     expect(read(block('Rate of flow of charge', 'Electric current', 'Electric potential; Resistance; Conductance', 'The rate of flow of electric charge is called ___.')).doubts).toEqual([]);
   });
 
+  it('a one-word answer that repeats the word after the ___', () => {
+    expect(read(block('Force on a charge', 'Electrostatic force', 'Gravity; Friction; Tension', 'A charge feels an ___ force.')).doubts[0]).toMatch(/says "force" twice/);
+    expect(read(block('Force on a charge', 'Force', 'Mass; Speed; Heat', 'Every push or pull is a ___ acting on a body.')).doubts).toEqual([]);
+  });
+
+  it('an answer that stands out among the options: much longer, or written another way', () => {
+    expect(read(block('Force when the distance is doubled', 'It becomes one quarter', 'Twice; Half; Four times', 'When the distance is doubled the force is ___ as large.')).doubts)
+      .toContain('The answer is much longer than every wrong option, which gives it away in multiple choice.');
+    expect(read(block('Charge on an electron in coulombs', '-1.6 × 10^-19', '+1.6 × 10^-19; -1.6 × 10^-18; +1.6 x 10^-18', 'The charge on an electron is ___ C.')).doubts)
+      .toEqual(['The answer writes × and a wrong option writes x, which can give the answer away in multiple choice: write them the same way.']);
+    expect(read(block('Area of a square of side 3 m', '9 m²', '6 m^2; 12 m²; 3 m²', 'A square of side 3 m has an area of ___.')).doubts[0]).toMatch(/writes ² and a wrong option writes \^/);
+  });
+
+  it('a True/False statement with "always" or "never" in it', () => {
+    const { rows } = format(`${head}Q: Like charges always repel each other\nA: True\nLevel: easy`);
+    expect(doubts(rows[0])).toEqual(['A True/False statement with "always" in it is often true only sometimes: check that it holds every time.']);
+  });
+
+  it('two questions in one topic with the same answer', () => {
+    const two = `${head}Q: SI unit of electric charge\nA: Coulomb\nFill: The SI unit of charge is the ___ here.\nWrong: Ampere; Volt; Ohm\nLevel: easy\n\nQ: Unit named after a French physicist\nA: coulomb\nFill: Charge is measured in the ___ unit.\nWrong: Ampere; Volt; Ohm\nLevel: easy`;
+    const { rows } = format(two);
+    expect(doubts(rows[0], rows)).toEqual(['"Unit named after a French physicist" in the same topic has the same answer ("coulomb"): check that they don\'t test the same fact.']);
+    expect(doubts(rows[0])).toEqual([]); // with no other questions given, nothing to compare
+    const other = format(two.replace('Level: easy\n\nQ: Unit named', 'Level: easy\n\nTopic 2: Transfer of Heat\n\nQ: Unit named')).rows;
+    expect(doubts(other[0], other)).toEqual([]); // another topic
+  });
+
+  it('the page\'s own example raises no notes', () => {
+    const { rows } = format(EXAMPLE);
+    for (const r of rows) expect(doubts(r, rows), r.question).toEqual([]);
+  });
+
   it('formulas are not "two answers", and a formula option holding the answer\'s formula is plainly wrong', () => {
     expect(read(block('Field and potential gradient', 'E = -dV/dr', 'E = +dV/dr; E = Vr; E = V/r', 'The field is the negative potential gradient, written ___.')).doubts).toEqual([]);
     expect(read(block('Potential of a point charge', 'kq/r', 'kq/r^2; kqr; kr/q', 'Potential due to a point charge is ___.')).doubts).toEqual([]);
