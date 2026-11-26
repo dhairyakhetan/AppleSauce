@@ -182,6 +182,11 @@ export interface HodCheck {
   detail: string;
   /** Questions passed by the AI with no person checking them (the questions check only). */
   ai_only?: number;
+  /**
+   * Which questions those are, in paper order (20261126310000_hod_checks_ai_only_ids.sql). Missing, not empty, while
+   * the database file is not pasted: the screen then only has the count and says so.
+   */
+  ai_only_ids?: string[];
 }
 
 /**
@@ -201,16 +206,27 @@ export function normaliseChecks(raw: unknown): HodCheck[] {
     if (!r) return { key: c.key, label: c.label, ok: false, detail: 'This check did not load. Refresh the page.' };
     const out: HodCheck = { key: c.key, label: str(r.label) ?? c.label, ok: r.ok === true, detail: plainCheckDetail(c.key, str(r.detail) ?? '') };
     if (c.key === 'questions_checked' && num(r.ai_only) > 0) out.ai_only = num(r.ai_only);
+    if (c.key === 'questions_checked' && Array.isArray(r.ai_only_ids)) out.ai_only_ids = strList(r.ai_only_ids);
     return out;
   });
 }
 
-/** The sentence under the questions check when some questions were passed by the AI only. The preview cannot point to
- *  them yet (the paper preview does not say which ones), so it says what the HOD can do instead. */
-export function aiOnlyText(count: number): string | null {
+/** The sentence under the questions check when some questions were passed by the AI only. When the database says which
+ *  ones (`marked`), each is marked "AI only" on the paper and Show me walks through them. Before that database file is
+ *  pasted only the count is known, so it says what the HOD can do instead. */
+export function aiOnlyText(count: number, marked = false): string | null {
   if (!Number.isFinite(count) || count <= 0) return null;
   const which = count === 1 ? '1 question was' : `${count} questions were`;
+  if (marked) {
+    return `${which} passed by the AI with no person checking. ${count === 1 ? 'It is' : 'Each one is'} marked "AI only" on the paper. Leave ${count === 1 ? 'it' : 'them'} out, or use Publish anyway if the paper cannot wait.`;
+  }
   return `${which} passed by the AI with no person checking. This screen cannot point to ${count === 1 ? 'it' : 'them'} yet. Tell the owner, or use Publish anyway if the paper cannot wait.`;
+}
+
+/** The ids of the questions checked by the AI only, or null when the database does not say which (not pasted yet). */
+export function aiOnlyIds(checks: HodCheck[]): string[] | null {
+  const c = checks.find((x) => x.key === 'questions_checked');
+  return c && Array.isArray(c.ai_only_ids) ? c.ai_only_ids : null;
 }
 
 /**
@@ -646,8 +662,12 @@ export interface PreviewQuestion {
   flag_reasons: string[];
   set_aside_reason: string | null;
   scanner_junk: boolean;
-  /** The OR group the live page draws an "OR" between. Optional: the preview function does not send it yet. */
+  /** The OR group the live page draws an "OR" between (20261126320000). Missing before that database file is pasted. */
   alternative_group?: string | null;
+  /** The paper's own word for this OR choice ("Either", a repeated number), shown small as on the live page. */
+  alternative_label?: string | null;
+  /** Passed by the AI with no person checking (from the questions check's ai_only_ids). False when the server does not say. */
+  ai_only?: boolean;
 }
 
 export interface PreviewHeader {
@@ -682,6 +702,11 @@ export interface PreviewPaper {
   header: PreviewHeader;
   marks_from_questions: number | null;
   approval_note: string | null;
+  /**
+   * The database accepts "Leave it out" on every question of this paper (20261126300000, flagged by the preview in
+   * 20261126320000). False before those files are pasted: then only questions that came to the HOD can be left out.
+   */
+  leave_out_any: boolean;
 }
 
 export interface HodPreview {
@@ -728,6 +753,8 @@ export function normalisePreviewQuestion(raw: unknown): PreviewQuestion | null {
     set_aside_reason: str(r.set_aside_reason),
     scanner_junk: bool(r.scanner_junk),
     alternative_group: str(r.alternative_group),
+    alternative_label: str(r.alternative_label),
+    ai_only: false,
   };
 }
 
@@ -769,9 +796,12 @@ export function normalisePreview(raw: unknown): HodPreview {
   const p = obj(r.paper);
   const id = str(p.audit_paper_id);
   if (!id) throw new Error('The paper preview came back incomplete.');
+  const checks = normaliseChecks(r.checks);
+  const aiOnly = new Set(aiOnlyIds(checks) ?? []);
   const questions = list(r.questions)
     .map(normalisePreviewQuestion)
     .filter((q): q is PreviewQuestion => q !== null)
+    .map((q) => (aiOnly.has(q.id) ? { ...q, ai_only: true } : q))
     .sort((a, b) => a.ord - b.ord);
   const c = obj(r.counts);
   const fromRows = countQuestions(questions);
@@ -791,6 +821,7 @@ export function normalisePreview(raw: unknown): HodPreview {
       header: normalisePreviewHeader(p.header),
       marks_from_questions: numOrNull(p.marks_from_questions),
       approval_note: str(p.approval_note),
+      leave_out_any: p.leave_out_any === true,
     },
     questions,
     counts,
@@ -798,7 +829,7 @@ export function normalisePreview(raw: unknown): HodPreview {
       .map((x) => obj(x))
       .map((x) => ({ page: num(x.page), object_path: str(x.object_path) ?? '' }))
       .filter((x) => x.object_path !== ''),
-    checks: normaliseChecks(r.checks),
+    checks,
   };
 }
 
@@ -1425,21 +1456,29 @@ export function isRealQuestion(q: Pick<PreviewQuestion, 'kind' | 'state'>): bool
 }
 
 /**
- * Leave it out (set aside) is accepted by the server only for a question that came to the HOD (hod_set_question_state:
- * buckets escalated and admin) or one already left out. For the rest the server refuses, so the button is not offered.
+ * Leave it out (set aside). Since 20261126300000 the server accepts it on ANY question of a paper waiting to go live
+ * (with a note); the preview says so with paper.leave_out_any. Before that file is pasted the server accepts it only
+ * for a question that came to the HOD (buckets escalated and admin), so only those get the button.
  */
-export function canLeaveOut(q: Pick<PreviewQuestion, 'review_bucket' | 'state'>): boolean {
-  return q.state !== 'set_aside' && (q.review_bucket === 'escalated' || q.review_bucket === 'admin');
+export function canLeaveOut(q: Pick<PreviewQuestion, 'review_bucket' | 'state'>, leaveOutAny = false): boolean {
+  if (q.state === 'set_aside') return false;
+  return leaveOutAny || q.review_bucket === 'escalated' || q.review_bucket === 'admin';
 }
 
 /** Which questions a "Show me" walks through. */
-export type MarkKind = 'junk' | 'pictures' | 'open';
+export type MarkKind = 'junk' | 'pictures' | 'open' | 'ai_only';
 
 export function markedIds(kind: MarkKind, qs: PreviewQuestion[]): string[] {
   return qs
     .filter((q) => isRealQuestion(q) && q.state !== 'set_aside')
     .filter((q) =>
-      kind === 'junk' ? q.scanner_junk : kind === 'pictures' ? q.has_picture && !q.picture_staged && !q.figure_path : q.state === 'open',
+      kind === 'junk'
+        ? q.scanner_junk
+        : kind === 'pictures'
+          ? q.has_picture && !q.picture_staged && !q.figure_path
+          : kind === 'ai_only'
+            ? q.ai_only === true
+            : q.state === 'open',
     )
     .map((q) => q.id);
 }
@@ -1448,6 +1487,7 @@ export const MARK_WORDS: Record<MarkKind, { one: string; chip: string }> = {
   junk: { one: 'question with scanner junk', chip: 'Scanner junk' },
   pictures: { one: 'question whose picture is not on the site yet', chip: 'Picture not copied yet' },
   open: { one: 'question still open', chip: 'Still open' },
+  ai_only: { one: 'question checked by the AI only', chip: 'AI only' },
 };
 
 /** "Question 7 saved." (or "Question saved." when the paper gave it no number). */

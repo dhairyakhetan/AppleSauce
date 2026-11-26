@@ -207,6 +207,12 @@ export interface LeftoverInput {
   /** Who got at least one paper in this run. */
   gotSome: readonly string[];
   cap?: number;
+  /**
+   * The database's own reasons (hod_handout_reasons, 20261126330000), or null/undefined when it could not be asked
+   * (the file is not pasted yet, or the call failed). With them every paper and checker gets the hand-out's real rule,
+   * including the two the screen cannot see (own school, let it sit for 7 days).
+   */
+  server?: HandoutReasons | null;
 }
 
 export interface LeftoverWhy {
@@ -225,6 +231,7 @@ const checkers = (n: number) => `${n} ${n === 1 ? 'checker' : 'checkers'}`;
  * not guessed at. Subjects never stop a paper; they only help pick who gets it.
  */
 export function explainLeftovers(input: LeftoverInput): LeftoverWhy {
+  if (input.server) return explainFromServer(input, input.server);
   const cap = input.cap ?? PAPER_CAP;
   const lines: string[] = [];
   let fixOnCheckers = false;
@@ -290,6 +297,114 @@ export function explainLeftovers(input: LeftoverInput): LeftoverWhy {
         );
         fixOnCheckers = true;
       }
+    }
+  }
+  return { lines, fixOnCheckers };
+}
+
+// --------------------------------------------- the database's own reasons (20261126330000)
+
+/** Why a paper was not handed out: the first hand-out rule that rules out every checker. */
+export type PaperBlock = 'taken' | 'no_checker' | 'all_full' | 'grade' | 'own_school' | 'let_it_sit' | 'other';
+/** Why a checker got nothing, from the checker's side of the same rules. */
+export type PersonBlock = 'expired' | 'full' | 'none_left' | 'grade' | 'own_school' | 'let_it_sit' | 'other';
+
+const PAPER_BLOCKS: readonly PaperBlock[] = ['taken', 'no_checker', 'all_full', 'grade', 'own_school', 'let_it_sit', 'other'];
+const PERSON_BLOCKS: readonly PersonBlock[] = ['expired', 'full', 'none_left', 'grade', 'own_school', 'let_it_sit', 'other'];
+
+export interface HandoutReasons {
+  papers: { paper_id: string; reason: PaperBlock }[];
+  checkers: { user_id: string; reason: PersonBlock }[];
+  /** verifier_paper_cap() */
+  cap: number;
+  /** verifier_idle_days() */
+  idleDays: number;
+}
+
+/** Most papers the screen asks the database about in one call (the function reads at most this many). */
+export const REASONS_MAX = 200;
+
+/** The answer of hod_handout_reasons, or null when it is not the expected shape (an unknown reason reads as 'other'). */
+export function normaliseHandoutReasons(raw: unknown): HandoutReasons | null {
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+  if (!r || !Array.isArray(r.papers) || !Array.isArray(r.checkers)) return null;
+  const n = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback);
+  const papers: HandoutReasons['papers'] = [];
+  for (const x of r.papers) {
+    const o = x && typeof x === 'object' ? (x as Record<string, unknown>) : {};
+    if (typeof o.paper_id !== 'string' || o.paper_id === '') continue;
+    const reason = PAPER_BLOCKS.includes(o.reason as PaperBlock) ? (o.reason as PaperBlock) : 'other';
+    papers.push({ paper_id: o.paper_id, reason });
+  }
+  const people: HandoutReasons['checkers'] = [];
+  for (const x of r.checkers) {
+    const o = x && typeof x === 'object' ? (x as Record<string, unknown>) : {};
+    if (typeof o.user_id !== 'string' || o.user_id === '') continue;
+    const reason = PERSON_BLOCKS.includes(o.reason as PersonBlock) ? (o.reason as PersonBlock) : 'other';
+    people.push({ user_id: o.user_id, reason });
+  }
+  return { papers, checkers: people, cap: n(r.cap, PAPER_CAP), idleDays: n(r.idle_days, 7) };
+}
+
+const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
+
+/** explainLeftovers when the database said why: one line per reason, counted, in the hand-out's own order. */
+function explainFromServer(input: LeftoverInput, server: HandoutReasons): LeftoverWhy {
+  const lines: string[] = [];
+  let fixOnCheckers = false;
+  const cap = server.cap;
+  const of = input.leftIsAtLeast ? 'Of the papers still listed, ' : '';
+  const n = (k: number) => `${k} ${k === 1 ? 'paper' : 'papers'}`;
+  const count = <T extends string>(rows: { reason: T }[], reason: T) => rows.filter((x) => x.reason === reason).length;
+  const it = (k: number) => (k === 1 ? 'it' : 'them');
+
+  const paperLine: Record<PaperBlock, (k: number) => string> = {
+    taken: (k) => `${of}${n(k)}: given to a checker just now, so ${k === 1 ? 'it leaves' : 'they leave'} this list.`,
+    no_checker: (k) => `${of}${n(k)}: no checker can take papers right now (none is active, or their details expired).`,
+    all_full: (k) => `${of}${n(k)}: every checker who can take papers already holds ${cap} papers with work, the most anyone can hold.`,
+    grade: (k) => `${of}${n(k)}: the class is above the grade of every checker who has room.`,
+    own_school: (k) => `${of}${n(k)}: every checker who could take ${it(k)} is at the paper's own school, and nobody checks a paper from their own school.`,
+    let_it_sit: (k) =>
+      `${of}${n(k)}: the checkers who could take ${it(k)} let ${it(k)} sit for ${days(server.idleDays)} before, so ${k === 1 ? 'it is' : 'they are'} not given back to them yet.`,
+    other: (k) => `${of}${n(k)}: a checker could take ${it(k)} now. Press Auto assign all again.`,
+  };
+  for (const reason of PAPER_BLOCKS) {
+    const k = count(server.papers, reason);
+    if (k > 0) lines.push(paperLine[reason](k));
+  }
+
+  // The people who got nothing, by the database's reason. Only the checkers this screen lists are counted.
+  const got = new Set(input.gotSome);
+  const listed = new Set(input.people.map((x) => x.user_id));
+  const none = server.checkers.filter((c) => listed.has(c.user_id) && !got.has(c.user_id));
+  const personLine: Record<PersonBlock, (k: number) => string> = {
+    expired: (k) => `${checkers(k)} got nothing because their details have expired. Update them on Checkers.`,
+    full: (k) => `${checkers(k)} already ${k === 1 ? 'holds' : 'hold'} ${cap} papers with work, the most anyone can hold.`,
+    none_left: (k) => `${checkers(k)} got nothing because no paper was left to give.`,
+    grade: (k) => `${checkers(k)} ${k === 1 ? 'is' : 'are'} below the class of every paper left.`,
+    own_school: (k) => `${checkers(k)} got nothing because every paper left that suits their class is from their own school.`,
+    let_it_sit: (k) => `${checkers(k)} got nothing because they let the papers left that suit them sit for ${days(server.idleDays)} before.`,
+    other: (k) => `${checkers(k)} could take a paper that is left. Press Auto assign all again.`,
+  };
+  for (const reason of PERSON_BLOCKS) {
+    const k = count(none, reason);
+    if (k === 0) continue;
+    lines.push(personLine[reason](k));
+    if (reason === 'expired') fixOnCheckers = true;
+  }
+
+  // Subjects never stop a paper, but setting them helps the hand-out match. Said only when the details loaded.
+  if (input.profiles !== null) {
+    const profileOf = new Map(input.profiles.map((x) => [x.user_id, x]));
+    const noSubjects = input.people.filter((x) => {
+      const prof = profileOf.get(x.user_id);
+      return !got.has(x.user_id) && prof?.expired !== true && (prof?.preferred_subjects.length ?? 0) === 0;
+    }).length;
+    if (noSubjects > 0) {
+      lines.push(
+        `${checkers(noSubjects)} who got nothing ${noSubjects === 1 ? 'has' : 'have'} no subjects set. That does not stop papers, but setting subjects on Checkers helps Auto assign match them.`,
+      );
+      fixOnCheckers = true;
     }
   }
   return { lines, fixOnCheckers };

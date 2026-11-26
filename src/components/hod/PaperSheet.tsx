@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { MathText } from '@/components/papers/math-text';
-import { OptionList, OrDivider, PaperHeader, QuestionRow, SectionTitle } from '@/components/papers/printed-paper';
+import { OptionList, OrDivider, PaperHeader, QuestionMeta, QuestionRow, SectionTitle } from '@/components/papers/printed-paper';
 import { PaperRowEditor, rowKindWords } from '@/components/hod/PaperRowEditor';
 import { deskLink, quietButton } from '@/components/hod/HodShared';
 import { actionToneClass } from '@/lib/checker-button-styles';
@@ -75,13 +75,20 @@ function labelOf(q: Pick<PreviewQuestion, 'display_number' | 'number_path'>): st
   return q.display_number ?? q.number_path ?? '?';
 }
 
-/** The small marks the desk puts on a question (never on the live page): still open, scanner junk, picture not copied. */
+/** The small marks the desk puts on a question (never on the live page): still open, checked by the AI only, scanner
+ *  junk, picture not copied. */
 function DeskChips({ q }: { q: PreviewQuestion }) {
   const unstaged = q.has_picture && !q.picture_staged && !q.figure_path;
-  if (q.state !== 'open' && !q.scanner_junk && !unstaged) return null;
+  const aiOnly = q.ai_only === true && q.state !== 'set_aside';
+  if (q.state !== 'open' && !q.scanner_junk && !unstaged && !aiOnly) return null;
   return (
     <p className="mb-1.5 flex flex-wrap gap-1.5 font-sans" data-testid="desk-chips">
       {q.state === 'open' ? <span className="rounded-full bg-brand px-2 py-0.5 text-[12px] font-bold text-foreground">{MARK_WORDS.open.chip}</span> : null}
+      {aiOnly ? (
+        <span className="rounded-full bg-brand-subtle px-2 py-0.5 text-[12px] font-bold text-foreground" data-testid="ai-only-chip" title="Passed by the AI with no person checking">
+          {MARK_WORDS.ai_only.chip}
+        </span>
+      ) : null}
       {q.scanner_junk ? <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[12px] font-bold text-destructive">{MARK_WORDS.junk.chip}</span> : null}
       {unstaged ? <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] font-bold text-foreground">{MARK_WORDS.pictures.chip}</span> : null}
     </p>
@@ -121,8 +128,11 @@ function SheetQuestion({
   onChanged,
   pictureWork,
   current,
+  leaveOutAny = false,
 }: {
   pictureWork?: PictureWork;
+  /** The database accepts Leave it out on every question of this paper (preview paper.leave_out_any). */
+  leaveOutAny?: boolean;
   q: PreviewQuestion;
   depth: number;
   api: HodApi;
@@ -272,7 +282,7 @@ function SheetQuestion({
               >
                 Edit
               </button>
-              {canLeaveOut(q) ? (
+              {canLeaveOut(q, leaveOutAny) ? (
                 <button
                   type="button"
                   className={cn(EDIT_BUTTON, 'text-warm-secondary')}
@@ -331,6 +341,8 @@ function SheetQuestion({
         data-current={current || undefined}
       >
         <DeskChips q={q} />
+        {/* The paper's own word for this OR choice, small, as the live page shows it. */}
+        <QuestionMeta parts={[q.alternative_label]} />
         {q.instructions ? <MathText text={q.instructions} className="mb-1.5 text-[14px] italic leading-[1.55] text-warm-secondary" /> : null}
         {q.body.trim() ? (
           <MathText text={displayBodyWithoutDuplicateNumber(q.body, q.display_number)} className="text-[15px] leading-[1.6] text-foreground" />
@@ -979,6 +991,7 @@ export function PaperSheet({
                   onChanged={onChanged}
                   pictureWork={pictureWork}
                   current={currentId === q.id}
+                  leaveOutAny={paper.leave_out_any}
                 />
               </Fragment>
             );

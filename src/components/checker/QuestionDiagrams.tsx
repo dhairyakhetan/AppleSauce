@@ -2,8 +2,10 @@ import { Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DIAGRAM_CHECK_LINE, diagramHeading, type DiagramItem } from '@/lib/checker-diagrams';
 
-/* The diagram that belongs to the question being checked, shown right beside the picture of its words,
-   with no tap needed (owner, 6 November 2026). A tap on one enlarges it in the same viewer the crop uses.
+/* The diagram that belongs to the question being checked, shown with its words, with no tap needed (owner,
+   6 November 2026). On the checker screen it sits inside the part card, beside the words on a wide card and
+   directly under them on a narrow one (owner, 26 November 2026: "not at the top"; see DiagramBeside in
+   PartCard.tsx). A tap on one enlarges it in the same viewer the crop uses.
    Renders nothing when the question has no stored diagram. It sits on a white sheet so it reads like the
    printed paper, and it never grows past a fixed height: the question's own picture keeps the room. */
 export function QuestionDiagrams({
@@ -36,7 +38,13 @@ export function QuestionDiagrams({
             data-testid="diagram-item"
             className="group relative flex min-w-0 max-w-full cursor-zoom-in justify-center rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
-            <img src={it.url} alt={it.alt} className="block h-auto max-h-[30vh] w-auto max-w-full object-contain" />
+            {/* Beside the words (a wide card) it stays short, so the words keep the room and the card does not
+                grow much past them. */}
+            <img
+              src={it.url}
+              alt={it.alt}
+              className="block h-auto max-h-[30vh] w-auto max-w-full object-contain [@container(min-width:30rem)]:max-h-[min(30vh,14rem)]"
+            />
             <span aria-hidden="true" className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-foreground shadow-sm">
               <Maximize2 className="h-3 w-3" />
             </span>

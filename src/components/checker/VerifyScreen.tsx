@@ -1698,6 +1698,12 @@ export function VerifyScreen({
           </div>
         );
 
+        /** The question's own stored diagram, shown WITH the question's words (owner, 6 Nov 2026: "show the
+         *  diagram with the question itself"; 26 Nov 2026: "alongside the question, not at the top"). It goes inside
+         *  the part card: beside the words on a wide card, directly under them (before the options) on a phone. */
+        const hasDiagram = diagramShown.length > 0;
+        const diagramBlock = <QuestionDiagrams items={diagramShown} onEnlarge={(src, alt) => setLightbox({ src, alt })} />;
+
         /** The card: absent only when there are no words and nothing to type over (the alert above says what to do). */
         const partCard =
           blank && !lost && mode === 'check' ? null : (
@@ -1719,6 +1725,7 @@ export function VerifyScreen({
               editFooter={editFooter}
               splitBody={splitBody}
               splitFooter={<SplitPreview body={bodyDraft} at={splitAt} />}
+              diagram={hasDiagram ? diagramBlock : null}
             />
           );
 
@@ -1742,15 +1749,12 @@ export function VerifyScreen({
         const checkedPart = (
           <>
             {rulesLine}
-            {partCard}
+            {/* With no card (no words to show) the diagram still sits where the words would be. */}
+            {partCard ?? (hasDiagram ? <div className="mb-3">{diagramBlock}</div> : null)}
             {tools}
             {marksHint}
           </>
         );
-
-        /** The question's own stored diagram, shown WITH the question's words (owner, 6 Nov 2026: "show the
-         *  diagram with the question itself"), on the phone's Question tab as well as on a wide screen. */
-        const diagramBlock = <QuestionDiagrams items={diagramShown} onEnlarge={(src, alt) => setLightbox({ src, alt })} className="mb-3" />;
 
         /** The whole left side, top to bottom. A part of a bigger question shows the whole question from its
          *  stem, every part in order, with the checked part as the one card in its natural place. */
@@ -1760,7 +1764,6 @@ export function VerifyScreen({
               {questionTop}
               {alerts}
               {instructionsBlock}
-              {diagramBlock}
               <div data-testid="whole-question" role="group" aria-label="The whole question">
                 {contextRows[0].isParent ? null : passageBlock}
                 {contextRows.map((r, i) => (
@@ -1777,7 +1780,6 @@ export function VerifyScreen({
               {questionTop}
               {alerts}
               {checkedPart}
-              {diagramBlock}
               {passageBlock}
               {instructionsBlock}
             </>

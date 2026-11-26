@@ -8,6 +8,7 @@ import {
   type QuestionDiagram,
 } from '@/lib/checker-api';
 import type { StagePictureItem } from '@/lib/stage-pictures';
+import { normaliseHandoutReasons, REASONS_MAX, type HandoutReasons } from '@/lib/hod-bulk-assign';
 import type { RawOption } from '@/lib/checker-options';
 import { paperLabel } from '@/lib/checker-progress';
 import { isVerifierGrade } from '@/lib/verifier-papers';
@@ -615,6 +616,11 @@ export interface HodApi {
   unassign(assignmentId: number): Promise<void>;
   /** distribute_unassigned_papers(): hands out what it can by the rules; returns how many papers were given. */
   distribute(): Promise<number>;
+  /**
+   * hod_handout_reasons() (20261126330000): read-only; for these papers (at most 200) and every active checker, the
+   * hand-out rule that kept them apart. null when the server does not have the function yet; other failures throw.
+   */
+  handoutReasons(paperIds: string[]): Promise<HandoutReasons | null>;
   profiles(): Promise<HodVerifierProfile[]>;
   setProfile(userId: string, input: ProfileInput): Promise<void>;
   setPreferred(userId: string, subjects: string[]): Promise<void>;
@@ -764,6 +770,17 @@ export const realHodApi: HodApi = {
   },
   async distribute() {
     return num(await call('distribute_unassigned_papers'));
+  },
+  async handoutReasons(paperIds) {
+    const { data, error } = await withTimeout(
+      supabase.rpc('hod_handout_reasons' as never, { p_paper_ids: paperIds.slice(0, REASONS_MAX) } as never),
+      HOD_CALL_TIMEOUT_MS,
+    );
+    if (error) {
+      if (isMissingFunctionError(error)) return null;
+      throw error;
+    }
+    return normaliseHandoutReasons(data);
   },
   async profiles() {
     return normaliseVerifierProfiles(await call('hod_verifier_profiles'));

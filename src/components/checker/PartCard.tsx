@@ -18,6 +18,23 @@ import type { RawOption } from '@/lib/checker-options';
 
 const BADGE = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold text-foreground';
 
+/* The words and their diagram. The card measures its own width (a CSS container), so the layout follows the
+   room the card really has: from 30rem of card width (a laptop's half-screen card) the words sit left and the
+   diagram right, no wider than two fifths; narrower (a phone, a tablet's column) the diagram sits directly under
+   the words. */
+export function DiagramBeside({ diagram, children }: { diagram: ReactNode; children: ReactNode }) {
+  return (
+    <div className="[container-type:inline-size]" data-testid="words-and-diagram">
+      <div className="flex flex-col gap-3 [@container(min-width:30rem)]:flex-row [@container(min-width:30rem)]:items-start">
+        <div className="min-w-0 flex-1">{children}</div>
+        <div className="min-w-0 [@container(min-width:30rem)]:w-2/5 [@container(min-width:30rem)]:shrink-0" data-testid="diagram-beside">
+          {diagram}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export type PartCardMode = 'read' | 'edit' | 'split';
 
 export function PartCard({
@@ -47,6 +64,9 @@ export function PartCard({
   focused = true,
   /** Tapping a calm card brings the highlight pair back to it (a view aid only). */
   onFocus,
+  /** The question's own stored diagram (null when it has none). It sits WITH the words, not above the card
+   *  (owner, 26 Nov 2026): beside them when the card is wide, directly under them, before the options, when narrow. */
+  diagram,
 }: {
   mode: PartCardMode;
   body: string;
@@ -65,6 +85,7 @@ export function PartCard({
   splitFooter?: ReactNode;
   focused?: boolean;
   onFocus?: () => void;
+  diagram?: ReactNode;
 }) {
   // Editing and splitting always keep the ring: that is where the typing happens.
   const calm = mode === 'read' && !focused;
@@ -126,12 +147,21 @@ export function PartCard({
             <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 [@media(max-width:399px)]:gap-x-1.5">{badges}</div>
             {changesPanel}
             {mode === 'split' ? (
-              splitBody
+              <>
+                {splitBody}
+                {diagram ? <div className="mt-3 min-w-0">{diagram}</div> : null}
+              </>
+            ) : diagram ? (
+              <DiagramBeside diagram={diagram}>
+                <MathText text={body} className="break-words text-[18px] leading-relaxed text-foreground" />
+              </DiagramBeside>
             ) : (
               <MathText text={body} className="break-words text-[18px] leading-relaxed text-foreground" />
             )}
           </>
         )}
+        {/* While the words are being edited the box needs the full width, so the diagram waits under it. */}
+        {editing && diagram ? <div className="mt-3 min-w-0">{diagram}</div> : null}
         <OptionList options={options} />
       </div>
       {editing && editFooter ? <div className="flex flex-col gap-2 border-t border-warm-hairline px-3 py-2.5">{editFooter}</div> : null}

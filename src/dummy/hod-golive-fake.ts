@@ -641,8 +641,10 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
         record(`reopen ${id}`);
         return 'open';
       }
-      // The server's rule (hod_set_question_state): pass and set aside only for a question that came to the HOD.
-      if (x.pile === 'students' && x.state !== 'set_aside') throw pgError('This question is still with the student checkers.', '55000');
+      // The server's rule (hod_set_question_state): pass only for a question that came to the HOD. Since 20261126300000
+      // any question of a paper waiting to go live can be left out; on any other paper the old rule holds for that too.
+      const leaveOutAny = state === 'set_aside' && p.approval === 'awaiting';
+      if (!leaveOutAny && x.pile === 'students' && x.state !== 'set_aside') throw pgError('This question is still with the student checkers.', '55000');
       if (state === 'set_aside') {
         if (!note || !note.trim()) throw pgError('Say why the question is set aside');
         x.state = 'set_aside';
@@ -772,6 +774,7 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
           header: { ...p.header },
           marks_from_questions: rs.filter((x) => x.state === 'passed').reduce((n, x) => n + (x.marks ?? 0), 0),
           approval_note: null,
+          leave_out_any: p.approval === 'awaiting',
         },
         questions: p.questions.map(toPreviewQ),
         counts: {

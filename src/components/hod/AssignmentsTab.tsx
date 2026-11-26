@@ -67,8 +67,10 @@ import {
    written. "Auto assign all" runs the automatic hand-out straight away and
    then says how many went to whom and how many are left (the server only
    returns a count, so who got what is read back from the lists afterwards),
-   and why papers or people got nothing, from what the screen already holds
-   (explainLeftovers). Since 26 Nov 2026 nothing is handed out by itself, so the
+   and why papers or people got nothing (explainLeftovers): in full from the
+   database (hod_handout_reasons, 20261126330000, including a checker's own
+   school and a paper they let sit for 7 days), or, before that file is pasted,
+   from what the screen already holds. Since 26 Nov 2026 nothing is handed out by itself, so the
    count of papers waiting and the button sit at the very top of the tab
    (HandOutCard); the button is off, with the reason under it, while the list is
    loading or when nothing is waiting, and a failure is shown right under it.
@@ -599,10 +601,14 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
         perPerson = newlyHeld(before, afterList);
         left = Math.min(afterFree.length, UNASSIGNED_SHOWN);
         leftIsAtLeast = afterFree.length > UNASSIGNED_SHOWN;
-        // Why papers or people got nothing, from the lists the screen holds (no extra call).
+        // Why papers or people got nothing. The database says it in full (own school, let it sit for 7 days) once
+        // 20261126330000 is pasted; until then, or if that read fails, the screen words what it can see itself.
         const was = new Set(before.map((b) => `${b.paper_id}|${b.user_id}`));
+        const leftShown = afterFree.slice(0, UNASSIGNED_SHOWN);
+        const server = leftShown.length > 0 ? await api.handoutReasons(leftShown.map((p) => p.paper_id)).catch(() => null) : null;
         why = explainLeftovers({
-          leftPapers: afterFree.slice(0, UNASSIGNED_SHOWN).map((p) => ({ grade: classGrade(p.cls) })),
+          server,
+          leftPapers: leftShown.map((p) => ({ grade: classGrade(p.cls) })),
           leftIsAtLeast,
           people: verifiers,
           profiles: profilesQ.data ?? null,
