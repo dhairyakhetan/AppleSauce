@@ -191,7 +191,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [text, example, catalog.list]);
   const all = useMemo(() => (listCheck?.issues.length ? [...formatIssues, ...listCheck.issues].sort((a, b) => a.line - b.line) : formatIssues), [formatIssues, listCheck]);
-  const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) }, rows);
+  const issues = useMemo(() => visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) }, rows),
+    [all, typingLine, typingBox, raw, rows]);
   const errors = issues.filter((x) => x.level === 'error').length;
   const toFix = issues.length;
   /** The problems to fix, one entry per line (a line can have more than one). */
@@ -223,7 +224,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     const wasExample = example;
     if (before.trim() && before !== next) {
       offerUndo(what, () => {
-        setRaw(before);
+        setRaw(remember(before)); // and its own chapter lines, so the autocorrect never puts the replaced text's back
         setExample(wasExample);
         setBatch((b) => b + 1);
         box.current?.focus({ preventScroll: true });
@@ -437,7 +438,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     if (d.subject && !fits(d, 'subject')) t = writeDetail(t, 'subject', '');
     d = readDetails(t);
     const typedCh = parseNumbered(d.chapter, 'chapter');
-    if (d.chapter && !chaptersFor(list, d.board, d.class, d.subject).some((c) => c.chapter_no === typedCh.no && sameName(c.name, typedCh.name))) t = writeDetail(t, 'chapter', '');
+    // a chapter on the list for the new pick stays, also one written with its number only ("Chapter 4")
+    if (d.chapter && !chaptersFor(list, d.board, d.class, d.subject).some((c) => c.chapter_no === typedCh.no && (!typedCh.name || sameName(c.name, typedCh.name)))) t = writeDetail(t, 'chapter', '');
     return remember(t);
   });
 
@@ -591,8 +593,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
                         Line {line}
                       </button>
                       <div className="flex flex-col gap-1 text-foreground">
-                        {xs.map((x) => (
-                          <p key={x.text} className="flex items-start gap-1.5">
+                        {xs.map((x, j) => (
+                          <p key={`${j}|${x.text}`} className="flex items-start gap-1.5">
                             {xs.length > 1 && <span className={cn('mt-2 size-1.5 shrink-0 rounded-full', x.level === 'error' ? 'bg-destructive' : 'bg-brand')} aria-hidden />}
                             <span>{x.text}</span>
                           </p>
@@ -849,6 +851,24 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
+/**
+ * What a fix changed, as lines to leave alone if it is taken back: each line it rewrote (as it was), each chapter line it
+ * put back (as it is now), and each Q: line it put a blank line before.
+ */
+function fixedLines(old: string, next: string): string[] {
+  const was = old.split('\n');
+  const now = next.split('\n');
+  const wasSet = new Set(was);
+  const nowSet = new Set(now);
+  const out = was.filter((l) => !nowSet.has(l));
+  const keys = new Set(was.map((l) => readMeta(l)?.key));
+  for (const l of now) { const k = readMeta(l)?.key; if (k && (DETAIL_KEYS as string[]).includes(k) && !keys.has(k)) out.push(l); }
+  const blankBefore = (ls: string[]) => new Set(ls.filter((l, i) => /^\s*Q:/.test(l) && i > 0 && !ls[i - 1].trim()));
+  const before = blankBefore(was);
+  for (const l of blankBefore(now)) if (!before.has(l) && wasSet.has(l)) out.push(l);
+  return out;
+}
+
 function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine, autoFix }: {
   value: string;
   onChange: (v: string) => void;
@@ -898,8 +918,8 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
     const fixed = autoFix(old, at, leave.current);
     if (fixed.text === old) return;
     const next = fixed.text;
-    const kept = new Set(next.split('\n'));
-    lastFix.current = { before: old, lines: old.split('\n').filter((l) => !kept.has(l)), caret: at };
+    const lines = fixedLines(old, next);
+    lastFix.current = { before: old, lines, caret: at };
     let a = 0;
     while (a < old.length && a < next.length && old[a] === next[a]) a++;
     let b = 0;
@@ -911,6 +931,12 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
       const c1 = c0 <= a ? c0 : c0 >= old.length - b ? c0 + next.length - old.length : a;
       onChange(next);
       setCaret(next.slice(0, c1).split('\n').length);
+      // a change made from outside the box isn't in the browser's undo history, so it gets its own Undo; taking it back
+      // also means it isn't made again
+      offerUndo('Tidied the questions', () => {
+        for (const l of lines) leave.current.add(l);
+        if (boxRef.current?.value === next) onChange(old);
+      });
       return;
     }
     const top = ta.scrollTop;

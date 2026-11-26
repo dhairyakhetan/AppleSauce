@@ -66,6 +66,17 @@ describe('tidyText', () => {
     expect(tidyText(text, { list, caret: null, leave: new Set([line]) }).text).toBe(text);
   });
 
+  it('puts no blank line before a Q: line, and no chapter line back, when the writer took that back', () => {
+    const q2 = 'Q: Instrument that measures pressure';
+    const text = HEAD + Q + '\n' + q2 + '\nA: Barometer';
+    expect(run(text).text).toContain('\n\n' + q2);
+    expect(tidyText(text, { list, caret: null, leave: new Set([q2]) }).text).toBe(text);
+    const keep = { board: 'CBSE', class: '7', subject: 'Science', chapter: '4: Heat' };
+    const noBoard = 'Class: 7\nSubject: Science\nChapter 4: Heat\n\n' + Q;
+    expect(tidyText(noBoard, { list, caret: null, keep }).text).toBe('Board: CBSE\n' + noBoard);
+    expect(tidyText(noBoard, { list, caret: null, keep, leave: new Set(['Board: CBSE']) }).text).toBe(noBoard);
+  });
+
   it('fixes only the code block of a pasted reply, never the chatbot\'s sentences around it', () => {
     const reply = 'Here you go.\nwrong: a note, with, commas\n\n```\n' + HEAD + Q.replace('Level: easy', 'Level: Easy') + '\n```\nLevel: Easy ones first, as you asked.';
     const t = run(reply).text;

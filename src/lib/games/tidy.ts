@@ -108,6 +108,8 @@ export interface TidyResult { text: string; caret: number | null }
  * result says where it goes. `keep` is the last chapter lines the text had, put back at the top if they are gone.
  */
 export function tidyText(text: string, opts: { list: ListChapter[]; caret: number | null; keep?: Partial<Record<DetailKey, string>>; leave?: ReadonlySet<string> }): TidyResult {
+  // `leave`: lines the writer took a fix back from, left as they are; a Q: line in it gets no blank line put before
+  // it, and a chapter line in it isn't put back
   const lines = text.split('\n');
   let caretLine = -1;
   let caretCol = 0;
@@ -132,7 +134,7 @@ export function tidyText(text: string, opts: { list: ListChapter[]; caret: numbe
     if (opts.leave?.has(line)) fixed = line;
     if (isCaret) fixed = sameLength(line, fixed);
     // a blank line before each question (not on the caret's line: it waits until the writer moves on)
-    if (!isCaret && !(fenced && !fence) && /^\s*Q:/.test(fixed) && out.length && out[out.length - 1].trim() && !FENCE.test(out[out.length - 1])) out.push('');
+    if (!isCaret && !(fenced && !fence) && !opts.leave?.has(fixed) && /^\s*Q:/.test(fixed) && out.length && out[out.length - 1].trim() && !FENCE.test(out[out.length - 1])) out.push('');
     out.push(fixed);
     if (isCaret) newCaretLine = out.length - 1;
   });
@@ -141,7 +143,8 @@ export function tidyText(text: string, opts: { list: ListChapter[]; caret: numbe
   // the four chapter lines back at the top, once the caret is below them or the box was left
   const keep = opts.keep ?? {};
   const has = new Set(out.map((l) => readMeta(l)?.key));
-  const gone = DETAIL_KEYS.filter((k) => !has.has(k) && keep[k]?.trim());
+  // (not one whose return the writer took back: it is in `leave` as the line it would be)
+  const gone = DETAIL_KEYS.filter((k) => !has.has(k) && keep[k]?.trim() && !opts.leave?.has(writeDetail('', k, keep[k]!).trim()));
   if (gone.length) {
     const firstOther = out.findIndex((l) => l.trim() && !(readMeta(l)?.key && (DETAIL_KEYS as string[]).includes(readMeta(l)!.key)));
     const movedOn = firstOther >= 0 && (newCaretLine < 0 || newCaretLine >= firstOther);

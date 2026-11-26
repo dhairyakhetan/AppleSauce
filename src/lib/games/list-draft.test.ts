@@ -210,6 +210,12 @@ describe('Bulk remove', () => {
       .toEqual([[3, 'Nothing is on the list for CBSE class 8 Physics.']]);
   });
 
+  it('removes every chapter when one block for a subject has no chapter lines, whatever another block for it names', () => {
+    const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: Geography\n\nBoard: CBSE\nClass: 8\nSubject: Geography\n2', LIST);
+    expect(r.problems).toEqual([]);
+    expect(r.groups[0].removed.map((c) => c.chapter_no)).toEqual([1, 2]);
+  });
+
   it('lists a kept chapter once, however many times it is named', () => {
     const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: History\n2\nFrom Trade to Territory\n2. From Trade to Territory', LIST);
     expect(r.groups[0].kept).toEqual([{ chapter_no: 2, name: 'From Trade to Territory', questions: 17 }]);

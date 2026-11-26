@@ -333,10 +333,14 @@ export interface RemoveGroup {
  * while there is one.
  */
 export function readBulkRemove(text: string, list: AdminChapter[]): { groups: RemoveGroup[]; problems: BulkProblem[] } {
-  const groups = new Map<string, RemoveGroup & { named: boolean }>();
+  /** `all`: a block for it had no chapter lines, so every chapter goes, whatever another block for it names. */
+  const groups = new Map<string, RemoveGroup & { all: boolean }>();
+  /** The block being read, and whether it has named a chapter yet. */
+  let block: { group: RemoveGroup & { all: boolean }; named: boolean } | null = null;
+  const endBlock = () => { if (block && !block.named) block.group.all = true; block = null; };
   const problems: BulkProblem[] = [];
   const where = { board: '', class: 0, subject: '', bad: false };
-  let at: (RemoveGroup & { named: boolean }) | null = null;
+  let at: (RemoveGroup & { all: boolean }) | null = null;
   const remove = (g: RemoveGroup, c: DraftChapter) => {
     if (c.deleted) return;
     if (c.questions) { if (!g.kept.some((k) => k.chapter_no === c.chapter_no)) g.kept.push({ chapter_no: c.chapter_no, name: c.name, questions: c.questions }); return; }
@@ -362,15 +366,17 @@ export function readBulkRemove(text: string, list: AdminChapter[]): { groups: Re
       if (k === 'subject') where.subject = ok ? checked!.name : '';
       where.bad = !ok;
       at = null;
+      endBlock();
       if (ok && k === 'subject' && where.board && where.class && where.subject) {
         const g = { board: where.board, class: where.class, subject: where.subject };
         const id = `${g.board}|${g.class}|${g.subject}`;
         if (!groups.has(id)) {
           const loaded = chaptersOf(list, g);
           if (!loaded.length) { say(`Nothing is on the list for ${g.board} class ${g.class} ${g.subject}.`); return; }
-          groups.set(id, { group: g, loaded, draft: draftOf(loaded), removed: [], kept: [], named: false });
+          groups.set(id, { group: g, loaded, draft: draftOf(loaded), removed: [], kept: [], all: false });
         }
         at = groups.get(id)!;
+        block = { group: at, named: false };
       }
       return;
     }
@@ -378,7 +384,7 @@ export function readBulkRemove(text: string, list: AdminChapter[]): { groups: Re
     if (!at && where.board && where.class && where.subject) return; // its Subject line already says nothing is on the list
     if (!at) { say(where.board && where.class && !where.subject ? 'Put a Subject line under the Class line, above these chapters. In Bulk remove the Subject line comes after Board and Class.' : missingHead(where)); return; }
     if (/^[-*•]/.test(line)) { say('Bulk remove takes whole chapters. Delete a topic in the list above.'); return; }
-    at.named = true;
+    if (block) block.named = true;
     const only = /^(\d{1,3})\s*[.:)]?$/.exec(line);
     const numbered = /^(\d{1,3})\s*[.:)]\s*(.+)$/.exec(line);
     const no = only ? Number(only[1]) : numbered ? Number(numbered[1]) : null;
@@ -393,11 +399,12 @@ export function readBulkRemove(text: string, list: AdminChapter[]): { groups: Re
     remove(g, (byNo ?? byName)!);
   });
 
+  endBlock();
   for (const g of groups.values()) {
-    if (!g.named) for (const c of g.draft) remove(g, c);
+    if (g.all) for (const c of g.draft) remove(g, c);
     g.removed = g.draft.filter((c) => c.deleted).sort(byNumber);
   }
-  return { groups: [...groups.values()].map(({ named: _named, ...g }) => g), problems };
+  return { groups: [...groups.values()].map(({ all: _all, ...g }) => g), problems };
 }
 
 // ---------------------------------------------------------------- what changed

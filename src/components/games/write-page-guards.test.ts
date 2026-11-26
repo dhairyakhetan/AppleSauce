@@ -55,4 +55,20 @@ describe('Write questions: guards', () => {
     expect(bulk).toContain('text={removeText} setText={setRemoveText}');
     expect(bulk).toContain('useEffect(() => setArmed(false), [text, list]);');
   });
+
+  it('gives a fix made when the box is left its own Undo, which also stops it being made again', () => {
+    expect(write).toMatch(/offerUndo\('Tidied the questions', \(\) => \{\s*for \(const l of lines\) leave\.current\.add\(l\);/);
+  });
+
+  it('puts the replaced text\'s chapter lines away when Try an example, Fix it or Clear is undone', () => {
+    expect(write).toContain('setRaw(remember(before));');
+  });
+
+  it('keeps a Chapter line written with its number only when Board, Class or Subject is picked again', () => {
+    expect(write).toContain('c.chapter_no === typedCh.no && (!typedCh.name || sameName(c.name, typedCh.name))');
+  });
+
+  it('asks twice again after a failed Bulk remove', () => {
+    expect(bulk).toMatch(/catch \(e\) \{\s*setError\(\(e as Error\)\.message\);\s*setArmed\(false\);/);
+  });
 });

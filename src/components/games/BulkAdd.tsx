@@ -179,6 +179,7 @@ function BulkRemove({ api, list, blocked, onSaved, text, setText, onBack }: {
       await onSaved(r.changes);
     } catch (e) {
       setError((e as Error).message);
+      setArmed(false); // a failed delete asks twice again
     } finally {
       setSaving(false);
     }

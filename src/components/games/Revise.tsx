@@ -2,13 +2,14 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
 import { GAME_TYPES, makeGame, poolFor, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
 
-/** The most answers the small preview's crossword uses. */
-const COMPACT_CROSSWORD = 8;
 import type { BankQuestion } from '@/lib/games/rows';
 import { bySubject } from '@/lib/games/details';
 import { cn } from '@/lib/utils';
 import { GameView } from './GameView';
 import { chip, GAME_NAMES, plural, whyNot } from './helpers';
+
+/** The most answers the small preview's crossword uses. */
+const COMPACT_CROSSWORD = 8;
 
 /* What students get: pick a class, subject and chapter, and the topics studied (all of them to start with), and play a
    short puzzle made from those questions on the device by the games engine (src/lib/games/engine), which checks every
