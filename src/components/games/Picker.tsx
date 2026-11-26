@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
-import { ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* The games pages' dropdown, in place of the browser's own: a pill (or, in a form, a field) that opens an anchored panel,
@@ -13,6 +13,8 @@ export interface PickerOption {
   label: string;
   /** Shown on the right, e.g. "12 chapters". */
   meta?: string;
+  /** `good`: the note on the right in green (a chapter that already has questions). */
+  tone?: 'good';
   /** On the list: shown first, under its own heading. */
   on?: boolean;
 }
@@ -48,6 +50,11 @@ export function Picker({ label, value, options, onPick, searchable = options.len
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  /** In a dialog, the panel opens inside it: a dialog blocks scrolling (wheel and touch) everywhere outside itself,
+   * so a long list opened outside it couldn't be scrolled. The panel is never taller than the room the screen has
+   * (Radix's available height), so the end of a long list is never off screen. */
+  const [inside, setInside] = useState<HTMLElement | null>(null);
   const id = useId();
 
   // options on the list first, then the rest, each as given; a search keeps those whose name has it
@@ -71,6 +78,7 @@ export function Picker({ label, value, options, onPick, searchable = options.len
     requestAnimationFrame(() => listRef.current?.querySelector(`[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' }));
   };
   const toggle = (o: boolean) => {
+    if (o) setInside(triggerRef.current?.closest<HTMLElement>('[role="dialog"]') ?? null);
     setOpen(o);
     if (!o) return;
     setQuery('');
@@ -103,7 +111,7 @@ export function Picker({ label, value, options, onPick, searchable = options.len
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={toggle}>
       <PopoverPrimitive.Trigger asChild>
-        <button type="button" id={triggerId} disabled={disabled} aria-haspopup="listbox" aria-label={`${label}: ${current?.label ?? placeholder ?? 'none'}`} aria-invalid={invalid || undefined}
+        <button ref={triggerRef} type="button" id={triggerId} disabled={disabled} aria-haspopup="listbox" aria-label={`${label}: ${current?.label ?? placeholder ?? 'none'}`} aria-invalid={invalid || undefined}
           className={cn('group inline-flex items-center gap-2 text-foreground ring-1 ring-border', LOOK[look],
             `transition-[transform,box-shadow] duration-100 ${EASE} hover:ring-warm-hairline active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus`,
             'data-[state=open]:ring-2 data-[state=open]:ring-brand disabled:opacity-disabled disabled:active:scale-100', invalid && 'ring-2 ring-destructive', className)}>
@@ -111,15 +119,15 @@ export function Picker({ label, value, options, onPick, searchable = options.len
           <ChevronDown aria-hidden className={`size-4 shrink-0 text-warm-meta transition-transform duration-150 ${EASE} group-data-[state=open]:rotate-180`} />
         </button>
       </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal container={inside ?? undefined}>
         <PopoverPrimitive.Content align="start" sideOffset={8} collisionPadding={16}
           onOpenAutoFocus={(e) => { e.preventDefault(); (searchRef.current ?? listRef.current)?.focus({ preventScroll: true }); }}
-          className={cn('z-50 flex max-w-[calc(100vw-32px)] flex-col rounded-[24px] bg-card p-1.5 text-foreground outline-none',
+          className={cn('z-50 flex max-h-[var(--radix-popover-content-available-height)] max-w-[calc(100vw-32px)] flex-col rounded-[24px] bg-card p-1.5 text-foreground outline-none',
             look === 'field' ? 'w-[var(--radix-popover-trigger-width)] min-w-[14rem]' : 'w-[20rem]',
             /* Tactile pass: the shared popover edge and arrival (150ms from scale .97 + fade, out 120ms, origin at the trigger). */
             'overlay-menu shadow-popover origin-[var(--radix-popper-transform-origin)]')}>
           {searchable && (
-            <div className="relative mb-1.5">
+            <div className="relative mb-1.5 shrink-0">
               <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-warm-meta" />
               <input ref={searchRef} value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} onKeyDown={onKey}
                 role="combobox" aria-expanded aria-controls={`${id}-list`} aria-activedescendant={shown[active] ? optionId(active) : undefined}
@@ -129,7 +137,7 @@ export function Picker({ label, value, options, onPick, searchable = options.len
           )}
           <div ref={listRef} id={`${id}-list`} role="listbox" aria-label={label} tabIndex={searchable ? -1 : 0} onKeyDown={searchable ? undefined : onKey}
             aria-activedescendant={!searchable && shown[active] ? optionId(active) : undefined}
-            className="scrollbar-slim max-h-[min(50vh,320px)] overflow-y-auto overscroll-contain outline-none">
+            className="scrollbar-slim max-h-[min(50vh,320px)] min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none">
             {sections.map((s) => (
               <div key={s.title || 'rest'} role="group" aria-label={s.title || undefined}>
                 {s.title && <p aria-hidden className="px-3 pb-1 pt-2 text-[12px] font-semibold text-warm-meta">{s.title}</p>}
@@ -139,10 +147,11 @@ export function Picker({ label, value, options, onPick, searchable = options.len
                   return (
                     <div key={o.value} id={optionId(i)} data-i={i} role="option" aria-selected={picked} onPointerMove={() => active !== i && setActive(i)} onClick={() => choose(o)}
                       className={cn('flex min-h-11 md:min-h-10 cursor-pointer select-none items-center gap-2 rounded-[18px] px-3 text-[14px] transition-colors duration-150',
-                        /* Tactile pass: the highlighted option is one step above the list, the chosen one two steps, no tick. */
-                        picked ? 'bg-accent font-semibold text-foreground' : cn(i === active ? 'bg-muted' : 'bg-transparent', 'text-warm-prose'))}>
+                        /* the chosen option in blue with a tick, the one under the pointer (or keys) in light orange */
+                        picked ? 'bg-brand-blue-subtle font-semibold text-brand-blue-deep' : i === active ? 'bg-brand-subtle text-foreground' : 'bg-transparent text-warm-prose')}>
+                      {picked ? <Check className="size-4 shrink-0" aria-hidden /> : <span className="size-4 shrink-0" aria-hidden />}
                       <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                      {o.meta && <span className="shrink-0 text-[12px] font-normal tabular-nums text-warm-meta">{o.meta}</span>}
+                      {o.meta && <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[12px] tabular-nums', o.tone === 'good' ? 'bg-success-subtle-bg font-semibold text-success-subtle-text' : 'font-normal text-warm-meta')}>{o.meta}</span>}
                     </div>
                   );
                 })}

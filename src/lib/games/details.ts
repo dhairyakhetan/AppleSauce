@@ -387,6 +387,18 @@ export const SUBJECTS: { name: string; code: string; also: string[] }[] = [
 const SUBJECT_NAMES = SUBJECTS.flatMap((x) => [key(x.name), ...x.also].map((a) => ({ a, name: x.name })));
 
 /** The subject named in a box or a line, or an error: only subjects on the list above can be used. */
+/*
+ * The order subjects are listed in everywhere on the games pages: two kinds only, core subjects first (the ones nearly
+ * everyone takes), then electives (every other subject). Alphabetical within each; the kinds aren't shown.
+ */
+export const CORE_SUBJECTS = new Set(['Mathematics', 'Science', 'Social Science', 'English', 'English Language', 'English Literature', 'Hindi',
+  'Physics', 'Chemistry', 'Biology', 'History', 'Geography', 'Civics', 'History & Civics', 'Political Science', 'Economics',
+  'Accountancy', 'Business Studies', 'Environmental Studies']);
+/** 0 for core subjects, 1 for electives (every other subject). */
+export const subjectRank = (name: string) => (CORE_SUBJECTS.has(name) ? 0 : 1);
+/** Sorts subject names: core first, then electives, each alphabetically. */
+export const bySubject = (a: string, b: string) => subjectRank(a) - subjectRank(b) || a.localeCompare(b);
+
 export function checkSubject(raw: string): { name: string; code: string | null; problem?: Problem } {
   const k = key(raw);
   if (!k) return { name: '', code: null };
@@ -410,6 +422,20 @@ export function parseNumbered(s: string, kind: 'chapter' | 'topic'): { no: numbe
 }
 
 /** A chapter or topic: its number (null when missing or out of range), its name capitalised, and any problem. */
+/**
+ * A board, class or subject written the site's way, when there is one clear answer: its own spelling and capitals
+ * ("cBsE" → CBSE, "maths" → Mathematics, "X" or "10th" → 10), or the one name a typo is a letter or two away from
+ * ("cbsu" → CBSE). Null when there is nothing sure to change it to. The autocorrect in the Questions box uses it.
+ */
+export function fixDetail(k: 'board' | 'class' | 'subject', value: string): string | null {
+  if (!value.trim()) return null;
+  if (k === 'class') { const c = checkClass(value).value; return c === null ? null : String(c); }
+  const r = k === 'board' ? checkBoard(value) : checkSubject(value);
+  if (r.code) return r.name;
+  const near = r.problem?.text.match(/^Did you mean (.+)\?$/)?.[1];
+  return near ?? null;
+}
+
 export function checkNumbered(value: string, kind: 'chapter' | 'topic'): { no: number | null; name: string; problem?: Problem } {
   const { no, name } = parseNumbered(value, kind);
   const Kind = kind === 'chapter' ? 'Chapter' : 'Topic';

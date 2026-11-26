@@ -248,9 +248,11 @@ export function readBulk(text: string, list: AdminChapter[]): { groups: BulkGrou
       const cls = k === 'class' ? checkClass(v) : null;
       const ok = checked ? !!checked.code : cls!.value !== null && cls!.value >= 1 && cls!.value <= 12;
       if (!ok) say((checked ?? cls)!.problem?.text ?? `"${v}" isn't a ${k} on the site's list.`);
-      if (k === 'board') where.board = ok ? checked!.name : '';
+      // as in Bulk remove: a Board line starts afresh and a Class line forgets the subject, so chapters never go to a
+      // subject left over from the block above
+      if (k === 'board') { where.board = ok ? checked!.name : ''; where.class = 0; where.subject = ''; }
+      if (k === 'class') { where.class = ok ? cls!.value! : 0; where.subject = ''; }
       if (k === 'subject') where.subject = ok ? checked!.name : '';
-      if (k === 'class') where.class = ok ? cls!.value! : 0;
       where.bad = !ok;
       at = null;
       current = null;
@@ -296,6 +298,93 @@ export function readBulk(text: string, list: AdminChapter[]): { groups: BulkGrou
     }
   });
   return { groups: [...groups.values()], problems };
+}
+
+// ---------------------------------------------------------------- Bulk remove
+
+/** One board, class and subject in a Bulk remove: its draft with the chapters marked deleted, and those that stay. */
+export interface RemoveGroup {
+  group: ListGroup;
+  loaded: AdminChapter[];
+  draft: DraftChapter[];
+  /** Marked deleted, in order. */
+  removed: DraftChapter[];
+  /** Asked for, but they have questions: the database keeps them. */
+  kept: { chapter_no: number; name: string; questions: number }[];
+}
+
+/**
+ * Bulk remove (Bulk add's other mode): the same Board, Class and Subject lines, then the chapters to delete, each by its
+ * number, its name, or both ("4", "Heat", "4. Heat"). A subject with no chapter lines under it loses all its chapters.
+ * A chapter that has questions can't be deleted (the database's rule): it is listed as kept, not a problem. Anything
+ * not on the list, a number and name that don't match, or a topic line is a problem on its line, and nothing is saved
+ * while there is one.
+ */
+export function readBulkRemove(text: string, list: AdminChapter[]): { groups: RemoveGroup[]; problems: BulkProblem[] } {
+  const groups = new Map<string, RemoveGroup & { named: boolean }>();
+  const problems: BulkProblem[] = [];
+  const where = { board: '', class: 0, subject: '', bad: false };
+  let at: (RemoveGroup & { named: boolean }) | null = null;
+  const remove = (g: RemoveGroup, c: DraftChapter) => {
+    if (c.deleted) return;
+    if (c.questions) { g.kept.push({ chapter_no: c.chapter_no, name: c.name, questions: c.questions }); return; }
+    g.draft = deleteChapter(g.draft, c.key);
+  };
+
+  text.split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    const say = (t: string) => problems.push({ line: i + 1, text: t });
+    if (!line || line.startsWith('```')) return;
+    const head = BULK_HEAD.exec(line);
+    if (head) {
+      const v = head[2].trim();
+      const k = head[1].toLowerCase();
+      const checked = k === 'board' ? checkBoard(v) : k === 'subject' ? checkSubject(v) : null;
+      const cls = k === 'class' ? checkClass(v) : null;
+      const ok = checked ? !!checked.code : cls!.value !== null && cls!.value >= 1 && cls!.value <= 12;
+      if (!ok) say((checked ?? cls)!.problem?.text ?? `"${v}" isn't a ${k} on the site's list.`);
+      // a Board line starts afresh and a Class line forgets the subject: a subject is only ever the one its own Subject
+      // line names, never one left over from the block above (which, with no chapters under it, would lose them all)
+      if (k === 'board') { where.board = ok ? checked!.name : ''; where.class = 0; where.subject = ''; }
+      if (k === 'class') { where.class = ok ? cls!.value! : 0; where.subject = ''; }
+      if (k === 'subject') where.subject = ok ? checked!.name : '';
+      where.bad = !ok;
+      at = null;
+      if (ok && k === 'subject' && where.board && where.class && where.subject) {
+        const g = { board: where.board, class: where.class, subject: where.subject };
+        const id = `${g.board}|${g.class}|${g.subject}`;
+        if (!groups.has(id)) {
+          const loaded = chaptersOf(list, g);
+          if (!loaded.length) { say(`Nothing is on the list for ${g.board} class ${g.class} ${g.subject}.`); return; }
+          groups.set(id, { group: g, loaded, draft: draftOf(loaded), removed: [], kept: [], named: false });
+        }
+        at = groups.get(id)!;
+      }
+      return;
+    }
+    if (where.bad) return;
+    if (!at) { say('Put Board, Class and Subject lines above the chapters.'); return; }
+    if (/^[-*•]/.test(line)) { say('Bulk remove takes whole chapters. Delete a topic in the list above.'); return; }
+    at.named = true;
+    const only = /^(\d{1,3})\s*[.:)]?$/.exec(line);
+    const numbered = /^(\d{1,3})\s*[.:)]\s*(.+)$/.exec(line);
+    const no = only ? Number(only[1]) : numbered ? Number(numbered[1]) : null;
+    const name = only ? '' : (numbered ? numbered[2] : line).trim();
+    const g = at;
+    const byNo = no !== null ? g.draft.find((c) => c.chapter_no === no) : undefined;
+    const byName = name ? g.draft.find((c) => sameName(c.name, name)) : undefined;
+    const what = `${g.group.board} class ${g.group.class} ${g.group.subject}`;
+    if (no !== null && !byNo) { say(`There is no chapter ${no} in ${what}.`); return; }
+    if (name && !byName) { say(`There is no chapter called "${name}" in ${what}.`); return; }
+    if (byNo && byName && byNo !== byName) { say(`Chapter ${no} is "${byNo.name}", not "${name}".`); return; }
+    remove(g, (byNo ?? byName)!);
+  });
+
+  for (const g of groups.values()) {
+    if (!g.named) for (const c of g.draft) remove(g, c);
+    g.removed = g.draft.filter((c) => c.deleted).sort(byNumber);
+  }
+  return { groups: [...groups.values()].map(({ named: _named, ...g }) => g), problems };
 }
 
 // ---------------------------------------------------------------- what changed

@@ -46,11 +46,8 @@ const ALL_DUMMY_PAGES: DummyPageEntry[] = [
   { path: '/teacher-review', label: 'Review teachers (dummy)' },
   // One button for the whole Admin page: its four tabs and every section run on fakes.
   { path: '/admin', label: 'Admin (dummy)' },
-  { path: '/games', label: 'Games team: write questions (dummy)' },
-  { path: '/games/approve', label: 'Games team: approve questions (dummy)' },
-  { path: '/games/play', label: 'Games team: try the games (dummy)' },
-  { path: '/games/team', label: 'Games team: team (dummy)' },
-  { path: '/games/chapters', label: 'Games team: chapters (dummy)' },
+  // One button for the whole games team site: its five parts (write, approve, try, team, chapters) are tabs inside it.
+  { path: '/games', label: 'Games team (dummy)' },
 ];
 
 /** Pages that have a dummy mode, for the preview toggle. */

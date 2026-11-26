@@ -1,20 +1,21 @@
 import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDown, Copy, Send, Trash2 } from 'lucide-react';
+import { ArrowDown, Check, Copy, Send, Trash2, X } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
-import { checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
+import { bySubject, checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
 import { usableIn } from '@/lib/games/engine';
 import { asText, doubts, EXAMPLE, format, lineLevels, missing, problemsByRow, visibleIssues, type Issue } from '@/lib/games/format';
 import { chatbotPrompt, fixPrompt } from '@/lib/games/prompt';
+import { tidyText } from '@/lib/games/tidy';
 import { type ListChapter, type ListTopic, type Row, type SentBack } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
-import { btn, chip, copyText, day, FIELD, GAME_NAMES, LINKISH, offerUndo, plural } from './helpers';
+import { btn, chip, copyText, day, FIELD, GAME_NAMES, lineKind, LINKISH, offerUndo, plural } from './helpers';
 import { Picker } from './Picker';
-import { ActionIcon, RowsTable } from './shared';
+import { ActionIcon, Labelled, RowsTable } from './shared';
 import './games.css';
 
 /* Write questions: people on the games team write questions in one format (a block per question: Q:, A:, Also:, Fill:,
@@ -30,6 +31,28 @@ const EXAMPLE_QUESTIONS = new Set(format(EXAMPLE).rows.map((r) => r.question.toL
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 const SECTION = 'flex flex-col gap-4 rounded-[24px] bg-muted p-4 sm:p-6';
 
+/**
+ * Runs a change that replaces the text (Try an example, Clear) and keeps `el` where it was on screen, so the page
+ * doesn't jump when what is above it grows or shrinks. Measured again after each redraw for a second.
+ */
+function steady(el: HTMLElement | null, act: () => void) {
+  const t0 = el?.getBoundingClientRect().top;
+  act();
+  if (!el || t0 === undefined) return;
+  const settle = () => {
+    const d = el.getBoundingClientRect().top - t0;
+    if (Math.abs(d) >= 1) window.scrollBy({ top: d, behavior: 'instant' as ScrollBehavior });
+  };
+  requestAnimationFrame(settle);
+  // parts of the page redraw a little later (they wait for typing to settle): correct after each, before it is painted
+  if (typeof ResizeObserver === 'undefined') return;
+  const ro = new ResizeObserver(settle);
+  ro.observe(document.body);
+  const form = el.closest('form, section');
+  if (form) ro.observe(form);
+  window.setTimeout(() => ro.disconnect(), 1000);
+}
+
 /** Scrolls smoothly to a part of the page and moves keyboard focus there, without adding "#..." to the address. */
 function scrollToEl(el: HTMLElement | null) {
   if (!el) return;
@@ -41,7 +64,7 @@ export interface Alerts { list?: SentBack[]; error?: string }
 /** The fixed list of chapters, with their topics (no list while loading). */
 export interface Catalog { list?: ListChapter[]; error?: string }
 
-export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
+export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onRetryAlerts, onSent, catalog, onRetryCatalog }: {
   api: GamesApi;
   /** An HoD or admin, who can open Approve questions. */
   canApprove: boolean;
@@ -49,6 +72,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   alerts: Alerts;
   /** The sent-back list was opened: these are now seen. */
   onSeen: (ids: string[]) => void;
+  /** Removes sent-back questions from the list for good (`gone` false puts them back: Undo). */
+  onDismiss: (ids: string[], gone?: boolean) => void;
   onRetryAlerts: () => void;
   /** Questions were sent: the counts elsewhere on the page go up. */
   onSent: () => void;
@@ -78,6 +103,15 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   /** Send was pressed with questions that need fixing. */
   const [stopped, setStopped] = useState(false);
   const boxTimer = useRef(0);
+  /** How many approved questions each chapter has (shown in the Chapter dropdown); null until loaded, or if it can't be. */
+  const [inBank, setInBank] = useState<Map<string, number> | null>(null);
+  useEffect(() => {
+    api.loadQuestionBank().then((qs) => {
+      const m = new Map<string, number>();
+      for (const q of qs) if (q.chapter_id) m.set(q.chapter_id, (m.get(q.chapter_id) ?? 0) + 1);
+      setInBank(m);
+    }, () => setInBank(null));
+  }, [api]);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
   /** The list of questions on the right, which scrolls by itself (side by side only). */
@@ -89,7 +123,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   useEffect(() => {
     const el = results.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([e]) => setResultsInView(e.isIntersecting), { rootMargin: '0px 0px -30% 0px' });
+    // "in view" also once scrolled past them: the button only points down, to results still below
+    const io = new IntersectionObserver(([e]) => setResultsInView(e.isIntersecting || e.boundingClientRect.top < 0), { rootMargin: '0px 0px -30% 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -106,6 +141,14 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     setTypingLine(line);
   };
   const details = readDetails(raw);
+  /**
+   * The chapter lines the text last had: the autocorrect puts one back at the top if it is deleted (once the writer has
+   * moved below the top lines). A pick, Clear or Try an example sets them; typing a new one replaces it.
+   */
+  const keep = useRef<Partial<Record<DetailKey, string>>>({});
+  useEffect(() => { for (const k of DETAIL_KEYS) if (details[k].trim()) keep.current[k] = details[k]; });
+  const remember = (t: string) => { keep.current = { ...readDetails(t) }; return t; };
+  const autoFix = (text: string, at: number | null) => tidyText(text, { list: catalog.list ?? [], caret: at, keep: keep.current });
   const gaps = missing(rows);
   // a chapter whose topics the list leaves open needs no Topic line
   const topicless = new Set(catalog.list?.filter(isOpen).map((c) => c.chapter_id));
@@ -149,6 +192,12 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
   const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) }, rows);
   const errors = issues.filter((x) => x.level === 'error').length;
   const toFix = issues.length;
+  /** The problems to fix, one entry per line (a line can have more than one). */
+  const byLine = useMemo(() => {
+    const m = new Map<number, Issue[]>();
+    for (const x of issues) m.set(x.line, [...(m.get(x.line) ?? []), x]);
+    return [...m];
+  }, [issues]);
 
   /**
    * Which questions need fixing, from every problem (shown or still waiting for the cursor to move on): a problem on its
@@ -178,10 +227,22 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
         box.current?.focus({ preventScroll: true });
       });
     }
-    setRaw(next);
+    setRaw(remember(next));
     setExample(isExample);
     setBatch((b) => b + 1);
   };
+
+  /** Clear and "Start a new batch" empty the questions but keep the chapter lines, ready for the next ones. */
+  const headOf = (t: string) => {
+    const d = readDetails(t);
+    const head = DETAIL_KEYS.reduce((acc, k) => (d[k].trim() ? writeDetail(acc, k, d[k]) : acc), '');
+    return head.trim() ? `${head.trimEnd()}\n\n` : '';
+  };
+  const clearAll = () => replaceAll(headOf(raw), 'Cleared');
+  /** "Try an example" over questions of your own asks first. */
+  const [askExample, setAskExample] = useState(false);
+  const exampleBtn = useRef<HTMLButtonElement>(null);
+  const loadExample = () => { setAskExample(false); steady(exampleBtn.current, () => replaceAll(EXAMPLE, 'Example loaded', true)); };
 
   /** "Fix it" on a sent-back question: it goes in the Questions box with its details (the text before it can be had back with Undo). */
   const fix = (a: SentBack) => {
@@ -323,70 +384,157 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
     ta.scrollIntoView({ behavior: motion(), block: 'center' });
     ta.focus({ preventScroll: true });
     ta.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
-    ta.scrollTop = Math.max(0, (line - 3) * (parseFloat(getComputedStyle(ta).lineHeight) || 24));
+    /*
+     * The whole question in the middle of the box, measured on the copy behind it (it wraps exactly as the box does):
+     * a line number alone can't say where a line is once long lines wrap. A question taller than the box starts near
+     * its top, with the problem line in view.
+     */
+    const copy = ta.parentElement?.querySelector<HTMLElement>('.games-backdrop-in');
+    const at = (n: number) => copy?.querySelector<HTMLElement>(`[data-l="${n}"]`);
+    const q = rows.find((x) => line >= x.line && line <= (x.end ?? x.line));
+    const first = at(q?.line ?? line);
+    const last = at(q?.end ?? line);
+    const here = at(line);
+    if (copy && first && last && here) {
+      const base = copy.getBoundingClientRect().top;
+      const top = first.getBoundingClientRect().top - base;
+      const bottom = last.getBoundingClientRect().bottom - base;
+      const view = ta.clientHeight;
+      ta.scrollTop = Math.max(0, bottom - top <= view - 48 ? (top + bottom) / 2 - view / 2 : here.getBoundingClientRect().top - base - view / 3);
+    } else {
+      ta.scrollTop = Math.max(0, (line - 3) * (parseFloat(getComputedStyle(ta).lineHeight) || 24));
+    }
     moveCaret(line);
+  };
+
+  // ---- the four detail boxes as dropdowns of what is on the list of chapters
+  const list = catalog.list ?? [];
+  const lists = list.length > 0;
+  const boardName = checkBoard(details.board).name;
+  const classNo = checkClass(details.class).value;
+  const subjectName = checkSubject(details.subject).name;
+  const boardsOn = [...new Set(list.map((c) => c.board))].sort();
+  const boardOk = boardsOn.includes(boardName);
+  const classesOn = boardOk ? [...new Set(list.filter((c) => c.board === boardName).map((c) => c.class))].sort((a, b) => a - b) : [];
+  const classOk = classNo !== null && classesOn.includes(classNo);
+  const subjectsOn = classOk ? [...new Set(list.filter((c) => c.board === boardName && c.class === classNo).map((c) => c.subject))].sort(bySubject) : [];
+  const subjectOk = subjectsOn.includes(subjectName);
+
+  /** A pick goes into the text; the boxes after it that no longer fit (another board's class, say) are emptied. */
+  const pickDetail = (k: DetailKey, v: string) => setRaw((r) => {
+    let t = k === 'chapter'
+      ? writeDetail(r, 'chapter', (() => { const c = listed.find((x) => String(x.chapter_no) === v); return c ? `${c.chapter_no}: ${c.name}` : ''; })())
+      : writeDetail(r, k, v);
+    if (k === 'chapter') return remember(t);
+    const fits = (d: Record<DetailKey, string>, upTo: 'class' | 'subject') => list.some((c) => c.board === checkBoard(d.board).name
+      && c.class === checkClass(d.class).value && (upTo === 'class' || c.subject === checkSubject(d.subject).name));
+    let d = readDetails(t);
+    if (k === 'board' && d.class && !fits(d, 'class')) t = writeDetail(t, 'class', '');
+    d = readDetails(t);
+    if (d.subject && !fits(d, 'subject')) t = writeDetail(t, 'subject', '');
+    d = readDetails(t);
+    const typedCh = parseNumbered(d.chapter, 'chapter');
+    if (d.chapter && !chaptersFor(list, d.board, d.class, d.subject).some((c) => c.chapter_no === typedCh.no && sameName(c.name, typedCh.name))) t = writeDetail(t, 'chapter', '');
+    return remember(t);
+  });
+
+  /** One dropdown. `needs`: the box to fill in first (it says so, and on hover), or null when it can be used. */
+  const listField = (k: DetailKey, options: { value: string; label: string; meta?: string; tone?: 'good' }[], value: string, needs: string | null, wide?: string) => {
+    const off = !needs && !!details[k].trim() && !value; // something in the text that isn't on the list
+    const problem = off ? (checkDetail(k, details[k]) ?? { level: 'warn' as const, text: `"${details[k]}" isn't on the list of chapters.` }) : undefined;
+    return (
+      <div className={cn('flex flex-col gap-1', wide)} key={k}>
+        <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
+        <div title={needs ? `Select ${needs} first` : undefined} className={needs ? 'cursor-not-allowed' : undefined}>
+          <Picker id={`d-${k}`} look="field" label={LABEL[k]} value={value} options={options} disabled={!!needs} invalid={off}
+            placeholder={off ? `${details[k]} (not on the list)` : 'Choose'}
+            onPick={(v) => pickDetail(k, v)} />
+        </div>
+        {problem && <span className={cn('text-[12px]', problem.level === 'error' ? 'text-destructive' : 'text-brand-deep')}>{problem.text}</span>}
+      </div>
+    );
   };
 
   return (
     <div className="flex flex-col gap-4">
 
-      <SentBackPanel panelRef={backPanel} alerts={alerts} open={backOpen} setOpen={setBackOpen} focus={backFocus} onSeen={onSeen} onRetry={onRetryAlerts} onFix={fix} />
+      <SentBackPanel panelRef={backPanel} alerts={alerts} open={backOpen} setOpen={setBackOpen} focus={backFocus} onSeen={onSeen} onDismiss={onDismiss} onRetry={onRetryAlerts} onFix={fix} />
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <section className={SECTION} aria-labelledby="in-h">
           <h2 id="in-h" className="text-[15px] font-bold text-foreground">1. Write</h2>
-          {/* Chapter gets a row of its own: its names are long */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {DETAIL_KEYS.map((k) => {
-              const problem = typingBox === k ? undefined : k === 'chapter' && listHasNone
-                ? { level: 'warn' as const, text: `The list has no chapters for this board, class and subject yet.` }
-                : checkDetail(k, details[k]);
-              if (k === 'chapter' && listed.length) {
+          {/* Chapter gets a row of its own: its names are long. With the list of chapters loaded, the four are dropdowns of
+              what is on it, each waiting for the one before; without it, boxes to type in. */}
+          {lists ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {listField('board', boardsOn.map((b) => ({ value: b, label: b })), boardOk ? boardName : '', null)}
+              {listField('class', classesOn.map((n) => ({ value: String(n), label: String(n) })), classOk ? String(classNo) : '', boardOk ? null : 'Board')}
+              {listField('subject', subjectsOn.map((x) => ({ value: x, label: x })), subjectOk ? subjectName : '', !boardOk ? 'Board' : !classOk ? 'Class' : null, 'col-span-2 sm:col-span-1')}
+              {listField('chapter', listed.map((c) => {
+                const n = inBank?.get(c.chapter_id) ?? 0;
+                return { value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}`, meta: inBank ? (n ? `${n} approved` : 'No questions yet') : undefined, tone: n ? 'good' as const : undefined };
+              }), chosen ? String(chosen.chapter_no) : '', !boardOk ? 'Board' : !classOk ? 'Class' : !subjectOk ? 'Subject' : null, 'col-span-full')}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {DETAIL_KEYS.map((k) => {
+                const problem = typingBox === k ? undefined : k === 'chapter' && listHasNone
+                  ? { level: 'warn' as const, text: `The list has no chapters for this board, class and subject yet.` }
+                  : checkDetail(k, details[k]);
+                if (k === 'chapter' && listed.length) {
+                  return (
+                    <div className="col-span-full flex flex-col gap-1" key={k}>
+                      <label htmlFor="d-chapter" className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
+                      <Picker id="d-chapter" look="field" label={LABEL[k]} value={chosen ? String(chosen.chapter_no) : ''} invalid={!!details.chapter && !chosen}
+                        placeholder={details.chapter && !chosen ? `${details.chapter} (not on the list)` : 'Choose a chapter'}
+                        options={listed.map((c) => ({ value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}` }))}
+                        onPick={(v) => {
+                          const c = listed.find((x) => String(x.chapter_no) === v);
+                          setRaw((r) => writeDetail(r, 'chapter', c ? `${c.chapter_no}: ${c.name}` : ''));
+                        }} />
+                    </div>
+                  );
+                }
                 return (
-                  <div className="col-span-full flex flex-col gap-1" key={k}>
-                    <label htmlFor="d-chapter" className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
-                    <Picker id="d-chapter" look="field" label={LABEL[k]} value={chosen ? String(chosen.chapter_no) : ''} invalid={!!details.chapter && !chosen}
-                      placeholder={details.chapter && !chosen ? `${details.chapter} (not on the list)` : 'Choose a chapter'}
-                      options={listed.map((c) => ({ value: String(c.chapter_no), label: `${c.chapter_no}: ${c.name}` }))}
-                      onPick={(v) => {
-                        const c = listed.find((x) => String(x.chapter_no) === v);
-                        setRaw((r) => writeDetail(r, 'chapter', c ? `${c.chapter_no}: ${c.name}` : ''));
+                  <div className={cn('flex flex-col gap-1', k === 'subject' && 'col-span-2 sm:col-span-1', k === 'chapter' && 'col-span-full')} key={k}>
+                    <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
+                    <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${HINT[k]}`} autoComplete="off"
+                      className={cn(FIELD, 'h-11', problem?.level === 'error' && 'ring-2 ring-destructive', problem?.level === 'warn' && 'ring-2 ring-brand')}
+                      aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        keep.current[k] = v;
+                        setRaw((r) => writeDetail(r, k, v));
+                        // a box's warning waits until it is left, or until typing pauses
+                        setTypingBox(k);
+                        clearTimeout(boxTimer.current);
+                        boxTimer.current = window.setTimeout(() => setTypingBox(null), 1500);
+                      }}
+                      onBlur={(e) => {
+                        clearTimeout(boxTimer.current);
+                        setTypingBox(null);
+                        const std = standardDetail(k, e.target.value);
+                        if (std !== e.target.value) setRaw((r) => writeDetail(r, k, std));
                       }} />
+                    {problem && <span id={`d-${k}-msg`} className={cn('text-[12px]', problem.level === 'error' ? 'text-destructive' : 'text-brand-deep')}>{problem.text}</span>}
                   </div>
                 );
-              }
-              return (
-                <div className={cn('flex flex-col gap-1', k === 'subject' && 'col-span-2 sm:col-span-1', k === 'chapter' && 'col-span-full')} key={k}>
-                  <label htmlFor={`d-${k}`} className="text-[12px] font-semibold text-warm-secondary">{LABEL[k]}</label>
-                  <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${HINT[k]}`} autoComplete="off"
-                    className={cn(FIELD, 'h-11', problem?.level === 'error' && 'ring-2 ring-destructive', problem?.level === 'warn' && 'ring-2 ring-brand')}
-                    aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setRaw((r) => writeDetail(r, k, v));
-                      // a box's warning waits until it is left, or until typing pauses
-                      setTypingBox(k);
-                      clearTimeout(boxTimer.current);
-                      boxTimer.current = window.setTimeout(() => setTypingBox(null), 1500);
-                    }}
-                    onBlur={(e) => {
-                      clearTimeout(boxTimer.current);
-                      setTypingBox(null);
-                      const std = standardDetail(k, e.target.value);
-                      if (std !== e.target.value) setRaw((r) => writeDetail(r, k, std));
-                    }} />
-                  {problem && <span id={`d-${k}-msg`} className={cn('text-[12px]', problem.level === 'error' ? 'text-destructive' : 'text-brand-deep')}>{problem.text}</span>}
-                </div>
-              );
-            })}
-          </div>
+              })}
+            </div>
+          )}
           {chosen && (chosen.topics.length ? (
             <div className="flex flex-col gap-1.5">
               <p className="text-[12px] font-semibold text-warm-secondary">Add a topic</p>
               <div className="flex flex-wrap gap-2">
-                {chosen.topics.map((t) => (
-                  <button key={t.topic_id} type="button" className={chip('card')} onClick={() => addTopic(t)}>Topic {t.topic_no}: {t.name}</button>
-                ))}
+                {chosen.topics.map((t) => {
+                  const n = own.filter((q) => q.chapter_id === chosen.chapter_id && q.topic_no === t.topic_no).length;
+                  return (
+                    <button key={t.topic_id} type="button" className={cn(chip('card'), n > 0 && 'text-success-subtle-text')} onClick={() => addTopic(t)}
+                      title={n ? `${plural(n, 'question')} written under this topic. Click to add its Topic line again.` : undefined}>
+                      {n > 0 && <Check aria-hidden />}Topic {t.topic_no}: {t.name}{n > 0 && <span className="font-normal">({n})</span>}
+                    </button>
+                  );
+                })}
               </div>
               {isOpen(chosen) && <p className="text-[13px] text-warm-secondary">These topics are already in use. For a new one, write a line such as "Topic {Math.max(...chosen.topics.map((t) => t.topic_no)) + 1}: Name" above its questions.</p>}
             </div>
@@ -394,11 +542,12 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
-            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} />
+            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} autoFix={autoFix} />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={btn('card')} onClick={() => replaceAll(EXAMPLE, 'Example loaded', true)}>Try an example</button>
-            <button type="button" className={btn('card')} onClick={() => replaceAll('', 'Cleared')} disabled={!raw}>Clear</button>
+            <button type="button" ref={exampleBtn} className={btn('card')} onClick={() => (own.length ? setAskExample(true) : loadExample())}>Try an example</button>
+            <button type="button" className={btn('card')} onClick={(e) => steady(e.currentTarget, clearAll)} disabled={raw.trim() === headOf(raw).trim()}
+              title="Removes the questions. The chapter lines stay.">Clear</button>
           </div>
 
           <div className="flex flex-col gap-2 rounded-2xl bg-card p-4">
@@ -423,14 +572,33 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 
           {issues.length > 0 && (
             <div className={cn('rounded-2xl px-4 py-3 text-[14px]', errors ? 'bg-destructive/10' : 'bg-brand-subtle')}>
-              <b className="text-foreground">{plural(toFix, 'problem')} to fix</b>
-              <ul className="mt-1 flex flex-col gap-0.5">
-                {issues.slice(0, 50).map((x) => (
-                  <li key={`${x.line}\u0000${x.text}`} className={x.level === 'error' ? 'text-destructive' : 'text-brand-deep'}>
-                    <button type="button" className={LINKISH} onClick={() => goTo(x.line)}>Line {x.line}</button>: {x.text}
-                  </li>
-                ))}
-                {issues.length > 50 && <li className="text-warm-secondary">and {issues.length - 50} more</li>}
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <b className="text-foreground">{plural(toFix, 'problem')} to fix</b>
+                {errors > 0 && <span className="flex items-center gap-1.5 text-[13px] text-warm-secondary"><span className="size-2 rounded-full bg-destructive" aria-hidden />{errors} red</span>}
+                {toFix - errors > 0 && <span className="flex items-center gap-1.5 text-[13px] text-warm-secondary"><span className="size-2 rounded-full bg-brand" aria-hidden />{toFix - errors} amber</span>}
+              </p>
+              <ul className="mt-2 flex flex-col gap-2">
+                {byLine.slice(0, 50).map(([line, xs]) => {
+                  const worst = xs.some((x) => x.level === 'error') ? 'error' : 'warn';
+                  return (
+                    <li key={line} className="flex items-start gap-2.5">
+                      <button type="button" onClick={() => goTo(line)} aria-label={`Line ${line}: go to it`}
+                        className={cn('mt-px shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold tabular-nums transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                          worst === 'error' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/85' : 'bg-brand text-foreground hover:bg-brand/85')}>
+                        Line {line}
+                      </button>
+                      <div className="flex flex-col gap-1 text-foreground">
+                        {xs.map((x) => (
+                          <p key={x.text} className="flex items-start gap-1.5">
+                            {xs.length > 1 && <span className={cn('mt-2 size-1.5 shrink-0 rounded-full', x.level === 'error' ? 'bg-destructive' : 'bg-brand')} aria-hidden />}
+                            <span>{x.text}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </li>
+                  );
+                })}
+                {byLine.length > 50 && <li className="text-warm-secondary">and problems on {byLine.length - 50} more lines</li>}
               </ul>
             </div>
           )}
@@ -446,10 +614,10 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
       </div>
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="rounded-[24px] bg-card p-4 shadow-border sm:p-6">
+        <div className={SECTION}>
           <GamePreview rows={playable} />
         </div>
-        <form className={SECTION} onSubmit={(e) => { e.preventDefault(); trySend(); }}>
+        <form className={cn(SECTION, 'lg:sticky lg:top-24')} onSubmit={(e) => { e.preventDefault(); trySend(); }}>
           <h2 className="text-[15px] font-bold text-foreground">4. Send for approval</h2>
           {examples > 0 && (
             <p className="rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] text-foreground" role="status">
@@ -477,10 +645,22 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
             </p>
           )}
           {sent && raw.trim() && (
-            <button type="button" className={btn('card', 'w-fit')} onClick={() => { replaceAll('', 'Cleared'); setSent(null); box.current?.focus({ preventScroll: true }); }}>Start a new batch</button>
+            <button type="button" className={btn('card', 'w-fit')} onClick={() => { clearAll(); setSent(null); box.current?.focus({ preventScroll: true }); }}>Start a new batch</button>
           )}
           {sendError && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">Couldn't send: {sendError}</p>}
         </form>
+        <Dialog open={askExample} onOpenChange={setAskExample}>
+          <DialogContent className="max-w-md rounded-2xl bg-card">
+            <DialogTitle>Replace your questions with the example?</DialogTitle>
+            <DialogDescription>
+              The {plural(own.length, 'question')} in the Questions box will be replaced by the example. You can undo it for a few seconds afterwards.
+            </DialogDescription>
+            <div className="flex flex-col gap-2 sm:flex-row-reverse">
+              <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={loadExample}>Replace with the example</button>
+              <button type="button" className={btn('card', 'w-full sm:w-auto')} onClick={() => setAskExample(false)}>Keep my questions</button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={stopped} onOpenChange={setStopped}>
           <DialogContent className="max-w-lg rounded-2xl bg-card">
             <DialogTitle>There are errors in the questions</DialogTitle>
@@ -518,10 +698,10 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onRetryAlerts,
 }
 
 /** Questions an HoD sent back to this person, with why. Opening the list marks them seen. */
-function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onRetry, onFix }: {
+function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismiss, onRetry, onFix }: {
   panelRef: RefObject<HTMLElement>;
   alerts: Alerts; open: boolean; setOpen: (o: boolean) => void; focus: string[];
-  onSeen: (ids: string[]) => void; onRetry: () => void; onFix: (a: SentBack) => void;
+  onSeen: (ids: string[]) => void; onDismiss: (ids: string[], gone?: boolean) => void; onRetry: () => void; onFix: (a: SentBack) => void;
 }) {
   const list = alerts.list ?? [];
   const unseen = list.filter((a) => !a.seen);
@@ -553,15 +733,26 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onRetry
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="back-h" className="flex flex-wrap items-center gap-2 text-[15px] font-bold text-foreground">
           {plural(list.length, 'question was', 'questions were')} sent back to you
-          {unseen.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[12px] font-bold text-foreground">{unseen.length} new</span>}
+          {unseen.length > 0 && <span className="rounded-full bg-brand px-2 py-0.5 text-[12px] font-bold text-foreground">{unseen.length === list.length ? 'New' : `${unseen.length} new`}</span>}
         </h2>
         <button type="button" className={btn('card')} aria-expanded={open} aria-controls="back-list" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'See why'}</button>
       </div>
-      {!open && <p className="mt-1 text-[14px] text-warm-prose">{waitingFix ? `${plural(waitingFix, 'needs', 'need')} fixing.` : 'All of them have been sent again.'}</p>}
+      {!open && (
+        <p className="mt-1 text-[14px] text-warm-prose">
+          {!waitingFix ? (list.length === 1 ? 'It has been sent again.' : 'All of them have been sent again.')
+            : waitingFix === list.length ? (list.length === 1 ? 'It needs fixing.' : list.length === 2 ? 'Both need fixing.' : `All ${list.length} need fixing.`)
+            : `${waitingFix} of ${list.length} ${waitingFix === 1 ? 'needs' : 'need'} fixing.`}
+        </p>
+      )}
       {open && (
         <ul id="back-list" className="mt-3 flex flex-col gap-2">
           {list.map((a) => (
-            <li key={a.id} className={cn('flex flex-col gap-1 rounded-2xl bg-card p-4 text-[14px]', pointAt.has(a.id) && 'ring-2 ring-brand')}>
+            <li key={a.id} className={cn('relative flex flex-col gap-1 rounded-2xl bg-card p-4 pr-12 text-[14px]', pointAt.has(a.id) && 'ring-2 ring-brand')}>
+              <button type="button" aria-label="Remove from this list" title="Remove from this list"
+                className="absolute right-2 top-2 flex size-9 items-center justify-center rounded-full text-warm-secondary transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                onClick={() => { onSeen([a.id]); onDismiss([a.id]); offerUndo('Removed from the list', () => onDismiss([a.id], false)); }}>
+                <X className="size-4" aria-hidden />
+              </button>
               <p className="text-[12px] text-warm-meta">
                 {[a.chapter_no !== null && `Chapter ${a.chapter_no}`, a.chapter].filter(Boolean).join(': ')}{a.topic && ` · ${a.topic}`}
                 {fresh.has(a.id) && <span className="ml-2 rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold text-foreground">New</span>}
@@ -611,7 +802,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
   const board = fit(pick.board, boards);
   const classes = uniq(list.filter((c) => c.board === board).map((c) => c.class)).sort((a, b) => a - b);
   const cls = fit(Number(pick.cls), classes);
-  const subjects = uniq(list.filter((c) => c.board === board && c.class === cls).map((c) => c.subject)).sort();
+  const subjects = uniq(list.filter((c) => c.board === board && c.class === cls).map((c) => c.subject)).sort(bySubject);
   const subject = fit(pick.subject, subjects);
   const chapters = list.filter((c) => c.board === board && c.class === cls && c.subject === subject).sort((a, b) => a.chapter_no - b.chapter_no);
   const ch = chapters.find((c) => String(c.chapter_no) === pick.chapter) ?? (chapters.length === 1 ? chapters[0] : undefined);
@@ -655,7 +846,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
-function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine }: {
+function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine, autoFix }: {
   value: string;
   onChange: (v: string) => void;
   /** A paste; `all` when it replaces all the text (or the box was empty). */
@@ -669,9 +860,56 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
   setCaret: (line: number) => void;
   /** The box was scrolled: the line now at its top. */
   onTopLine?: (line: number) => void;
+  /** The autocorrect: the text with its sure fixes, and where the caret goes (`at` null when the box isn't being typed in). */
+  autoFix?: (text: string, at: number | null) => { text: string; caret: number | null };
 }) {
   const back = useRef<HTMLDivElement>(null);
   const pasted = useRef(false); // a paste is finished text: check all of it at once
+
+  /*
+   * The autocorrect runs a second after typing stops, and when the box is left. While the box is being typed in, the
+   * change goes in as an edit of the box (so Ctrl+Z undoes it, and what was typed before it), only the part that
+   * changed, and the caret's line stays where it was on screen.
+   */
+  const fixing = useRef(false);
+  const fixTimer = useRef(0);
+  const runFix = (focused: boolean) => {
+    const ta = boxRef.current;
+    if (!ta || !autoFix) return;
+    if (focused && ta.selectionStart !== ta.selectionEnd) return; // something is selected: leave it until later
+    const old = ta.value;
+    const at = focused ? ta.selectionStart : null;
+    const fixed = autoFix(old, at);
+    if (fixed.text === old) return;
+    const next = fixed.text;
+    if (!focused) { onChange(next); return; }
+    let a = 0;
+    while (a < old.length && a < next.length && old[a] === next[a]) a++;
+    let b = 0;
+    while (b < old.length - a && b < next.length - a && old[old.length - 1 - b] === next[next.length - 1 - b]) b++;
+    const top = ta.scrollTop;
+    const linesBefore = (t: string, i: number) => t.slice(0, i).split('\n').length;
+    const moved = at !== null && fixed.caret !== null ? linesBefore(next, fixed.caret) - linesBefore(old, at) : 0;
+    fixing.current = true;
+    ta.setSelectionRange(a, old.length - b);
+    const middle = next.slice(a, next.length - b);
+    let ok = false;
+    try { ok = document.execCommand(middle ? 'insertText' : 'delete', false, middle); } catch { ok = false; }
+    fixing.current = false;
+    if (!ok || ta.value !== next) onChange(next);
+    const c = fixed.caret ?? next.length;
+    requestAnimationFrame(() => {
+      ta.setSelectionRange(c, c);
+      ta.scrollTop = top + moved * (parseFloat(getComputedStyle(ta).lineHeight) || 24);
+      sync();
+    });
+  };
+  useEffect(() => {
+    clearTimeout(fixTimer.current);
+    fixTimer.current = window.setTimeout(() => runFix(document.activeElement === boxRef.current), 1000);
+    return () => clearTimeout(fixTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, caret]);
 
   const sync = () => {
     const ta = boxRef.current;
@@ -717,9 +955,15 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
               const level = levels.get(i + 1);
               const body = l.trim();
               const nl = i > 0 ? '\n' : '';
-              if (!level || !body) return <Fragment key={i}>{nl}<span data-l={i + 1}>{l}</span></Fragment>;
+              if (!body) return <Fragment key={i}>{nl}<span data-l={i + 1}>{l}</span></Fragment>;
+              const kind = lineKind(l);
               const lead = l.slice(0, l.indexOf(body[0]));
-              return <Fragment key={i}>{nl}<span data-l={i + 1}>{lead}<span className={`games-mark ${level}`}>{body}</span>{l.slice(lead.length + body.length)}</span></Fragment>;
+              const inner = <Labelled body={body} kind={kind} />;
+              return (
+                <Fragment key={i}>{nl}<span data-l={i + 1} className={kind ? `gl-${kind}` : undefined}>
+                  {lead}{level ? <span className={`games-mark ${level}`}>{inner}</span> : inner}{l.slice(lead.length + body.length)}
+                </span></Fragment>
+              );
             })}
             {/* keeps an empty last line as tall as the textarea draws it */}
             {'​'}
@@ -728,10 +972,11 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
         <textarea id="q" ref={boxRef} spellCheck={false} value={value} aria-invalid={errors > 0} aria-describedby="caret-note"
           onChange={(e) => {
             onChange(e.target.value);
+            if (fixing.current) return; // the autocorrect's own edit, not typing
             if (pasted.current) { pasted.current = false; onCaret(e.target); onTyping(null); } else onTyping(lineOf(e.target));
           }}
           onPaste={(e) => { pasted.current = true; const t = e.currentTarget; onPaste(t.selectionStart === 0 && t.selectionEnd === t.value.length); }}
-          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
+          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => { onTyping(null); clearTimeout(fixTimer.current); runFix(false); }}
           onScroll={() => { sync(); onTopLine?.(topLine()); }} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
           placeholder={'One block per question, like this:\n\nTopic 1: Chemical Equations\n\nQ: The question\nA: The answer\nFill: A sentence with ___ where the answer goes\nWrong: Wrong option; another; another\nLevel: easy'} />
       </div>

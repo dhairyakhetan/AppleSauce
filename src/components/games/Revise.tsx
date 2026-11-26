@@ -1,7 +1,11 @@
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
-import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
+import { GAME_TYPES, makeGame, poolFor, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
+
+/** The most answers the small preview's crossword uses. */
+const COMPACT_CROSSWORD = 8;
 import type { BankQuestion } from '@/lib/games/rows';
+import { bySubject } from '@/lib/games/details';
 import { cn } from '@/lib/utils';
 import { GameView } from './GameView';
 import { chip, GAME_NAMES, plural, whyNot } from './helpers';
@@ -12,8 +16,8 @@ import { chip, GAME_NAMES, plural, whyNot } from './helpers';
 
    Used twice: Try the games (the approved question bank, full size) and the preview on Write questions (`written`: the
    class, subject and chapter are the ones being written, so their pickers show only when the text has more than one to
-   choose from; `compact` too in the page itself: smaller, with what each greyed-out game needs, so the writer can fix
-   it). */
+   choose from; `compact` too in the page itself: smaller). Hovering a greyed-out game's tab says what it needs, so the
+   writer can fix it. */
 
 /** What a puzzle needs to know about a question. */
 export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'also' | 'fill' | 'wrong_options' | 'difficulty'>;
@@ -40,7 +44,7 @@ function chaptersOf(questions: ReviseQuestion[]): Chapter[] {
       id, questions: qs, cls: q0.class, subject: q0.subject, no: q0.chapter_no, name: q0.chapter,
       topics: [...topics.values()].sort((a, b) => (a.no ?? 99) - (b.no ?? 99)),
     };
-  }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || a.subject.localeCompare(b.subject) || (a.no ?? 0) - (b.no ?? 0));
+  }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || bySubject(a.subject, b.subject) || (a.no ?? 0) - (b.no ?? 0));
 }
 
 export function Revise({ questions, compact = false, written = false, heading, extra }: {
@@ -85,12 +89,22 @@ export function Revise({ questions, compact = false, written = false, heading, e
   // every game these questions can make (each one already checked), so the player can switch between them
   const games = useMemo(() => {
     const out: Partial<Record<GameType, Game>> = {};
-    for (const t of GAME_TYPES) { const g = makeGame(t, items, seed); if (g) out[t] = g; }
+    for (const t of GAME_TYPES) {
+      // the small preview's crossword uses at most a few of the answers, so it stays a size that fits beside the page
+      // (New puzzle picks others); full size uses them all
+      let g = null;
+      const pool = compact && t === 'crossword' ? poolFor(t, items) : [];
+      if (pool.length > COMPACT_CROSSWORD) {
+        const few = [...pool].sort((a, b) => seedOf(`${a.id}|${seed}`) - seedOf(`${b.id}|${seed}`)).slice(0, COMPACT_CROSSWORD);
+        g = makeGame(t, few, seed);
+      }
+      g = g ?? makeGame(t, items, seed);
+      if (g) out[t] = g;
+    }
     return out;
-  }, [items, seed]);
+  }, [items, seed, compact]);
   const type = want && games[want] ? want : GAME_TYPES.find((t) => games[t]);
   const game = type && games[type];
-  const missing = GAME_TYPES.filter((t) => !games[t]);
 
   const toggle = (k: string) => {
     const out = pick.chapter === chapter!.id ? pick.out.filter((t) => known.includes(t)) : [];
@@ -100,7 +114,8 @@ export function Revise({ questions, compact = false, written = false, heading, e
 
   const pill = cn('rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', compact ? 'min-h-9 px-3 text-[12px]' : 'min-h-11 md:min-h-10 px-3.5 text-[13px]');
   const label = cn('font-semibold text-warm-secondary', compact ? 'text-[11px]' : 'text-[12px]');
-  const box = cn('flex flex-col rounded-[24px] bg-muted', compact ? 'gap-3 p-3 sm:p-4' : 'gap-4 p-4 sm:p-6');
+  // the small preview sits on a muted step card of Write questions, so its boxes are white there
+  const box = cn('flex flex-col rounded-[24px]', compact ? 'gap-3 bg-card p-3 sm:p-4' : 'gap-4 bg-muted p-4 sm:p-6');
 
   if (!chapter) return heading ? <div className="flex flex-col gap-3">{heading}</div> : null;
 
@@ -172,9 +187,9 @@ export function Revise({ questions, compact = false, written = false, heading, e
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div role="tablist" aria-label="Game" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-card p-1 sm:rounded-full">
             {GAME_TYPES.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={t === type} disabled={!games[t]} onClick={() => setWant(t)}
+              <button key={t} type="button" role="tab" aria-selected={t === type} aria-disabled={!games[t] || undefined} onClick={() => games[t] && setWant(t)}
                 title={whyNot(t, items, !!games[t]) ?? undefined}
-                className={cn('flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:text-warm-label disabled:line-through',
+                className={cn('flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-disabled:cursor-not-allowed aria-disabled:text-warm-label aria-disabled:line-through',
                   compact ? 'h-8 px-2.5 text-[12px]' : 'h-9 px-3 text-[13px]',
                   t === type ? 'bg-muted text-foreground' : 'text-warm-secondary hover:text-foreground')}>
                 {GAME_NAMES[t]}
@@ -186,12 +201,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
             <button type="button" className={chip('card')} onClick={() => setRound((r) => r + 1)}><Shuffle aria-hidden /> New puzzle</button>
           </div>
         </div>
-        {compact && missing.length > 0 && (
-          <ul className="flex flex-col gap-1 text-[12px] text-warm-secondary">
-            {missing.map((t) => <li key={t}><b className="text-foreground">{GAME_NAMES[t]}:</b> {whyNot(t, items, false)}</li>)}
-          </ul>
-        )}
-        <div className={cn('rounded-2xl bg-card', compact ? 'p-3' : 'p-4 sm:p-6')}>
+        <div className={cn('rounded-2xl', compact ? '' : 'bg-card p-4 sm:p-6')}>
           {game ? <GameView key={`${type}|${seed}|${made}`} game={game} compact={compact} onNext={() => setRound((r) => r + 1)} />
             : <p className="py-6 text-center text-[14px] text-warm-secondary">These topics don't have enough questions for a puzzle yet. {written ? 'Add a few more.' : 'Pick more topics.'}</p>}
         </div>
