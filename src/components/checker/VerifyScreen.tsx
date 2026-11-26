@@ -9,7 +9,7 @@ import { FIX_RULE_LINE, RulesInfo, ShortcutsPopover } from '@/components/checker
 import { PaperPageFlip } from '@/components/checker/PaperPageFlip';
 import { QuestionDiagrams } from '@/components/checker/QuestionDiagrams';
 import { diagramItems, diagramPaths, diagramsKey, withoutShownFigureFlag } from '@/lib/checker-diagrams';
-import { pageNumberOf } from '@/lib/paper-pages';
+import { flipStartPage, PAGE_NOT_FOUND_TITLE } from '@/lib/paper-pages';
 import { rotationOfPage, type PageRotation } from '@/lib/page-rotation';
 import { AiSurePill, PanelTabs, PrintedFrame, TypedFrame, VERIFY_TABS, type PanelId } from '@/components/checker/Panels';
 import { tileForNextQuestion } from '@/lib/checker-bento';
@@ -25,7 +25,7 @@ import { whatToCheck } from '@/lib/checker-kid-reasons';
 import { englishContext, passageHeading } from '@/lib/checker-english';
 import { assembleQuestionContext, wholeQuestionRows, type QuestionContext } from '@/lib/checker-context';
 import { focusedPartId, noPictureSummary, planCheckerPicture, planPartPictures, pictureHeading, PICTURE_MAY_MISS_PARTS, type PartPicture, type PicturePlan } from '@/lib/checker-pictures';
-import { planVerifiedPage, PAGE_HEADING, type PagePlan } from '@/lib/checker-page';
+import { pageNotFound, planVerifiedPage, PAGE_HEADING, type PagePlan } from '@/lib/checker-page';
 import { describeLanes, unmappedCodes } from '@/lib/checker-lanes';
 import { lostTextSuggestion, LOST_TEXT_CONFIRM, LOST_TEXT_HEADING, LOST_TEXT_NOTE, LOST_TEXT_TITLE } from '@/lib/checker-lost-text';
 import {
@@ -1859,13 +1859,15 @@ export function VerifyScreen({
           ) : null;
 
         // No crop and no page matched this question, or both failed to load:
-        // show the whole paper as a page-flip, never a dead end.
+        // show the whole paper as a page-flip, never a dead end. When the page was looked for and not found
+        // (owner, 26 Nov 2026) the flip opens at page 1 and says so plainly.
         const flipBody = (
           <PaperPageFlip
             paperId={question.paper_id}
             loadPages={api.paperPages}
             pictureUrl={api.pictureUrl}
-            questionPage={pageNumberOf(question.source?.page)}
+            questionPage={flipStartPage(question.source)}
+            {...(pageNotFound(question.source) ? { title: PAGE_NOT_FOUND_TITLE } : {})}
           />
         );
         // The one box (see oneBox): a quiet line for the parts without a picture, the whole paper to flip through, and
@@ -1898,7 +1900,7 @@ export function VerifyScreen({
             paperId={question.paper_id}
             loadPages={api.paperPages}
             pictureUrl={api.pictureUrl}
-            questionPage={pageNumberOf(question.source?.page)}
+            questionPage={flipStartPage(question.source)}
             title="The whole paper"
           />
         );

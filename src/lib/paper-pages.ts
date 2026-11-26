@@ -109,7 +109,19 @@ export function missingPagesNote(pages: PaperPage[]): string {
   return `${list} not available yet, so the flip skips ahead. If the question is not on a page you can see, do not pass it.`;
 }
 
+/**
+ * The page the whole-paper flip opens on, from a question's source. When the pipeline looked for the page and
+ * did not find it (page_verified false), any page number left on the row is only a guess, so the flip opens at
+ * page 1 and does not claim "this question is on page N" (owner, 26 Nov 2026).
+ */
+export function flipStartPage(source: Record<string, unknown> | null | undefined): number | null {
+  if (source?.page_verified === false) return null;
+  return pageNumberOf(source?.page);
+}
+
 export const WHOLE_PAPER_TITLE = 'No page matched this question, so here is the whole paper';
+/** The heading when the page was looked for and not found (owner, 26 Nov 2026). No dashes. */
+export const PAGE_NOT_FOUND_TITLE = 'We could not find this question on the page; look through the pages below.';
 export const WHOLE_PAPER_NOTE = 'Flip through the pages until you find the question, then check the typed words against it.';
 export const NO_PAGES_TITLE = 'This paper has no page pictures yet';
 // Shown to verifiers AND to the HOD, so it must not tell the HOD to "ask the HOD".

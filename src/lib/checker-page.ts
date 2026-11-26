@@ -46,6 +46,16 @@ export function pageIsVerified(source: Source): boolean {
   return source?.page_verified === true;
 }
 
+/**
+ * True when the pipeline LOOKED for the question's page and did not find it (locate_pages.py wrote
+ * source.page_verified = false). Not the same as "never looked" (no page_verified at all). Such a question is
+ * served when every page of its paper is stored (20261126200000, owner 26 Nov 2026: "If you can't find the
+ * question on the paper, just fall back to showing the pages"), so the screen shows the whole paper from page 1.
+ */
+export function pageNotFound(source: Source): boolean {
+  return source?.page_verified === false;
+}
+
 /** The 1-based page a question sits on, or null when the pipeline has not said. */
 export function sourcePage(source: Source): number | null {
   const raw = source?.page;
