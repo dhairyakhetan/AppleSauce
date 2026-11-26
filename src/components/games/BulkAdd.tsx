@@ -27,6 +27,8 @@ export function BulkAdd({ api, list, blocked, onSaved }: {
 }) {
   const [mode, setMode] = useState<'add' | 'remove'>('add');
   const [text, setText] = useState('');
+  /** Bulk remove's own text: a list written to add chapters is never read as chapters to delete. */
+  const [removeText, setRemoveText] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -56,7 +58,7 @@ export function BulkAdd({ api, list, blocked, onSaved }: {
   };
 
   const switchTo = (m: 'add' | 'remove') => { setMode(m); setError(''); };
-  if (mode === 'remove') return <BulkRemove api={api} list={list} blocked={blocked} onSaved={onSaved} text={text} setText={setText} onBack={() => switchTo('add')} />;
+  if (mode === 'remove') return <BulkRemove api={api} list={list} blocked={blocked} onSaved={onSaved} text={removeText} setText={setRemoveText} onBack={() => switchTo('add')} />;
 
   return (
     <section aria-labelledby="bulk-h" className="mt-4 flex flex-col gap-3 rounded-[24px] bg-muted p-4 sm:p-6">
@@ -156,9 +158,9 @@ function BulkRemove({ api, list, blocked, onSaved, text, setText, onBack }: {
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  /** The first press arms the button; the second removes. Any change to the text disarms it. */
+  /** The first press arms the button; the second removes. Any change to the text or the list disarms it. */
   const [armed, setArmed] = useState(false);
-  useEffect(() => setArmed(false), [text]);
+  useEffect(() => setArmed(false), [text, list]); // and any change to the list (a save above may renumber chapters)
 
   const read = useMemo(() => readBulkRemove(text, list), [text, list]);
   const groups = read.groups.filter((g) => g.removed.length > 0);
@@ -177,6 +179,7 @@ function BulkRemove({ api, list, blocked, onSaved, text, setText, onBack }: {
       await onSaved(r.changes);
     } catch (e) {
       setError((e as Error).message);
+      setArmed(false); // a failed delete asks twice again
     } finally {
       setSaving(false);
     }

@@ -244,6 +244,7 @@
     --mosaic-mint-text: 168 45% 26%;
     --mosaic-purple-bg: 262 52% 93%;
     --mosaic-purple-text: 262 45% 26%;
+    --games-topic-text: 262 48% 40%; /* /games Questions box: Topic lines */
 
     --success: #228B22;
     --success-subtle-bg: #E6F4E6;   /* "settled" badge background */

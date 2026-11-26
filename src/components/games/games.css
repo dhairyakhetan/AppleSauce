@@ -45,10 +45,10 @@
 .games-backdrop-in { color: var(--text-quaternary); }
 /* one colour per kind of line; its label a little lighter */
 .gl-detail { color: var(--text-secondary); }
-.gl-topic { color: hsl(262 48% 40%); }
+.gl-topic { color: hsl(var(--games-topic-text)); }
 .gl-q { color: hsl(var(--foreground)); }
 .gl-a { color: var(--success-subtle-text); }
-.gl-also { color: hsl(168 55% 27%); }
+.gl-also { color: hsl(var(--mosaic-mint-text)); }
 .gl-fill { color: hsl(var(--brand-blue-deep)); }
 .gl-wrong { color: hsl(var(--brand-deep)); }
 .gl-level { color: var(--text-tertiary); }

@@ -48,7 +48,7 @@ function onlyMatch<T>(items: T[], name: (t: T) => string, written: string): T | 
 interface Context { board: string; cls: number | null; subject: string; chapter?: ListChapter }
 
 /** The fixes for one line, or the line as it was. `ctx` is what the lines above set, and is updated. */
-function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
+function fixLine(line: string, ctx: Context, list: ListChapter[], typing = false): string {
   const meta = readMeta(line);
   if (meta && (meta.key === 'board' || meta.key === 'class' || meta.key === 'subject')) {
     const k = meta.key;
@@ -65,7 +65,8 @@ function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
     const here = list.filter((c) => c.board === ctx.board && c.class === ctx.cls && c.subject === ctx.subject);
     const byNo = no !== null ? here.find((c) => c.chapter_no === no) : undefined;
     const ch = byNo && (!name || close(name, byNo.name)) ? byNo : no === null && name ? onlyMatch(here, (c) => c.name, name) : undefined;
-    ctx.chapter = ch ?? byNo;
+    // only a chapter matched for sure: topics are never fixed against a chapter the writer may not mean
+    ctx.chapter = ch;
     return ch ? `Chapter ${ch.chapter_no}: ${ch.name}` : line;
   }
   if (meta?.key === 'topic') {
@@ -73,7 +74,8 @@ function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
     if (!ch || isOpen(ch)) return line;
     const { no, name } = parseNumbered(meta.value, 'topic');
     const byNo = no !== null ? ch.topics.find((t) => t.topic_no === no) : undefined;
-    const t = byNo && (!name || close(name, byNo.name)) ? byNo : name ? onlyMatch(ch.topics, (x) => x.name, name) : undefined;
+    // a number and a name that disagree are left for the writer: either could be the one meant
+    const t = byNo && (!name || close(name, byNo.name)) ? byNo : no === null && name ? onlyMatch(ch.topics, (x) => x.name, name) : undefined;
     return t ? `Topic ${t.topic_no}: ${t.name}` : line;
   }
   const m = line.match(QUESTION_LABEL);
@@ -86,8 +88,12 @@ function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
     const l = rest.trim().replace(/[.!]+$/, '').toLowerCase();
     if (LEVELS.has(l)) rest = l;
   }
-  if (label === 'Wrong' && !rest.includes(';') && (rest.match(/,/g) ?? []).length >= 2 && !/\d,\d/.test(rest)) {
-    rest = rest.split(',').map((o) => o.trim()).filter(Boolean).join('; ');
+  // not on the line being typed: more options with commas may still come, and would end up with both separators
+  if (!typing && label === 'Wrong' && !rest.includes(';') && (rest.match(/,/g) ?? []).length >= 2 && !/\d,\d/.test(rest)) {
+    const parts = rest.split(',').map((o) => o.trim()).filter(Boolean);
+    // only when each part is plainly one option: a part with "and"/"or" in it, or a long one, may be an option with a
+    // comma inside ("Copper, zinc and tin"), so the line is left for the writer
+    if (parts.every((o) => !/\b(and|or)\b/i.test(o) && o.split(/\s+/).length <= 4)) rest = parts.join('; ');
   }
   return `${m[1]}${label}: ${rest}`;
 }
@@ -101,7 +107,9 @@ export interface TidyResult { text: string; caret: number | null }
  * The text with its sure fixes made. `caret` is where the caret is (null when the box isn't being typed in); the
  * result says where it goes. `keep` is the last chapter lines the text had, put back at the top if they are gone.
  */
-export function tidyText(text: string, opts: { list: ListChapter[]; caret: number | null; keep?: Partial<Record<DetailKey, string>> }): TidyResult {
+export function tidyText(text: string, opts: { list: ListChapter[]; caret: number | null; keep?: Partial<Record<DetailKey, string>>; leave?: ReadonlySet<string> }): TidyResult {
+  // `leave`: lines the writer took a fix back from, left as they are; a Q: line in it gets no blank line put before
+  // it, and a chapter line in it isn't put back
   const lines = text.split('\n');
   let caretLine = -1;
   let caretCol = 0;
@@ -114,14 +122,19 @@ export function tidyText(text: string, opts: { list: ListChapter[]; caret: numbe
   const out: string[] = [];
   const ctx: Context = { board: '', cls: null, subject: '' };
   let fence = false;
+  const fenced = lines.some((l) => FENCE.test(l));
   let newCaretLine = -1;
   lines.forEach((line, i) => {
     if (FENCE.test(line)) { fence = !fence; out.push(line); if (i === caretLine) newCaretLine = out.length - 1; return; }
-    let fixed = fixLine(line, ctx, opts.list);
     const isCaret = i === caretLine;
+    let fixed = fixLine(line, ctx, opts.list, isCaret);
+    // a pasted reply: only its code block is fixed, never the chatbot's own sentences around it
+    if (fenced && !fence) fixed = line;
+    // a fix the writer took back with Ctrl+Z stays taken back
+    if (opts.leave?.has(line)) fixed = line;
     if (isCaret) fixed = sameLength(line, fixed);
     // a blank line before each question (not on the caret's line: it waits until the writer moves on)
-    if (!isCaret && /^\s*Q:/.test(fixed) && out.length && out[out.length - 1].trim() && !FENCE.test(out[out.length - 1])) out.push('');
+    if (!isCaret && !(fenced && !fence) && !opts.leave?.has(fixed) && /^\s*Q:/.test(fixed) && out.length && out[out.length - 1].trim() && !FENCE.test(out[out.length - 1])) out.push('');
     out.push(fixed);
     if (isCaret) newCaretLine = out.length - 1;
   });
@@ -130,7 +143,8 @@ export function tidyText(text: string, opts: { list: ListChapter[]; caret: numbe
   // the four chapter lines back at the top, once the caret is below them or the box was left
   const keep = opts.keep ?? {};
   const has = new Set(out.map((l) => readMeta(l)?.key));
-  const gone = DETAIL_KEYS.filter((k) => !has.has(k) && keep[k]?.trim());
+  // (not one whose return the writer took back: it is in `leave` as the line it would be)
+  const gone = DETAIL_KEYS.filter((k) => !has.has(k) && keep[k]?.trim() && !opts.leave?.has(writeDetail('', k, keep[k]!).trim()));
   if (gone.length) {
     const firstOther = out.findIndex((l) => l.trim() && !(readMeta(l)?.key && (DETAIL_KEYS as string[]).includes(readMeta(l)!.key)));
     const movedOn = firstOther >= 0 && (newCaretLine < 0 || newCaretLine >= firstOther);

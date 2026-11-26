@@ -85,3 +85,7 @@ tmp/
 # local copies of these two if you ever need to re-run the conversion.
 /history_civics_bank.json
 /question_bank_economics.json
+
+# Playwright (npm run e2e)
+/test-results/
+/playwright-report/

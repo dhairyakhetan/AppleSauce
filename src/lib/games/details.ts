@@ -386,7 +386,6 @@ export const SUBJECTS: { name: string; code: string; also: string[] }[] = [
 ];
 const SUBJECT_NAMES = SUBJECTS.flatMap((x) => [key(x.name), ...x.also].map((a) => ({ a, name: x.name })));
 
-/** The subject named in a box or a line, or an error: only subjects on the list above can be used. */
 /*
  * The order subjects are listed in everywhere on the games pages: two kinds only, core subjects first (the ones nearly
  * everyone takes), then electives (every other subject). Alphabetical within each; the kinds aren't shown.
@@ -399,6 +398,7 @@ export const subjectRank = (name: string) => (CORE_SUBJECTS.has(name) ? 0 : 1);
 /** Sorts subject names: core first, then electives, each alphabetically. */
 export const bySubject = (a: string, b: string) => subjectRank(a) - subjectRank(b) || a.localeCompare(b);
 
+/** The subject named in a box or a line, or an error: only subjects on the list above can be used. */
 export function checkSubject(raw: string): { name: string; code: string | null; problem?: Problem } {
   const k = key(raw);
   if (!k) return { name: '', code: null };
@@ -421,7 +421,6 @@ export function parseNumbered(s: string, kind: 'chapter' | 'topic'): { no: numbe
   return { no: kind === 'chapter' ? parts[0] : parts[parts.length - 1], name: tidy(m[2]) };
 }
 
-/** A chapter or topic: its number (null when missing or out of range), its name capitalised, and any problem. */
 /**
  * A board, class or subject written the site's way, when there is one clear answer: its own spelling and capitals
  * ("cBsE" → CBSE, "maths" → Mathematics, "X" or "10th" → 10), or the one name a typo is a letter or two away from
@@ -436,6 +435,7 @@ export function fixDetail(k: 'board' | 'class' | 'subject', value: string): stri
   return near ?? null;
 }
 
+/** A chapter or topic: its number (null when missing or out of range), its name capitalised, and any problem. */
 export function checkNumbered(value: string, kind: 'chapter' | 'topic'): { no: number | null; name: string; problem?: Problem } {
   const { no, name } = parseNumbered(value, kind);
   const Kind = kind === 'chapter' ? 'Chapter' : 'Topic';

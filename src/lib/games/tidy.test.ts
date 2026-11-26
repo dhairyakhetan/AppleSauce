@@ -43,6 +43,53 @@ describe('tidyText', () => {
     expect(run(odd).text).toBe(odd);
   });
 
+  it('leaves a Topic line whose number and name disagree', () => {
+    for (const t of ['Topic 2: Hot and Cold', 'Topic 5: Hot and Cold']) {
+      const text = HEAD.replace('Topic 1: Hot and Cold', t) + Q;
+      expect(run(text).text).toBe(text);
+    }
+  });
+
+  it('fixes no topic under a chapter it couldn\'t be sure of', () => {
+    const text = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Light\nTopic: transfer of heat\n\n' + Q;
+    expect(run(text).text).toBe(text);
+  });
+
+  it('leaves the commas of a Wrong line still being typed', () => {
+    const text = HEAD + Q.replace('Wrong: Barometer; Hygrometer; Ammeter', 'Wrong: Red, White, Blue');
+    expect(run(text, text.indexOf('Blue') + 4).text).toBe(text);
+  });
+
+  it('leaves a line whose fix the writer took back', () => {
+    const line = 'Wrong: Red, White, Blue';
+    const text = HEAD + Q.replace('Wrong: Barometer; Hygrometer; Ammeter', line);
+    expect(tidyText(text, { list, caret: null, leave: new Set([line]) }).text).toBe(text);
+  });
+
+  it('puts no blank line before a Q: line, and no chapter line back, when the writer took that back', () => {
+    const q2 = 'Q: Instrument that measures pressure';
+    const text = HEAD + Q + '\n' + q2 + '\nA: Barometer';
+    expect(run(text).text).toContain('\n\n' + q2);
+    expect(tidyText(text, { list, caret: null, leave: new Set([q2]) }).text).toBe(text);
+    const keep = { board: 'CBSE', class: '7', subject: 'Science', chapter: '4: Heat' };
+    const noBoard = 'Class: 7\nSubject: Science\nChapter 4: Heat\n\n' + Q;
+    expect(tidyText(noBoard, { list, caret: null, keep }).text).toBe('Board: CBSE\n' + noBoard);
+    expect(tidyText(noBoard, { list, caret: null, keep, leave: new Set(['Board: CBSE']) }).text).toBe(noBoard);
+  });
+
+  it('fixes only the code block of a pasted reply, never the chatbot\'s sentences around it', () => {
+    const reply = 'Here you go.\nwrong: a note, with, commas\n\n```\n' + HEAD + Q.replace('Level: easy', 'Level: Easy') + '\n```\nLevel: Easy ones first, as you asked.';
+    const t = run(reply).text;
+    expect(t).toContain('wrong: a note, with, commas');
+    expect(t).toContain('Level: Easy ones first, as you asked.');
+    expect(t).toContain('Level: easy\n```');
+  });
+
+  it('leaves a Wrong line whose commas may be inside an option', () => {
+    const text = HEAD + Q.replace('Wrong: Barometer; Hygrometer; Ammeter', 'Wrong: Copper, zinc and tin, Wood, Glass, Plastic');
+    expect(run(text).text).toBe(text);
+  });
+
   it('fixes labels, levels and commas, never the words', () => {
     const t = run(HEAD + 'q1: Instrument that measures temperature\na: Thermometer\nfill: Temperature is measured with a ___ here.\nwrong: Barometer, Hygrometer, Ammeter\nLEVEL: Easy.').text;
     expect(t).toBe(HEAD + 'Q: Instrument that measures temperature\nA: Thermometer\nFill: Temperature is measured with a ___ here.\nWrong: Barometer; Hygrometer; Ammeter\nLevel: easy');

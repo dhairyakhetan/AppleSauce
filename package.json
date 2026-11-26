@@ -22,7 +22,8 @@
     "import-bank": "tsx scripts/import-bank.ts",
     "generate-bank-sql": "tsx scripts/generate-bank-sql.ts",
     "push:all": "npm run remotes:setup && git push origin HEAD:shikshaq-2.0 && git push kanitest HEAD:main",
-    "remotes:setup": "node -e \"const{execSync:e}=require('child_process');try{e('git remote get-url kanitest',{stdio:'pipe'});console.log('kanitest remote already set up')}catch{e('git remote add kanitest https://github.com/kaxx4/shikshaqkanitest.git');console.log('added kanitest remote (test deploy)')}\""
+    "remotes:setup": "node -e \"const{execSync:e}=require('child_process');try{e('git remote get-url kanitest',{stdio:'pipe'});console.log('kanitest remote already set up')}catch{e('git remote add kanitest https://github.com/kaxx4/shikshaqkanitest.git');console.log('added kanitest remote (test deploy)')}\"",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -71,6 +72,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.6",
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/dompurify": "^3.0.5",
     "@types/katex": "^0.16.8",
