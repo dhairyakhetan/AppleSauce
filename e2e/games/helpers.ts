@@ -11,6 +11,8 @@ export async function writePage(page: Page) {
   await open(page);
   const box = page.locator('textarea#q');
   await expect(box).toBeVisible();
+  // the list of chapters has loaded: Board is a dropdown, not the typing box shown until then
+  await expect(page.locator('button#d-board')).toBeVisible({ timeout: 15_000 });
   return box;
 }
 

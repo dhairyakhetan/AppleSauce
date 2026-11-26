@@ -137,7 +137,12 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   A green, Also teal, Fill blue, Wrong orange-brown, Level light grey; labels a little lighter). The textarea's text is
   see-through and the copy behind it (`games-backdrop` in `WriteQuestions.tsx`, `lineKind` in `helpers.ts`) is what shows, so the copy
   must keep exactly the textarea's font, padding and width: no bold, no other font size.
-- **Write questions, small behaviours:** Clear (and "Start a new batch") removes the questions but keeps the chapter
+- **Write questions, small behaviours:** a dropdown pick or a topic button types its line into the box a letter at a
+  time (`typeTo`, about half a second, at once with reduced motion; the box is read-only meanwhile, and anything that
+  reads the text finishes it first with `settled`). Changing a Board, Class, Subject or Chapter already set when the box
+  has questions of the writer's own asks "Clear your questions for the new chapter?" (Clear and change, with Undo; Keep
+  them; Cancel); the example's questions, or none, are cleared without asking. Setting a detail for the first time
+  never asks. Clear (and "Start a new batch") removes the questions but keeps the chapter
   lines; Try an example asks first when the box has questions of your own (Undo works either way); both keep the
   pressed button where it was on screen (`steady`), so the page never jumps. Topic buttons show a tick and how many
   questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs, and tapping it says so under the tabs (for phones).
@@ -151,7 +156,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   to fix" button shows only while the results are still below.
 - **Browser tests:** `npm run e2e` (Playwright, `playwright.config.ts`, files in `e2e/games/*.e2e.ts`) starts the dev
   server with the preview tools on and a placeholder Supabase address, and drives Write questions and Chapters in dummy
-  mode: the autocorrect and its Undo, the dropdowns, sent-back questions, the preview's greyed-out games, Bulk add and
+  mode: the autocorrect and its Undo, the dropdowns (typed in, and asking before a change clears questions), sent-back questions, the preview's greyed-out games, Bulk add and
   Bulk remove. No database or keys needed. `@playwright/test` is pinned to the Playwright version whose browser is
   installed. Not in `npm test` or CI (vitest runs in node with no browser); run it after changing these pages.
 - **Questions and answers are never reworded.** Only a bullet or number before

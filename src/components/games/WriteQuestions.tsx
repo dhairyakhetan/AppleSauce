@@ -82,6 +82,51 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   onRetryCatalog: () => void;
 }) {
   const [raw, setRaw] = useState('');
+  /*
+   * A dropdown pick or a topic button types its new line into the box, a letter at a time, like a person (about half a
+   * second; at once for anyone who asked for less motion). Lines it removes go at once. The box is read-only while it
+   * types, and anything that reads the text first finishes it (`settled`), so nothing ever works on half a line.
+   */
+  const rawNow = useRef(raw);
+  rawNow.current = raw;
+  const typing = useRef<{ final: string; timer: number; done?: () => void } | null>(null);
+  const [animating, setAnimating] = useState(false);
+  const settled = () => {
+    const a = typing.current;
+    if (!a) return rawNow.current;
+    clearTimeout(a.timer);
+    typing.current = null;
+    rawNow.current = a.final;
+    setRaw(a.final);
+    setAnimating(false);
+    a.done?.();
+    return a.final;
+  };
+  const typeTo = (next: string, done?: () => void) => {
+    const from = settled();
+    const was = new Set(from.split('\n'));
+    const lines = next.split('\n');
+    const typed = lines.map((l, i) => (l.trim() && !was.has(l) ? i : -1)).filter((i) => i >= 0);
+    const total = typed.reduce((n, i) => n + lines[i].length, 0);
+    const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!total || still || total > 160) { rawNow.current = next; setRaw(next); done?.(); return; }
+    const step = Math.min(28, Math.max(8, 500 / total));
+    let line = 0;
+    let at = 0;
+    const show = () => lines.map((l, i) => { const k = typed.indexOf(i); return k < 0 || k < line ? l : k > line ? '' : l.slice(0, at); }).join('\n');
+    const tick = () => {
+      at++;
+      if (at > lines[typed[line]].length) { line++; at = 0; }
+      if (line >= typed.length) { settled(); return; }
+      setRaw(show());
+      typing.current!.timer = window.setTimeout(tick, step * (0.6 + Math.random() * 0.8));
+    };
+    typing.current = { final: next, timer: 0, done };
+    setAnimating(true);
+    setRaw(show());
+    typing.current.timer = window.setTimeout(tick, step);
+  };
+  useEffect(() => () => clearTimeout(typing.current?.timer), []);
   /** The text as it was last sent: leaving the page with anything else asks first, as it isn't saved. */
   const [kept, setKept] = useState('');
   const [done, setDone] = useState('');
@@ -148,7 +193,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
    * moved below the top lines). A pick, Clear or Try an example sets them; typing a new one replaces it.
    */
   const keep = useRef<Partial<Record<DetailKey, string>>>({});
-  useEffect(() => { for (const k of DETAIL_KEYS) if (details[k].trim()) keep.current[k] = details[k]; });
+  useEffect(() => { if (typing.current) return; for (const k of DETAIL_KEYS) if (details[k].trim()) keep.current[k] = details[k]; });
   const remember = (t: string) => { keep.current = { ...readDetails(t) }; return t; };
   const autoFix = (text: string, at: number | null, leave?: ReadonlySet<string>) => tidyText(text, { list: catalog.list ?? [], caret: at, keep: keep.current, leave });
   const gaps = missing(rows);
@@ -324,7 +369,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
    * otherwise this Topic line goes after the line the cursor is on (or replaces it when it is empty). Either way the
    * cursor moves to the line after it, ready for the first question. */
   const addTopic = (t: ListTopic) => {
-    const lines = raw.split('\n');
+    const lines = settled().split('\n');
     const topicLine = `Topic ${t.topic_no}: ${t.name}`;
     const cur = caret >= 1 && caret <= lines.length ? caret - 1 : lines.length - 1;
     // the Topic line the cursor is under (none once a Chapter line is passed), and whether a question follows it
@@ -351,14 +396,13 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     if (at === lines.length - 1) lines.push('');
     const next = lines.join('\n');
     const pos = lines.slice(0, at + 1).join('\n').length + 1;
-    setRaw(next);
-    requestAnimationFrame(() => {
+    typeTo(next, () => requestAnimationFrame(() => {
       const ta = box.current;
       if (!ta) return;
       ta.focus({ preventScroll: true });
       ta.setSelectionRange(pos, pos);
       moveCaret(at + 2);
-    });
+    }));
   };
 
   /**
@@ -426,11 +470,11 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   const subjectOk = subjectsOn.includes(subjectName);
 
   /** A pick goes into the text; the boxes after it that no longer fit (another board's class, say) are emptied. */
-  const pickDetail = (k: DetailKey, v: string) => setRaw((r) => {
+  const pickText = (r: string, k: DetailKey, v: string) => {
     let t = k === 'chapter'
       ? writeDetail(r, 'chapter', (() => { const c = listed.find((x) => String(x.chapter_no) === v); return c ? `${c.chapter_no}: ${c.name}` : ''; })())
       : writeDetail(r, k, v);
-    if (k === 'chapter') return remember(t);
+    if (k === 'chapter') return t;
     const fits = (d: Record<DetailKey, string>, upTo: 'class' | 'subject') => list.some((c) => c.board === checkBoard(d.board).name
       && c.class === checkClass(d.class).value && (upTo === 'class' || c.subject === checkSubject(d.subject).name));
     let d = readDetails(t);
@@ -441,8 +485,35 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     const typedCh = parseNumbered(d.chapter, 'chapter');
     // a chapter on the list for the new pick stays, also one written with its number only ("Chapter 4")
     if (d.chapter && !chaptersFor(list, d.board, d.class, d.subject).some((c) => c.chapter_no === typedCh.no && (!typedCh.name || sameName(c.name, typedCh.name)))) t = writeDetail(t, 'chapter', '');
-    return remember(t);
-  });
+    return t;
+  };
+
+  /**
+   * A pick that changes a detail already set (another chapter, say) when the box has questions of the writer's own asks
+   * whether to clear them; the example's questions, or none, are cleared without asking.
+   */
+  const [askChange, setAskChange] = useState<{ k: DetailKey; v: string } | null>(null);
+  const applyPick = (k: DetailKey, v: string, clear: boolean) => {
+    setAskChange(null);
+    const now = settled();
+    if (clear && headOf(now).trim() !== now.trim()) {
+      const head = headOf(now);
+      replaceAll(head, example ? 'Example cleared' : 'Questions cleared');
+      rawNow.current = head;
+      typeTo(remember(pickText(head, k, v)));
+      return;
+    }
+    typeTo(remember(pickText(now, k, v)));
+  };
+  const pickDetail = (k: DetailKey, v: string) => {
+    const now = settled();
+    const next = pickText(now, k, v);
+    if (next === now) return;
+    const changing = !!readDetails(now)[k].trim() && readDetails(next)[k] !== readDetails(now)[k];
+    if (!changing || !rows.length) { applyPick(k, v, false); return; }
+    if (own.length) setAskChange({ k, v });
+    else applyPick(k, v, true);
+  };
 
   /** One dropdown. `needs`: the box to fill in first (it says so, and on hover), or null when it can be used. */
   const listField = (k: DetailKey, options: { value: string; label: string; meta?: string; tone?: 'good' }[], value: string, needs: string | null, wide?: string) => {
@@ -548,7 +619,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
-            <Editor value={raw} onChange={(t) => { if (!t.trim()) keep.current = {}; setRaw(t); }} onPaste={(all) => { setBatch((b) => b + 1); if (all) { setExample(false); keep.current = {}; } }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} autoFix={autoFix} />
+            <Editor value={raw} readOnly={animating} onChange={(t) => { if (!t.trim()) keep.current = {}; setRaw(t); }} onPaste={(all) => { setBatch((b) => b + 1); if (all) { setExample(false); keep.current = {}; } }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} autoFix={autoFix} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" ref={exampleBtn} className={btn('card')} onClick={() => (own.length ? setAskExample(true) : loadExample())}>Try an example</button>
@@ -655,6 +726,19 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
           )}
           {sendError && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">Couldn't send: {sendError}</p>}
         </form>
+        <Dialog open={!!askChange} onOpenChange={(o) => { if (!o) setAskChange(null); }}>
+          <DialogContent className="max-w-md rounded-2xl bg-card">
+            <DialogTitle>Clear your questions for the new {askChange ? LABEL[askChange.k].toLowerCase() : 'chapter'}?</DialogTitle>
+            <DialogDescription>
+              The Questions box has {plural(own.length, 'question')} for {details.chapter.trim() ? `Chapter ${details.chapter.trim()}` : 'the details chosen now'}. Clear {own.length === 1 ? 'it' : 'them'} to start on the new one, or keep {own.length === 1 ? 'it' : 'them'} under the new details. Clearing can be undone for a few seconds.
+            </DialogDescription>
+            <div className="flex flex-col gap-2 sm:flex-row-reverse">
+              <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={() => askChange && applyPick(askChange.k, askChange.v, true)}>Clear and change</button>
+              <button type="button" className={btn('card', 'w-full sm:w-auto')} onClick={() => askChange && applyPick(askChange.k, askChange.v, false)}>Keep them</button>
+              <button type="button" className={btn('quiet', 'w-full sm:w-auto sm:mr-auto')} onClick={() => setAskChange(null)}>Cancel</button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={askExample} onOpenChange={setAskExample}>
           <DialogContent className="max-w-md rounded-2xl bg-card">
             <DialogTitle>Replace your questions with the example?</DialogTitle>
@@ -870,8 +954,10 @@ function fixedLines(old: string, next: string): string[] {
   return out;
 }
 
-function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine, autoFix }: {
+function Editor({ value, readOnly, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret, onTopLine, autoFix }: {
   value: string;
+  /** A pick or topic button is typing its line in. */
+  readOnly?: boolean;
   onChange: (v: string) => void;
   /** A paste; `all` when it replaces all the text (or the box was empty). */
   onPaste: (all: boolean) => void;
@@ -904,7 +990,7 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
   const declined = useRef<string | null>(null);
   const runFix = (focused: boolean) => {
     const ta = boxRef.current;
-    if (!ta || !autoFix) return;
+    if (!ta || !autoFix || ta.readOnly) return;
     // the box is back to the text from before the last fix (Ctrl+Z): those lines are left as the writer wants them
     if (lastFix.current && ta.value === lastFix.current.before) {
       for (const l of lastFix.current.lines) leave.current.add(l);
@@ -1024,7 +1110,7 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
             {'​'}
           </div>
         </div>
-        <textarea id="q" ref={boxRef} spellCheck={false} value={value} aria-invalid={errors > 0} aria-describedby="caret-note"
+        <textarea id="q" ref={boxRef} spellCheck={false} value={value} readOnly={readOnly} aria-busy={readOnly || undefined} aria-invalid={errors > 0} aria-describedby="caret-note"
           onChange={(e) => {
             onChange(e.target.value);
             // Ctrl+Z on a fix: the browser leaves the restored text selected, and the next key would replace it; the
