@@ -8,7 +8,7 @@ import { VerifierDetailsForm } from '@/components/hod/VerifierDetailsForm';
 import { useConfirm } from '@/components/ui/use-confirm';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import { UNASSIGNED_SHOWN, verifierSetupLine } from '@/lib/hod-desk';
-import { formatGrade, formatValidUntil, parseSubjectList } from '@/lib/verifier-papers';
+import { formatGrade, formatValidUntil, loadGate, parseSubjectList } from '@/lib/verifier-papers';
 import {
   memberName,
   passRate,
@@ -315,8 +315,9 @@ export function VerifiersTab({ api, scope }: { api: HodApi; scope: string }) {
   /** The full subject list for the boxes (hod_list_subjects); if it fails the boxes fall back to what the desk holds. */
   const subjectsQ = useQuery({ queryKey: SUBJECTS_KEY(scope), queryFn: () => api.subjects(), staleTime: 5 * 60_000 });
 
-  if (teamQ.isLoading || profilesQ.isLoading) return <ListSkeleton label="Loading checkers" />;
-  if (teamQ.isError) return <LoadError what="The checkers" onRetry={() => void teamQ.refetch()} />;
+  // loadGate, not isLoading: offline pauses a read (isLoading stays false) and "There are no checkers yet" must not show.
+  if (loadGate(teamQ) === 'loading' || loadGate(profilesQ) === 'loading') return <ListSkeleton label="Loading checkers" />;
+  if (loadGate(teamQ) === 'error') return <LoadError what="The checkers" onRetry={() => void teamQ.refetch()} />;
   const team = teamQ.data ?? [];
   if (team.length === 0) return <EmptyNote>There are no checkers yet. An admin adds them under Admin, People, Checkers.</EmptyNote>;
   const profiles = sortProfiles(profilesQ.data ?? []);

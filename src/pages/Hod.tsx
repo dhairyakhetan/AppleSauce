@@ -7,7 +7,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { useIsAdminBadge } from '@/hooks/useIsAdminBadge';
 import { useIsCheckerBadge } from '@/hooks/useIsCheckerBadge';
 import { nextTabKey } from '@/components/admin/AdminTabs';
-import { AssignmentsTab } from '@/components/hod/AssignmentsTab';
+import { AssignmentsTab, UNASSIGNED_KEY } from '@/components/hod/AssignmentsTab';
 import { AiTrustTab } from '@/components/hod/AiTrustTab';
 import { HistoryTab } from '@/components/hod/HistoryTab';
 import { HodStageStrip } from '@/components/hod/HodStageStrip';
@@ -22,7 +22,8 @@ import { VerifiersTab } from '@/components/hod/VerifiersTab';
 import { TeacherReviewersTab } from '@/components/hod/TeacherReviewersTab';
 import { CHIP } from '@/lib/checker-button-styles';
 import { realHodApi, type HodApi } from '@/lib/hod-api';
-import { resolveTabKey, tabBadge, tabBadgeLabel } from '@/lib/hod-tabs';
+import { resolveTabKey, tabBadge, tabBadgeLabel, tabBadgeText } from '@/lib/hod-tabs';
+import { UNASSIGNED_SHOWN } from '@/lib/hod-desk';
 import type { TeacherReviewerAdminApi } from '@/lib/teacher-review-api';
 import { realFixRequestsApi, type FixRequestsApi } from '@/lib/fix-requests-api';
 import type { PaperAsksApi } from '@/lib/paper-asks-api';
@@ -187,6 +188,15 @@ export function HodPage({
     refetchOnMount: true,
   });
   const requestsWaiting = waitingCount(requestsCountQ.data);
+  // Papers waiting to be handed out, for the number on Assignments. The same read (and key) as the strip of counts and
+  // the list itself, so it costs nothing extra. If it fails the tab just shows no number.
+  const freeQ = useQuery({
+    queryKey: UNASSIGNED_KEY(scope),
+    queryFn: () => api.unassignedPapers(UNASSIGNED_SHOWN + 1),
+    enabled: allowed === true,
+    staleTime: 10_000,
+  });
+  const freePapers = freeQ.data?.length ?? 0;
 
   // On a narrow screen the tabs scroll as one row. If the selected tab is cut off, bring it
   // into view (horizontally only, so the page does not jump). It re-runs when the badge
@@ -202,7 +212,7 @@ export function HodPage({
     if (left >= row.scrollLeft && right <= row.scrollLeft + view) return;
     const target = left - (view - el.offsetWidth) / 2;
     row.scrollTo({ left: Math.max(0, Math.min(target, row.scrollWidth - view)), behavior: 'auto' });
-  }, [active.key, allowed, countsQ.data, requestsWaiting]);
+  }, [active.key, allowed, countsQ.data, requestsWaiting, freePapers]);
 
   if (checkFailed && allowed === null) {
     return (
@@ -282,7 +292,10 @@ export function HodPage({
           aria-label="HOD desk"
           className="relative mb-5 flex w-max max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted p-1 scrollbar-hide"
         >
-          {TABS.map((t) => (
+          {TABS.map((t) => {
+            // Assignments counts the papers waiting to be handed out (its own read); every other tab keeps its badge as before.
+            const badge = t.key === 'assignments' ? freePapers : tabBadge(t.key, countsQ.data, requestsWaiting);
+            return (
             <button
               key={t.key}
               ref={(el) => {
@@ -303,14 +316,15 @@ export function HodPage({
               )}
             >
               {t.label}
-              {tabBadge(t.key, countsQ.data, requestsWaiting) > 0 ? (
+              {badge > 0 ? (
                 <span className="inline-flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-brand px-[5px] text-[11px] font-bold tabular-nums text-foreground">
-                  <span aria-hidden>{tabBadge(t.key, countsQ.data, requestsWaiting)}</span>
-                  <span className="sr-only">{`: ${tabBadgeLabel(t.key, countsQ.data, requestsWaiting)}`}</span>
+                  <span aria-hidden>{tabBadgeText(t.key, badge)}</span>
+                  <span className="sr-only">{`: ${tabBadgeLabel(t.key, countsQ.data, requestsWaiting, freePapers)}`}</span>
                 </span>
               ) : null}
             </button>
-          ))}
+            );
+          })}
         </div>
         {countsQ.isError ? (
           <p role="status" className="mt-1 text-[12px] text-warm-meta">

@@ -16,6 +16,7 @@ import {
   type UploadStatus,
 } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
+import { loadGate } from '@/lib/verifier-papers';
 
 /* "Student uploads": papers students sent in with Submit a paper. Open the files
    to look at them, then approve or reject. Rejecting needs a reason. Approving
@@ -188,9 +189,10 @@ export function UploadsTab({ api, scope }: { api: HodApi; scope: string }) {
           </button>
         ))}
       </div>
-      {q.isLoading ? (
+      {/* loadGate, not isLoading: offline pauses a read (isLoading stays false) and "No upload is waiting" must not show. */}
+      {loadGate(q) === 'loading' ? (
         <ListSkeleton label="Loading student uploads" />
-      ) : q.isError ? (
+      ) : loadGate(q) === 'error' ? (
         <LoadError what="The student uploads" onRetry={() => void q.refetch()} />
       ) : (q.data ?? []).length === 0 ? (
         <EmptyNote>{status === 'pending' ? 'No upload is waiting. When a student sends in a paper, it shows here.' : 'No uploads in this list yet.'}</EmptyNote>

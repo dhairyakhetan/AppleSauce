@@ -10,6 +10,7 @@ import type { HodApi } from '@/lib/hod-api';
 import { refreshHod } from '@/lib/hod-refresh';
 import { aiRedoStepWords, errorWords, type HodAiRedoItem, type HodAiRedoStep } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
+import { loadGate } from '@/lib/verifier-papers';
 
 /* "Send to AI" (owner, 19 Nov 2026): the whole "send back to the AI" flow in one place.
    A student asks from the checker ("Send back to the AI"). The question lands here, waiting for an HOD's yes or no,
@@ -217,7 +218,8 @@ function Group({ title, items, api, scope }: { title: string; items: HodAiRedoIt
 export function SendToAiTab({ api, scope }: { api: HodApi; scope: string }) {
   const q = useQuery({ queryKey: AI_REDO_KEY(scope), queryFn: () => api.aiRedoList(), staleTime: 15_000 });
 
-  if (q.isLoading) return <ListSkeleton rows={3} label="Loading the questions for the AI" />;
+  // loadGate, not isLoading: offline pauses a read (isLoading stays false), so the gate waits for a real answer.
+  if (loadGate(q) === 'loading') return <ListSkeleton rows={3} label="Loading the questions for the AI" />;
   if (q.isError || !q.data) return <LoadError what="The list of questions for the AI" onRetry={() => void q.refetch()} />;
 
   const asked = q.data.filter((x) => x.state === 'requested');

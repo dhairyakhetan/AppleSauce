@@ -124,6 +124,12 @@ export interface PipelineRoute {
     driveSyncedAt: string | null;
     registryChangedAt: string | null;
   };
+  /**
+   * Papers ready for a checker that nobody holds yet, waiting for an HOD to hand them out (since 26 Nov 2026 nothing
+   * is handed out by itself). Read from the HOD desk's own list (hod_unassigned_papers), not from the route RPC, so
+   * it is null when that read failed or was not made: the stop then shows "?", never 0.
+   */
+  handOut?: { papers: number; capped: boolean } | null;
 }
 
 export interface PipelineRouteApi {
@@ -287,11 +293,26 @@ export function normaliseRoute(raw: unknown): PipelineRoute {
   };
 }
 
+/** How many papers nobody holds the route asks for: one more than the desk shows, to know when to say "200+". */
+export const HAND_OUT_SHOWN = 200;
+
+/** The papers waiting to be handed out, from the desk's own list. Any failure is null ("?"), never 0, and never stops the route. */
+export async function fetchHandOut(): Promise<PipelineRoute['handOut']> {
+  try {
+    const { data, error } = await supabase.rpc('hod_unassigned_papers' as never, { p_limit: HAND_OUT_SHOWN + 1 } as never);
+    const rows: unknown = data;
+    if (error || !Array.isArray(rows)) return null;
+    return { papers: Math.min(rows.length, HAND_OUT_SHOWN), capped: rows.length > HAND_OUT_SHOWN };
+  } catch {
+    return null;
+  }
+}
+
 /** The real read. A refusal comes back as a 42501 error and is thrown, so the page keeps its last numbers. */
 export async function fetchPipelineRoute(): Promise<PipelineRoute> {
-  const { data, error } = await supabase.rpc('admin_pipeline_route' as never);
+  const [{ data, error }, handOut] = await Promise.all([supabase.rpc('admin_pipeline_route' as never), fetchHandOut()]);
   if (error) throw error;
-  return normaliseRoute(data);
+  return { ...normaliseRoute(data), handOut };
 }
 
 export const realPipelineRouteApi: PipelineRouteApi = { route: fetchPipelineRoute };
@@ -421,6 +442,8 @@ export function unitWord(unit: StopUnit, n: number | null): string {
 /** Where each stop leads. The HOD desk is the home of the work, so both desks open its tabs. */
 const HOD_DESK = {
   assignments: '/hod?tab=assignments',
+  /** The list of papers nobody has, on Assignments, where Auto assign all is. */
+  handOut: '/hod?tab=assignments&stage=ready',
   needsYou: '/hod?tab=needs-you',
   ready: '/hod?tab=ready',
   live: '/hod?tab=live',
@@ -514,6 +537,14 @@ export function buildMainStops(route: PipelineRoute, audience: Audience = 'admin
   const studentFacts: string[] = [];
   if (checking) studentFacts.push(`${plural(checking.papers, 'paper')} with questions open`);
   studentFacts.push(`${plural(checkers.activeVerifiers, 'checker')} active`, `${plural(checkers.papersAssigned, 'paper')} handed out`);
+  // Since 26 Nov 2026 a paper reaches a checker only when an HOD hands it out, so the stop says how many are waiting.
+  const handOut = route.handOut ?? null;
+  const studentFigures: Figure[] = [
+    {
+      label: 'Waiting for you to hand out',
+      value: handOut ? `${handOut.capped ? `${fmt(HAND_OUT_SHOWN)}+` : fmt(handOut.papers)} ${handOut.papers === 1 && !handOut.capped ? 'paper' : 'papers'}` : '?',
+    },
+  ];
 
   const needsFacts: string[] = [];
   if (needsYou) {
@@ -587,12 +618,14 @@ export function buildMainStops(route: PipelineRoute, audience: Audience = 'admin
       track: 'main',
       step: 4,
       title: 'Checking by students',
-      meaning: 'Every question the AI reads goes to student checkers first. These are still open.',
+      meaning:
+        'Questions reach student checkers once an HOD hands their paper out (Auto assign all, or one by hand). Nothing is handed out by itself. These questions are still open.',
       count: checking ? checking.questions : null,
       unit: 'question',
       facts: studentFacts,
+      figures: studentFigures,
       look: STOP_LOOK.students,
-      action: { kind: 'link', href: HOD_DESK.assignments, label: 'Open assignments on the HOD desk' },
+      action: { kind: 'link', href: HOD_DESK.handOut, label: 'Hand out papers on the HOD desk' },
       bands: BAND_KEYS.map((key) => ({ key, label: BAND_LABEL[key], count: open.studentBands[key] })),
       trust,
     },

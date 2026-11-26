@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AttentionGroup, PaperStatusPill, PaperTimelineDisclosure } from '@/components/PaperStatus';
@@ -16,12 +16,12 @@ import {
   waitingForHodReason,
   type AttentionItem,
 } from '@/lib/paper-status';
+import { useHodConfirm } from '@/components/hod/HodConfirm';
 import { AssignmentWhy } from '@/components/hod/AssignmentWhy';
-import { WhoHasWhat } from '@/components/hod/WhoHasWhat';
+import { WhoHasWhat, type WhoRequest } from '@/components/hod/WhoHasWhat';
 import { WaitingForPapers } from '@/components/hod/WaitingForPapers';
 import { realPaperAsksApi, type PaperAsksApi } from '@/lib/paper-asks-api';
 import { PROFILES_KEY, TEAM_KEY } from '@/components/hod/VerifiersTab';
-import { useConfirm } from '@/components/ui/use-confirm';
 import { refreshHod } from '@/lib/hod-refresh';
 import { useAuth } from '@/lib/auth-context';
 import { actionToneClass } from '@/lib/checker-button-styles';
@@ -30,6 +30,8 @@ import { checkBulk, didLand, notLandedMessage, UNCHECKED_NOTE, type IntendedGive
 import { paperLabel } from '@/lib/checker-progress';
 import {
   MAX_BULK,
+  autoAssignOffReason,
+  explainLeftovers,
   newlyHeld,
   progressText,
   pruneSelected,
@@ -46,6 +48,7 @@ import { cn } from '@/lib/utils';
 import { formatGrade, loadGate } from '@/lib/verifier-papers';
 import { reasonWords } from '@/lib/checker-timeout';
 import {
+  classGrade,
   groupByVerifier,
   heldBackWhy,
   memberName,
@@ -63,7 +66,12 @@ import {
    the verifier's grade, details missing or expired); its reason is shown as
    written. "Auto assign all" runs the automatic hand-out straight away and
    then says how many went to whom and how many are left (the server only
-   returns a count, so who got what is read back from the lists afterwards).
+   returns a count, so who got what is read back from the lists afterwards),
+   and why papers or people got nothing, from what the screen already holds
+   (explainLeftovers). Since 26 Nov 2026 nothing is handed out by itself, so the
+   count of papers waiting and the button sit at the very top of the tab
+   (HandOutCard); the button is off, with the reason under it, while the list is
+   loading or when nothing is waiting, and a failure is shown right under it.
    Papers in the list below can be ticked and given to one verifier in one go:
    the existing one-paper call, run four at a time, at most 50 at once, each
    paper's success or refusal shown. There is no server call that auto assigns
@@ -172,6 +180,15 @@ export function OutcomePanel({ outcome, onDismiss }: { outcome: Outcome | null; 
               {l}
             </p>
           ))}
+          {outcome.link ? (
+            <Link
+              to={outcome.link.to}
+              className="tap-44 mt-2 inline-flex min-h-11 items-center rounded-full bg-card px-4 text-[14px] font-semibold text-foreground shadow-button transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              data-testid="assign-outcome-link"
+            >
+              {outcome.link.label}
+            </Link>
+          ) : null}
           {outcome.failures.length > 0 ? (
             <ul className="mt-2 space-y-1" data-testid="assign-failures">
               {outcome.failures.map((f, i) => (
@@ -258,6 +275,93 @@ export function BulkBar({
   );
 }
 
+/** A Dismiss that is a real 44 px button, not a tiny underline. */
+const DISMISS = 'tap-44 inline-flex min-h-11 shrink-0 items-center rounded-full bg-card px-4 text-[14px] font-semibold text-foreground shadow-button transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus';
+
+/**
+ * The top of the Assignments tab: how many papers wait to be handed out, and Auto assign all. Nothing is handed out
+ * by itself (owner, 26 Nov 2026), so this is the first thing on the tab. The button is off, with the reason under it,
+ * while the list is loading or when nothing is waiting. A failure shows right under the button, and the result of the
+ * last run stays here until dismissed.
+ */
+export function HandOutCard({
+  gate,
+  count,
+  capped,
+  busy,
+  giving,
+  onAutoAssign,
+  failure,
+  onDismissFailure,
+  outcome,
+  onDismissOutcome,
+}: {
+  gate: 'loading' | 'error' | 'ready';
+  count: number;
+  /** The list was cut short, so the count reads "200+". */
+  capped: boolean;
+  busy: boolean;
+  giving: boolean;
+  onAutoAssign: () => void;
+  failure: string | null;
+  onDismissFailure: () => void;
+  outcome: Outcome | null;
+  onDismissOutcome: () => void;
+}) {
+  const off = autoAssignOffReason(gate, count);
+  const shown = capped ? `${UNASSIGNED_SHOWN}+` : String(count);
+  return (
+    <section aria-labelledby="hand-out" className="rounded-[18px] bg-brand-subtle p-4 shadow-card" data-testid="hand-out-card">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="hand-out" className="text-balance text-[16px] font-bold text-foreground" data-testid="hand-out-count">
+            {gate === 'loading' ? (
+              'Counting the papers waiting to be handed out...'
+            ) : gate === 'error' ? (
+              'The papers waiting to be handed out could not be counted'
+            ) : (
+              <>
+                <span className="text-[20px] tabular-nums">{shown}</span> {count === 1 && !capped ? 'paper' : 'papers'} waiting to be handed out
+              </>
+            )}
+          </h2>
+          <p className="mt-0.5 text-[13px] text-warm-secondary">
+            Nothing is handed out by itself. Auto assign all gives each paper to one checker, never above their grade and at most 10 each. You can also give
+            one yourself from the list below.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={busy || off !== null}
+          aria-busy={giving || undefined}
+          aria-describedby={off ? 'auto-assign-off' : undefined}
+          className={cn(actionToneClass('brand'), 'shrink-0')}
+          onClick={onAutoAssign}
+          data-testid="auto-assign-all"
+        >
+          {giving ? 'Assigning papers...' : 'Auto assign all'}
+        </button>
+      </div>
+      {off ? (
+        <p id="auto-assign-off" className="mt-2 text-[13px] text-warm-secondary" data-testid="auto-assign-off">
+          {off}
+        </p>
+      ) : null}
+      {failure ? (
+        <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-destructive" data-testid="auto-assign-failure">
+          <span>{failure}</span>
+          <button type="button" onClick={onDismissFailure} className={DISMISS}>
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+      <div className="mt-3">
+        <OutcomePanel outcome={outcome} onDismiss={onDismissOutcome} />
+      </div>
+    </section>
+  );
+}
+
 /** "Select all 12" with a box that shows none, some or all. */
 export function SelectAllRow({ listLength, selectedCount, onChange }: { listLength: number; selectedCount: number; onChange: () => void }) {
   const state = selectAllState(selectedCount, listLength);
@@ -289,7 +393,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
   const { user } = useAuth();
   /** The HOD's own id, for "Assign to me". In dummy mode there is no sign-in, so a fixed fake id stands in. */
   const myId = user?.id ?? (scope === 'dummy' ? 'dummy-me' : null);
-  const { confirm, confirmDialog } = useConfirm();
+  const { confirm, confirmDialog } = useHodConfirm();
   const [busy, setBusy] = useState(false);
   /** Set while the slow hand-out runs, so the button says what is happening. */
   const [giving, setGiving] = useState(false);
@@ -299,8 +403,16 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkTarget, setBulkTarget] = useState('');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  /** The last hand-out or bulk result, kept on screen until dismissed. */
+  /** The last bulk result, kept on screen until dismissed. */
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  /** The last Auto assign all result, at the top of the tab with its button. */
+  const [autoOutcome, setAutoOutcome] = useState<Outcome | null>(null);
+  /** Why the last Auto assign all failed, shown right under the button. */
+  const [autoFailure, setAutoFailure] = useState<string | null>(null);
+  /** Open a paper (or the stuck ones) in Who has what, from the Needs attention box. */
+  const [whoRequest, setWhoRequest] = useState<WhoRequest | null>(null);
+  /** Set by "Give papers to <name>" in Waiting for papers: who the assign bar is set to, in words. */
+  const [givingTo, setGivingTo] = useState<string | null>(null);
   const outcomeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (outcome) outcomeRef.current?.scrollIntoView?.({ block: 'nearest' });
@@ -392,16 +504,22 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
   /** Auto assign all: the server returns only a count, so who got what is read back from the lists. */
   async function autoAssignAll() {
     const waiting = unassignedQ.data?.length ?? 0;
+    // The button is off while the list loads or is empty (autoAssignOffReason); this is the same rule, in case of a stray press.
+    if (waiting === 0) return;
     const ok = await confirm({
-      title: waiting > 0 ? `Hand out ${waiting > UNASSIGNED_SHOWN ? `${UNASSIGNED_SHOWN}+` : waiting} free ${waiting === 1 ? 'paper' : 'papers'} now?` : 'Hand out the free papers now?',
-      description: 'Each paper goes to one checker, never above their grade. You will see how many went to whom and how many are left. Taking a paper back is one tap on its row.',
+      title: `Hand out ${waiting > UNASSIGNED_SHOWN ? `${UNASSIGNED_SHOWN}+` : waiting} free ${waiting === 1 ? 'paper' : 'papers'} now?`,
+      description:
+        'Each paper goes to one checker, never above their grade, and nobody gets more than 10. You will see how many went to whom, how many are left and why. To take a paper back later, open it under Who has what and press Unassign.',
       confirmLabel: 'Auto assign all',
+      cancelLabel: 'Cancel',
+      tone: 'brand',
     });
     if (!ok) return;
     setBusy(true);
     setGiving(true);
     setRefusal(null);
-    setOutcome(null);
+    setAutoFailure(null);
+    setAutoOutcome(null);
     const readFree = () => qc.fetchQuery({ queryKey: UNASSIGNED_KEY(scope), queryFn: () => api.unassignedPapers(UNASSIGNED_SHOWN + 1), staleTime: 0 });
     try {
       const before = heldNow(await readAssignments().catch(() => assignmentsQ.data ?? []));
@@ -409,24 +527,52 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       let perPerson: { name: string; count: number }[] | null = null;
       let left: number | null = null;
       let leftIsAtLeast = false;
+      let why: ReturnType<typeof explainLeftovers> | null = null;
       try {
         const [afterHeld, afterFree] = await Promise.all([readAssignments(), readFree()]);
-        perPerson = newlyHeld(before, heldNow(afterHeld));
+        const afterList = heldNow(afterHeld);
+        perPerson = newlyHeld(before, afterList);
         left = Math.min(afterFree.length, UNASSIGNED_SHOWN);
         leftIsAtLeast = afterFree.length > UNASSIGNED_SHOWN;
+        // Why papers or people got nothing, from the lists the screen holds (no extra call).
+        const was = new Set(before.map((b) => `${b.paper_id}|${b.user_id}`));
+        why = explainLeftovers({
+          leftPapers: afterFree.slice(0, UNASSIGNED_SHOWN).map((p) => ({ grade: classGrade(p.cls) })),
+          leftIsAtLeast,
+          people: verifiers,
+          profiles: profilesQ.data ?? null,
+          held: afterHeld.map((a) => ({ user_id: a.user_id, remaining: a.remaining })),
+          gotSome: afterList.filter((a) => !was.has(`${a.paper_id}|${a.user_id}`)).map((a) => a.user_id),
+        });
       } catch {
         // The hand-out itself worked; only the read-back failed, so say only what the server said.
       }
-      setOutcome(summariseAutoAssign({ gave, perPerson, left, leftIsAtLeast }));
+      setAutoOutcome(summariseAutoAssign({ gave, perPerson, left, leftIsAtLeast, why }));
       // When the read-back worked, both lists were just read, so they are not read again.
       refresh(perPerson ? ['assignments', 'unassigned'] : []);
     } catch (err) {
-      setRefusal(reasonWords(err, 'That did not work. Try again.'));
+      // Said right under the button that was pressed, and as a pop-up, not only in a banner.
+      const reason = reasonWords(err, 'That did not work. Try again.');
+      setAutoFailure(reason);
+      toast.error(reason, { duration: 10_000 });
       refresh();
     } finally {
       setGiving(false);
       setBusy(false);
     }
+  }
+
+  /** "Give papers to <name>" from Waiting for papers: that person is picked in the assign bar, and the list comes into view. */
+  function giveTo(userId: string, name: string) {
+    if (!verifiers.some((m) => m.user_id === userId)) {
+      setGivingTo(null);
+      toast.error(`${name} is not an active checker, so papers cannot be given to them here.`);
+      return;
+    }
+    setBulkTarget(userId);
+    setGivingTo(name);
+    if (stageFilter && stageFilter !== 'ready') clearStageFilter();
+    setTimeout(() => document.getElementById('papers-nobody-has')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }), 50);
   }
 
   /** Gives every ticked paper to one person with the existing one-paper call, four at a time. */
@@ -466,6 +612,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       title: `Take ${paperLabel(a)} back from ${a.checker_name ?? 'this checker'}?`,
       description: 'The paper goes back to the pool and can be given out again. Work already done on it stays.',
       confirmLabel: 'Unassign',
+      tone: 'danger',
     });
     if (!ok) return;
     await act(() => api.unassign(a.assignment_id), () => 'Paper taken back.');
@@ -477,6 +624,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       title: `Move ${paperLabel(a)} from ${a.checker_name ?? 'this checker'} to ${toName}?`,
       description: `${a.checker_name ?? 'They'} will no longer have this paper. Work already done on it stays.`,
       confirmLabel: 'Move it',
+      tone: 'brand',
     });
     if (!ok) return false;
     return act(() => api.assignPaper(a.paper_id, toId), () => done, { give: { paperId: a.paper_id, userId: toId }, name: toName });
@@ -507,14 +655,22 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       }),
   ];
 
-  /** Everything that is stuck, with the reason in plain words: papers nobody can be given yet, and papers a checker has left untouched. */
-  const attention: AttentionItem[] = [
-    ...(assignmentsQ.data ?? []).flatMap((a) => {
-      const reason = stuckReason(a, lookup, now) ?? waitingForHodReason(a, now);
-      return reason ? [{ key: `stuck-${a.assignment_id}`, stage: stageOfAssignment(), label: paperLabel(a), reason }] : [];
-    }),
-    ...(heldQ.data ?? []).map((p) => ({ key: `held-${p.paper_id}`, stage: stageOfHeldBack(), label: paperLabel(p), reason: heldBackWhy(p) })),
-  ];
+  /**
+   * Papers a checker holds and has left untouched, with the reason in plain words. Only those: papers waiting for an
+   * HOD are flagged on their own rows, and papers that are not ready have their own list at the bottom.
+   */
+  const stuckRows = (assignmentsQ.data ?? []).filter((a) => stuckReason(a, lookup, now) !== null);
+  const attention: AttentionItem[] = stuckRows.map((a) => ({
+    key: `stuck-${a.assignment_id}`,
+    stage: stageOfAssignment(),
+    label: `${paperLabel(a)}, with ${a.checker_name ?? 'a checker'}`,
+    reason: stuckReason(a, lookup, now) as string,
+  }));
+  /** "Open this paper" on a Needs attention item: open it under its person in Who has what. */
+  const openAttention = (key: string) => {
+    const a = stuckRows.find((x) => `stuck-${x.assignment_id}` === key);
+    if (a) setWhoRequest({ kind: 'paper', userId: a.user_id, assignmentId: a.assignment_id, n: Date.now() });
+  };
 
   /** Why a paper is flagged: nothing done for 7 days, or the checker finished and an HOD must decide. */
   const reasonsOf = (a: HodAssignment) => ({ stuck: stuckReason(a, lookup, now), waiting: waitingForHodReason(a, now) });
@@ -574,11 +730,25 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       {refusal ? (
         <div role="alert" className="flex items-start justify-between gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-destructive" data-testid="assign-refusal">
           <span>{refusal}</span>
-          <button type="button" onClick={() => setRefusal(null)} className="shrink-0 font-semibold underline">
+          <button type="button" onClick={() => setRefusal(null)} className={DISMISS}>
             Dismiss
           </button>
         </div>
       ) : null}
+
+      {/* First on the tab: how many papers wait to be handed out, and the one button that hands them out. */}
+      <HandOutCard
+        gate={freeGate}
+        count={unassignedQ.data?.length ?? 0}
+        capped={moreFree}
+        busy={busy}
+        giving={giving}
+        onAutoAssign={() => void autoAssignAll()}
+        failure={autoFailure}
+        onDismissFailure={() => setAutoFailure(null)}
+        outcome={autoOutcome}
+        onDismissOutcome={() => setAutoOutcome(null)}
+      />
 
       {stageFilter ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-muted px-4 py-3" role="status" data-testid="stage-filter-note">
@@ -591,11 +761,16 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
         </div>
       ) : (
         // The papers that are stuck, with the reason in plain words. Only on this screen: no extra number on the tab.
-        <AttentionGroup id="assign-attention" items={attention} />
+        <AttentionGroup id="assign-attention"
+          items={attention}
+          onOpen={openAttention}
+          onMore={() => setWhoRequest({ kind: 'stuck', n: Date.now() })}
+          moreLabel={`See all ${attention.length} stuck papers in Who has what`}
+        />
       )}
 
       {/* Checkers who finished everything and asked for more. Shown on every filter: it is about people, not papers. */}
-      <WaitingForPapers api={asksApi} scope={scope} />
+      <WaitingForPapers api={asksApi} scope={scope} onGive={giveTo} />
 
       <section aria-labelledby="who-has-what" hidden={!showSection('checking')}>
         <h2 id="who-has-what" className="mb-2 text-[16px] font-bold text-foreground">
@@ -618,6 +793,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
               reasonsOf={reasonsOf}
               renderActions={renderActions}
               renderMore={renderMore}
+              request={whoRequest}
             />
             {teamGate === 'error' ? (
               <LoadError what="The list of checkers" onRetry={() => void teamQ.refetch()} />
@@ -627,25 +803,24 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       </section>
 
       <section aria-labelledby="papers-nobody-has" hidden={!showSection('ready')}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 id="papers-nobody-has" className="text-[16px] font-bold text-foreground">
-            Papers nobody has
-          </h2>
-          <button
-            type="button"
-            disabled={busy}
-            aria-busy={giving || undefined}
-            className={actionToneClass('brand')}
-            onClick={() => void autoAssignAll()}
-          >
-            {giving ? 'Assigning papers...' : 'Auto assign all'}
-          </button>
-        </div>
+        <h2 id="papers-nobody-has" className="mb-2 scroll-mt-24 text-[16px] font-bold text-foreground">
+          Papers nobody has
+        </h2>
         <p className="mb-2 text-[13px] text-warm-secondary">
-          Papers go to checkers only when you press Auto assign all (or give one yourself), a whole paper to one checker and never above their grade. A checker with no grade recorded can get any
-          paper. A paper whose class is not known can go to any checker. A paper with nothing done on it for 7 days comes back
-          here by itself.
+          Papers go to checkers only when you press Auto assign all at the top (or give one yourself), a whole paper to one checker and never above their
+          grade. A checker with no grade recorded can get any paper. A paper whose class is not known can go to any checker. A paper with nothing done on
+          it for 7 days comes back here by itself.
         </p>
+        {givingTo ? (
+          <p role="status" className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] text-foreground" data-testid="giving-to">
+            <span>
+              Giving papers to <span className="font-semibold">{givingTo}</span>. Tick the papers, then press Assign in the bar at the bottom.
+            </span>
+            <button type="button" onClick={() => setGivingTo(null)} className={DISMISS}>
+              Dismiss
+            </button>
+          </p>
+        ) : null}
         <div ref={outcomeRef} className="mb-2 scroll-mb-24">
           <OutcomePanel outcome={outcome} onDismiss={() => setOutcome(null)} />
         </div>
@@ -731,7 +906,10 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
               count={progress ? progress.total : chosen.length}
               options={bulkOptions}
               value={bulkTarget}
-              onValue={setBulkTarget}
+              onValue={(v) => {
+                setBulkTarget(v);
+                setGivingTo(null);
+              }}
               onAssign={() => void bulkAssign(chosen.map((p) => ({ paperId: p.paper_id, label: paperLabel(p) })))}
               onClear={() => setSelected(new Set())}
               progress={progress}
@@ -752,7 +930,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
         </h2>
         <p className="mb-2 text-[13px] text-warm-secondary">
           These papers have questions waiting, but some pictures or printed pages are not stored yet. They cannot be given to a checker, by hand or
-          automatically, until every picture and every page is in. They move up to the list above by themselves.
+          by Auto assign all, until every picture and every page is in. They move up to the list above by themselves.
         </p>
         {heldQ.isError ? (
           <LoadError what="The list of papers that are not ready" onRetry={() => void heldQ.refetch()} />
@@ -783,6 +961,11 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
             ))}
           </ul>
         )}
+        {(heldQ.data ?? []).length >= UNASSIGNED_SHOWN ? (
+          <p className="mt-2 rounded-2xl bg-muted px-4 py-3 text-[13px] text-warm-secondary" data-testid="not-ready-more">
+            This list stops at the first {UNASSIGNED_SHOWN}. There may be more papers that are not ready; they show here as others move up.
+          </p>
+        ) : null}
       </section>
       {confirmDialog}
     </div>

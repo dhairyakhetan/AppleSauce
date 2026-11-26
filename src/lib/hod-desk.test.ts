@@ -113,12 +113,15 @@ describe('Assignments: moving a paper away from someone is confirmed', () => {
 
 describe('History', () => {
   it('keeps the rows on screen when a later page fails', () => {
-    expect(historyView({ isLoading: false, isError: true, rowCount: 100 })).toBe('rows');
+    expect(historyView({ hasData: true, isError: true, rowCount: 100 })).toBe('rows');
   });
   it('shows the error only when there is nothing to keep', () => {
-    expect(historyView({ isLoading: false, isError: true, rowCount: 0 })).toBe('error');
-    expect(historyView({ isLoading: false, isError: false, rowCount: 0 })).toBe('empty');
-    expect(historyView({ isLoading: true, isError: false, rowCount: 0 })).toBe('loading');
+    expect(historyView({ hasData: false, isError: true, rowCount: 0 })).toBe('error');
+    expect(historyView({ hasData: true, isError: false, rowCount: 0 })).toBe('empty');
+    expect(historyView({ hasData: false, isError: false, rowCount: 0 })).toBe('loading');
+  });
+  it('never says "nothing recorded" before an answer has arrived (offline, the read is paused, not empty)', () => {
+    expect(historyView({ hasData: false, isError: false, rowCount: 0 })).not.toBe('empty');
   });
   it('sends the role words the server uses', () => {
     expect(HISTORY_ROLES.map((r) => r.value)).toEqual(['', 'admin', 'hod', 'verifier']);

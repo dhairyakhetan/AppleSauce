@@ -82,11 +82,14 @@ export type HistoryView = 'loading' | 'error' | 'empty' | 'rows';
  * A failed "Load older" keeps the rows already on screen (TanStack Query v5 keeps
  * the data when a later page errors), so the error replaces the list only when
  * there is no list to keep.
+ *
+ * `hasData` is whether an answer has arrived at all (loadGate's rule), not `isLoading`: offline, TanStack Query pauses
+ * the read and `isLoading` is false, which once let "Nothing has been recorded" show while nothing had been read yet.
  */
-export function historyView(s: { isLoading: boolean; isError: boolean; rowCount: number }): HistoryView {
-  if (s.isLoading) return 'loading';
+export function historyView(s: { hasData: boolean; isError: boolean; rowCount: number }): HistoryView {
   if (s.rowCount > 0) return 'rows';
-  return s.isError ? 'error' : 'empty';
+  if (s.isError) return 'error';
+  return s.hasData ? 'empty' : 'loading';
 }
 
 /**

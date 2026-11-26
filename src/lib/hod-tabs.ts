@@ -6,6 +6,7 @@
 
 import type { HodDeskCounts } from '@/lib/hod-publish';
 import { requestsBadgeLabel } from '@/lib/fix-requests';
+import { UNASSIGNED_SHOWN } from '@/lib/hod-desk';
 
 export const TAB_KEYS = [
   'needs-you',
@@ -43,10 +44,13 @@ export function resolveTabKey(requested: string | null | undefined): TabKey {
 
 /**
  * The number on a tab's badge, or 0 for none. The requests waiting for the HOD come from their own call
- * (hod_request_counts), so they are passed in on their own.
+ * (hod_request_counts), so they are passed in on their own. So do the papers waiting to be handed out (the list of
+ * papers nobody has, the same read the strip of counts makes): since 26 Nov 2026 nothing is handed out by itself, so
+ * the Assignments tab says how many wait for an HOD to press Auto assign all.
  */
-export function tabBadge(key: string, counts: HodDeskCounts | null | undefined, requestsWaiting = 0): number {
+export function tabBadge(key: string, counts: HodDeskCounts | null | undefined, requestsWaiting = 0, freePapers = 0): number {
   if (key === 'requests') return requestsWaiting;
+  if (key === 'assignments') return freePapers;
   if (!counts) return 0;
   switch (key) {
     case 'needs-you':
@@ -61,9 +65,18 @@ export function tabBadge(key: string, counts: HodDeskCounts | null | undefined, 
   }
 }
 
+/** The badge as drawn: the list of papers nobody has is read 201 at a time, so more than 200 reads "200+". */
+export function tabBadgeText(key: string, n: number): string {
+  return key === 'assignments' && n > UNASSIGNED_SHOWN ? `${UNASSIGNED_SHOWN}+` : String(n);
+}
+
 /** What a badge means, in words, for the tab's tooltip and screen readers. */
-export function tabBadgeLabel(key: string, counts: HodDeskCounts | null | undefined, requestsWaiting = 0): string {
+export function tabBadgeLabel(key: string, counts: HodDeskCounts | null | undefined, requestsWaiting = 0, freePapers = 0): string {
   if (key === 'requests') return requestsBadgeLabel(requestsWaiting);
+  if (key === 'assignments') {
+    const n = tabBadgeText(key, freePapers);
+    return freePapers === 1 ? '1 paper waiting to be handed out' : `${n} papers waiting to be handed out`;
+  }
   if (!counts) return '';
   switch (key) {
     case 'needs-you': {

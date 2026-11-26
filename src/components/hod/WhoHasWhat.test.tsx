@@ -130,7 +130,8 @@ describe('Who has what: the wiring', () => {
   });
 
   it('long lists are paged and the phone layout has no sideways scroll', () => {
-    expect(src).toContain('windowRows(view, peopleShown)');
+    // A paper opened from Needs attention keeps its person inside the shown page (pinned), however long the list.
+    expect(src).toContain('windowRows(view, Math.max(peopleShown, pinnedAt + 1))');
     expect(src).toContain('windowRows(p.papers, page)');
     expect(src).toContain('min-w-0');
     expect(src).not.toMatch(/overflow-x-(auto|scroll)/);

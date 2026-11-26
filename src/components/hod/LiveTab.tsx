@@ -27,6 +27,7 @@ import {
   type OverrideMark,
 } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
+import { loadGate } from '@/lib/verifier-papers';
 
 /* "Live papers": every paper in the library, live or hidden. Counts are Live and
    Hidden only. Filter by status, subject and class, or search. Per paper: hide it
@@ -45,7 +46,7 @@ const STATUS_FILTERS: { key: LiveStatus; label: string }[] = [
   { key: 'hidden', label: 'Hidden' },
 ];
 
-function LiveRow({ p, api, onChanged, mark }: { p: HodLivePaper; api: HodApi; onChanged: () => void; mark?: OverrideMark }) {
+function LiveRow({ p, api, scope, onChanged, mark }: { p: HodLivePaper; api: HodApi; scope: string; onChanged: () => void; mark?: OverrideMark }) {
   const [mode, setMode] = useState<null | 'hide' | 'edit'>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -124,10 +125,11 @@ function LiveRow({ p, api, onChanged, mark }: { p: HodLivePaper; api: HodApi; on
         </p>
       ) : null}
       <RouteTrail stage="live" className="mt-3" />
+      {/* The same key as the other tabs (['hod', scope, 'timeline', id]), so Hide, Restore and Edit refresh it (hod-refresh.ts). */}
       {p.audit_paper_id ? (
         <PaperTimelineDisclosure
           className="mt-3"
-          queryKey={['hod', 'timeline', p.audit_paper_id]}
+          queryKey={['hod', scope, 'timeline', p.audit_paper_id]}
           load={() => api.paperTimeline(p.audit_paper_id as string)}
           fallback={EMPTY_MOMENTS}
           stage="live"
@@ -243,8 +245,9 @@ export function LiveTab({ api, scope }: { api: HodApi; scope: string }) {
     setShown(LIVE_PAGE);
   };
 
-  if (q.isLoading) return <ListSkeleton label="Loading live papers" />;
-  if (q.isError) return <LoadError what="The live papers" onRetry={() => void q.refetch()} />;
+  // loadGate, not isLoading: offline pauses a read (isLoading stays false) and "no papers in the library" must not show.
+  if (loadGate(q) === 'loading') return <ListSkeleton label="Loading live papers" />;
+  if (loadGate(q) === 'error') return <LoadError what="The live papers" onRetry={() => void q.refetch()} />;
   if (rows.length === 0) return <EmptyNote>There are no papers in the library yet.</EmptyNote>;
 
   const select = 'min-h-[44px] rounded-xl bg-muted px-3 text-[16px] sm:text-[14px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus';
@@ -328,7 +331,7 @@ export function LiveTab({ api, scope }: { api: HodApi; scope: string }) {
         <>
           <ul className="space-y-3">
             {filtered.slice(0, shown).map((p) => (
-              <LiveRow key={p.paper_id} p={p} api={api} onChanged={refresh} mark={p.audit_paper_id ? marks.get(p.audit_paper_id) : undefined} />
+              <LiveRow key={p.paper_id} p={p} api={api} scope={scope} onChanged={refresh} mark={p.audit_paper_id ? marks.get(p.audit_paper_id) : undefined} />
             ))}
           </ul>
           {filtered.length > shown ? (

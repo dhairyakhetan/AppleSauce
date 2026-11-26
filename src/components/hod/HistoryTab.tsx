@@ -52,7 +52,7 @@ export function HistoryTab({ api, scope }: { api: HodApi; scope: string }) {
   });
 
   const rowsAll = q.data?.pages.flat() ?? [];
-  const view = historyView({ isLoading: q.isLoading, isError: q.isError, rowCount: rowsAll.length });
+  const view = historyView({ hasData: q.data !== undefined, isError: q.isError, rowCount: rowsAll.length });
   const select = 'min-h-11 md:min-h-10 rounded-full bg-muted px-3 text-[16px] sm:text-[13px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus';
 
   return (
