@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
 import { ApproveQuestions } from '@/components/games/ApproveQuestions';
@@ -15,6 +15,15 @@ import { realGamesApi, type GamesApi } from '@/lib/games/api';
 import type { GamesRole, ListChapter, RoleCheck } from '@/lib/games/rows';
 import { PREVIEW_TOOLS } from '@/lib/preview-tools';
 import { cn } from '@/lib/utils';
+
+/** Where the sent-back questions the person removed from their list are kept (this browser only). */
+const DISMISSED = 'games.sentBack.dismissed';
+function readDismissed(): Set<string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(DISMISSED) ?? '[]');
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  } catch { return new Set(); }
+}
 
 /* /games: the games team's pages. People on the team write questions for the revision games, HoDs approve them, and
    everyone on the team can try the games made from the approved ones. Admins manage who is on the team.
@@ -149,7 +158,21 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   }, [api]);
   // and the list again: a send can add topics to a chapter whose topics are open
   const sent = useCallback(() => { recount(); setAlertsTry((n) => n + 1); setCatalogTry((n) => n + 1); }, [recount]);
-  const unseen = alerts.list?.filter((a) => !a.seen).length ?? 0;
+  /*
+   * Sent-back questions the person removed from their list (the cross on each one). Kept in this browser, as the
+   * database has no place for it: they stay gone on this device.
+   */
+  const [dismissed, setDismissed] = useState(readDismissed);
+  const dismiss = useCallback((ids: string[], gone = true) => {
+    setDismissed((d) => {
+      const next = new Set(d);
+      for (const id of ids) { if (gone) next.add(id); else next.delete(id); }
+      try { localStorage.setItem(DISMISSED, JSON.stringify([...next])); } catch { /* private window: kept until the page closes */ }
+      return next;
+    });
+  }, []);
+  const shown = useMemo<Alerts>(() => (alerts.list ? { ...alerts, list: alerts.list.filter((a) => !dismissed.has(a.id)) } : alerts), [alerts, dismissed]);
+  const unseen = shown.list?.filter((a) => !a.seen).length ?? 0;
 
   // a part stays mounted once opened
   const [opened, setOpened] = useState<Set<Part>>(new Set());
@@ -207,7 +230,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   }
 
   const parts: Record<Part, () => ReactNode> = {
-    write: () => <WriteQuestions api={api} canApprove={r !== 'member'} alerts={alerts} onSeen={seen} onRetryAlerts={() => setAlertsTry((n) => n + 1)} onSent={sent} catalog={catalog} onRetryCatalog={() => setCatalogTry((n) => n + 1)} />,
+    write: () => <WriteQuestions api={api} canApprove={r !== 'member'} alerts={shown} onSeen={seen} onDismiss={dismiss} onRetryAlerts={() => setAlertsTry((n) => n + 1)} onSent={sent} catalog={catalog} onRetryCatalog={() => setCatalogTry((n) => n + 1)} />,
     approve: () => <ApproveQuestions api={api} onWaiting={setWaiting} canDownload={r === 'admin'} />,
     play: () => <TryGames api={api} />,
     team: () => <Team api={api} me={email} />,
@@ -228,7 +251,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
                 {x.label}
                 {count > 0 && (
                   <>
-                    <span className="inline-flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-brand px-[5px] text-[11px] font-bold tabular-nums text-foreground" aria-hidden="true">{count}</span>
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold tabular-nums text-foreground" aria-hidden="true">{count}</span>
                     <span className="sr-only">{x.key === 'approve' ? `${count} waiting` : `${count} sent back to you`}</span>
                   </>
                 )}

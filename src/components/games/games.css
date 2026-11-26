@@ -3,7 +3,8 @@
 
 /* ---------------------------------------------------------------- the Questions box
    A textarea can't style parts of its text, so a copy of the text sits behind it with the same font, padding and
-   width: the copy is invisible except for the underlines on lines with a problem. The two scroll together. */
+   width. The textarea's own text is see-through (its caret isn't), so what shows is the copy: each kind of line in its
+   own colour, and the underlines on lines with a problem. The two scroll together. */
 .games-editor { position: relative; }
 .games-editor textarea,
 .games-editor .games-backdrop-in {
@@ -24,12 +25,14 @@
   border: 1px solid hsl(var(--border));
   border-radius: 16px;
   background: transparent;
-  color: hsl(var(--foreground));
+  color: transparent;
+  caret-color: hsl(var(--foreground));
   resize: vertical;
   outline: none;
 }
 .games-editor textarea:focus-visible { box-shadow: 0 0 0 2px hsl(var(--brand)); }
 .games-editor textarea::placeholder { color: var(--text-quaternary); }
+.games-editor textarea::selection { background: hsl(var(--brand-blue) / 0.22); color: transparent; }
 .games-backdrop {
   position: absolute;
   inset: 0;
@@ -39,7 +42,17 @@
   background: hsl(var(--card));
   pointer-events: none;
 }
-.games-backdrop-in { color: transparent; }
+.games-backdrop-in { color: var(--text-quaternary); }
+/* one colour per kind of line; its label a little lighter */
+.gl-detail { color: var(--text-secondary); }
+.gl-topic { color: hsl(262 48% 40%); }
+.gl-q { color: hsl(var(--foreground)); }
+.gl-a { color: var(--success-subtle-text); }
+.gl-also { color: hsl(168 55% 27%); }
+.gl-fill { color: hsl(var(--brand-blue-deep)); }
+.gl-wrong { color: hsl(var(--brand-deep)); }
+.gl-level { color: var(--text-tertiary); }
+.gl-label { opacity: 0.72; }
 .games-mark {
   border-radius: 3px;
   text-decoration-line: underline;

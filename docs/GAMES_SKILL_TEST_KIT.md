@@ -5,14 +5,14 @@ questions the Write questions page accepts.
 
 ## How to run it
 
-For each chatbot (ChatGPT, Gemini, Claude) and each of the 3 tests below, so 9 runs in all:
+For each chatbot (ChatGPT, Gemini, Claude) and each of the 4 tests below, so 12 runs in all:
 
 1. Open a **new chat** (no earlier messages; turn off memory or custom instructions if you can).
 2. Paste the **whole text of `public/games/instructions.md`**, then a blank line, then the test's request exactly as
    written below, in the same message.
 3. Copy the chatbot's **whole reply** (the chat around the code block is fine).
 4. Paste it into Write questions (`/games?dummy=1` works) and note the problems the page shows, or send all
-   9 replies to Claude to score against the checker.
+   12 replies to Claude to score against the checker.
 
 Test 2 is long (up to 80 questions): if the chatbot stops partway, reply "continue" as many times as it asks, and
 paste all its parts together. Note whether it said clearly what was left.
@@ -24,7 +24,11 @@ paste all its parts together. Note whether it said clearly what was left.
 - The chapter and Topic lines are exactly as given.
 - Test 2: 2 to 6 topics, at most 80 questions, a note that they came from general knowledge, and if the reply was
   split, nothing repeated or missing.
+- Tests 1 and 2: right after the code block, a line starting "Source:" (test 1: the teacher's notes; test 2:
+  general knowledge of the textbook, with a request to check the facts).
 - Test 3: all four questions kept, the chapter and Topic lines unchanged.
+- Test 4: **no questions at all**: one message that names the off-chapter notes (the electric circuit facts) and the
+  wrong facts (body temperature, sea breeze) and asks whether to use them, leave them out or correct them.
 
 ## Test 1: from the teacher's notes, fixed topics
 
@@ -82,19 +86,35 @@ Wrong: Oxygen; Chlorine; Nitrogen
 Level: easy
 ```
 
+## Test 4: notes that don't fit the chapter
+
+```
+Board: CBSE
+Class: 7
+Subject: Science
+Chapter 4: Heat
+Topics (fixed: use only these, written exactly like this):
+Topic 1: Hot and Cold
+Topic 2: Transfer of Heat
+
+10 questions from my notes: A thermometer measures temperature. Normal body temperature is 40 degrees Celsius. Heat flows from a hotter object to a colder one. In solids heat moves by conduction. Sea breeze blows from land to sea during the day. A switch completes or breaks an electric circuit. A fuse melts when too much current flows.
+```
+
 ## Results
 
 | Date | Rules version | Chatbot | Test 1 | Test 2 | Test 3 | Notes |
 |---|---|---|---|---|---|---|
 | 2026-11-20 | 1.1 | Claude Haiku (fresh) | 15 questions, 1 problem (a Fill line with no ___) | 25 in 6 topics, 0 problems, far too few | 4 kept, 0 problems | Too few in test 2: wording fixed in 1.2 |
 | 2026-11-20 | 1.1 | Claude Sonnet (fresh) | 15 questions, 0 problems | not run (stopped) | 4 kept, 0 problems | |
+| 2026-11-25 | 1.14 | Claude Haiku and Sonnet (fresh) | notes that fit: 8 questions, 0 problems, "Source: your notes." | no notes (8 asked): 8 questions, "Source: general knowledge…" | | Test 4 and its parts: notes from another chapter, notes partly about circuits, two wrong facts: all three asked first and wrote nothing |
 | | 1.2 | ChatGPT | | | | |
 | | 1.2 | Gemini | | | | |
 
 ## Versions of the rules
 
-The page's top line carries the date it was last updated and its version number; replies start with that date. What changed in each version:
+The page's top line carries the date it was last updated and its version number. What changed in each version:
 
+- 1.14 (25 November 2026): the teacher's material comes first; before writing, the chatbot checks it against the chapter and, if any part belongs to another chapter or disagrees with the textbook, asks the teacher and writes nothing until they answer. Every reply names its source on a "Source:" line after the code block.
 - 1.13 (21 November 2026): step 3 no longer claims the page rejects every break; some rules only the chatbot's own check catches.
 - 1.12 (21 November 2026): step 3 says plainly that the game ignores capitals, spaces, hyphens, punctuation, brackets and "the", so an Also line differing only in those is never needed ("Air-tight containers").
 - 1.11 (21 November 2026): the reply's first line names the guide, how many questions and the chapter, instead of the date.

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 
-import { createFakeGamesApi, DUMMY_LIST, DUMMY_TEXTS } from '@/dummy/games-fake-api';
+import { createFakeGamesApi, DUMMY_LIST, DUMMY_MADE_UP, DUMMY_TEXTS } from '@/dummy/games-fake-api';
+import SAMPLE_JSON from '@/dummy/games-sample-chapters.json?raw';
+import { sameName } from '@/lib/games/catalog';
 import { checkList } from '@/lib/games/catalog';
 import { GAME_TYPES, makeGame } from '@/lib/games/engine';
 import { format } from '@/lib/games/format';
@@ -25,7 +27,7 @@ describe('the made-up questions', () => {
   it.each(Object.entries(DUMMY_TEXTS))('%s passes the checker and the list, and makes every game', (_name, text) => {
     const { rows: rs, issues } = format(text);
     expect(issues).toEqual([]);
-    expect(checkList(text, rs, DUMMY_LIST).issues).toEqual([]);
+    expect(checkList(text, rs, DUMMY_MADE_UP).issues).toEqual([]);
     if (text.includes('Level: hard')) {
       const items = rs.map((r, i) => ({ id: String(i), question: r.question, answer: r.answer, also: r.also, fill: r.fill, wrong: r.wrong_options }));
       if (rs.length >= 8) for (const t of GAME_TYPES) expect(makeGame(t, items, 1), t).not.toBeNull();
@@ -35,7 +37,7 @@ describe('the made-up questions', () => {
 
 describe('the dummy games database', () => {
   it('numbers new questions after the ones already in the topic, and skips repeats', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     // already approved (case, spaces and a full stop at the end don't count), and the same question twice in one send
     const r = await api.sendBatch([
       ...rows(`${HEAT}${q('Material that lets heat pass through it easily.', 'Conductor')}${q('Liquid that rises in a thermometer', 'Mercury')}`),
@@ -48,7 +50,7 @@ describe('the dummy games database', () => {
   });
 
   it("doesn't take back a sent-back question unchanged (other answers, fill-in and options included), and points to why", async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const back = (await api.mySentBack()).find((x) => x.topic_no === 2)!;
     const again = `${HEAT}${q(back.question, back.answer, `Fill: ${back.fill}\nWrong: ${back.wrong_options.join('; ')}`)}`;
     expect(await api.sendBatch(rows(again))).toMatchObject({ sent: 0, sentBack: 1, sentBackIds: [back.id], batchIds: [] });
@@ -58,14 +60,14 @@ describe('the dummy games database', () => {
   });
 
   it('keeps the other answers and the fill-in sentence', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     await api.sendBatch(rows(`${HEAT}${q('Process by which heat moves through a solid', 'Conduction', 'Also: Thermal conduction\nFill: Heat moves through a solid by ___.\n')}`));
     const sent = (await api.loadForHod()).questions.find((x) => x.question === 'Process by which heat moves through a solid')!;
     expect(sent).toMatchObject({ also: ['Thermal conduction'], fill: 'Heat moves through a solid by ___.' });
   });
 
   it('refuses the whole send when a question is off the list of chapters and topics', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const before = (await api.loadForHod()).questions.length;
     const off = rows(`Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Heat\nTopic 9: Weather${q('Wind from the sea by day', 'Sea breeze')}`);
     await expect(api.sendBatch([...rows(`${HEAT}${q('Heat flowing through a solid', 'Conduction')}`), ...off])).rejects.toThrow(/topic 9/i);
@@ -74,7 +76,7 @@ describe('the dummy games database', () => {
   });
 
   it('lets a chapter the list gives no topics take topics of its own, as the database does', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const NUTRITION = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 2: Nutrition in Animals\n';
     const r = await api.sendBatch(rows(`${NUTRITION}Topic 1: Digestion in Humans${q('Organ where digestion ends', 'Small intestine')}\nTopic 2: Feeding in Amoeba${q('Finger-like parts Amoeba feeds with', 'Pseudopodia')}`));
     expect(r.sent).toBe(2);
@@ -87,7 +89,7 @@ describe('the dummy games database', () => {
   });
 
   it("saves a subject's chapters all at once by the database's rules: renames reach questions, numbers and deletes wait for none", async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const SCI7 = { board: 'CBSE', class: 7, subject: 'Science' };
     const open = async () => {
       const loaded = chaptersOf((await api.loadList()).chapters, SCI7);
@@ -129,7 +131,7 @@ describe('the dummy games database', () => {
   });
 
   it('saves several subjects at once (Bulk add), or none of them, as the database does', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const list = (await api.loadList()).chapters;
     const bulk = readBulk('Board: CBSE\nClass: 7\nSubject: Science\n6. Motion and Time\n- Speed\n\nBoard: ICSE\nClass: 9\nSubject: Physics\nForce', list);
     expect(bulk.problems).toEqual([]);
@@ -141,7 +143,7 @@ describe('the dummy games database', () => {
   });
 
   it("shows up to 20 of a topic's questions, in order, with how many it has", async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const r = await api.topicQuestions('CBSE07SCI04', 2);
     expect(r.total).toBeGreaterThan(0);
     expect(r.questions.map((x) => x.question_id)).toEqual([...r.questions.map((x) => x.question_id)].sort());
@@ -150,7 +152,7 @@ describe('the dummy games database', () => {
   });
 
   it('keeps the list for admins only', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const loaded = chaptersOf((await api.loadList()).chapters, { board: 'CBSE', class: 7, subject: 'Science' });
     api.setRole('hod');
     await expect(api.loadList()).rejects.toThrow(/Only an admin/);
@@ -159,7 +161,7 @@ describe('the dummy games database', () => {
   });
 
   it('lets only HoDs and admins approve, and only admins manage the team', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     api.setRole('member');
     await expect(api.loadForHod()).rejects.toThrow(/HoD/);
     await expect(api.loadPeople()).rejects.toThrow(/admin/);
@@ -172,7 +174,7 @@ describe('the dummy games database', () => {
   });
 
   it('approves, sends back with a reason, and keeps a sent-back question back while its copy waits', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     const bank = await api.loadForHod();
     const pending = bank.questions.filter((x) => x.status === 'pending');
     const before = await api.approvedCount();
@@ -190,10 +192,38 @@ describe('the dummy games database', () => {
   });
 
   it('keeps the moderator an admin and stops admins removing themselves', async () => {
-    const api = createFakeGamesApi(false);
+    const api = createFakeGamesApi(false, false);
     await expect(api.setPersonRole('asha.rao@example.com', 'member')).rejects.toThrow(/moderator/);
     await expect(api.removePerson('you@example.com')).rejects.toThrow(/yourself/);
     await api.setPersonRole('New.Person@Example.com ', 'hod');
     expect((await api.loadPeople()).find((p) => p.email === 'new.person@example.com')?.role).toBe('hod');
+  });
+
+  it('starts dummy mode with exactly the sample list, with no number or name twice in a subject', async () => {
+    const list = await createFakeGamesApi(false).loadCatalog();
+    const sample = (JSON.parse(SAMPLE_JSON) as { groups: { board: string; class: number; subject: string; chapters: [number, string][] }[] }).groups;
+    // the same chapters as the sample, under the same numbers and names: nothing added, nothing left out
+    const keys = (xs: string[]) => [...xs].sort();
+    expect(keys(list.map((c) => `${c.board}|${c.class}|${c.subject}|${c.chapter_no}|${c.name}`)))
+      .toEqual(keys(sample.flatMap((g) => g.chapters.map(([n, name]) => `${g.board}|${g.class}|${g.subject}|${n}|${name}`))));
+    expect(list.length).toBeGreaterThan(1200);
+    expect(new Set(list.map((c) => c.chapter_id)).size).toBe(list.length);
+    const bySubject = new Map<string, string[]>();
+    for (const c of list) bySubject.set(`${c.board}|${c.class}|${c.subject}`, [...(bySubject.get(`${c.board}|${c.class}|${c.subject}`) ?? []), c.name]);
+    for (const names of bySubject.values()) expect(names.filter((n, i) => names.findIndex((m) => sameName(m, n)) !== i)).toEqual([]);
+    // the made-up Heat sits on the sample's Heat Transfer in Nature, with its topics
+    const heat = list.find((c) => c.chapter_id === 'CBSE07SCI07')!;
+    expect(heat.name).toBe('Heat Transfer in Nature');
+    expect(heat.topics.map((x) => x.name)).toEqual(['Hot and Cold', 'Transfer of Heat', 'Sea and Land Breezes']);
+    expect(list.some((c) => c.board === 'CBSE' && c.class === 11 && c.subject === 'Web Applications')).toBe(true);
+  });
+
+  it('puts the made-up questions on the sample list in dummy mode, each under its chapter', async () => {
+    const api = createFakeGamesApi(false);
+    const list = await api.loadCatalog();
+    const qs = (await api.loadForHod()).questions;
+    expect(qs.length).toBeGreaterThan(0);
+    for (const q of qs) expect(list.find((c) => c.chapter_id === q.chapter_id)?.name).toBe(q.chapter);
+    expect(qs.some((q) => q.chapter === 'Heat Transfer in Nature')).toBe(true);
   });
 });

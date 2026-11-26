@@ -53,6 +53,11 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   Bulk add, at the bottom (`components/games/BulkAdd.tsx`, `readBulk`), takes
   Board, Class and Subject lines with chapters under them, for any number of
   subjects, and saves them all in one call (a list of saves, all or none).
+  Its red button switches it to Bulk remove (`readBulkRemove`): the same lines, then the chapters to delete by number,
+  name or both, or a subject with no chapters under it to delete all of them; chapters with questions are kept (the
+  database's rule), anything not on the list is a problem on its line, and the red bar asks twice. In both modes a
+  Board line starts afresh and a Class line forgets the subject, so nothing goes to a subject left over from the
+  block above.
   Until it is installed on the live database, every call in
   `lib/games/api.ts` (`realGamesApi`) fails and the pages say so. The site calls functions only; no role can read the tables.
   `lib/games/database.test.ts` runs the script on PGlite.
@@ -68,11 +73,18 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   the chapter is open, and the first question sent under a new topic adds it
   (one number and one name per topic). `lib/games/catalog.ts` checks the
   Questions box against it as people write (the database refuses the rest
-  anyway); the Chapter box becomes a picker and the topics become buttons
-  once board, class and subject match the list.
+  anyway); Board, Class, Subject and Chapter are dropdowns of what is on
+  the list (typing boxes only if the list can't load), each waiting for the one before (greyed out, "Select Board first" on hover),
+  the Chapter dropdown showing how many approved questions each chapter has; the topics become buttons.
 - **Dummy mode:** `?dummy=1` on any `/games` page, or the preview toggle's
   "Games team" buttons, runs the real pages against
-  `dummy/games-fake-api.ts`, which keeps the database's rules (list included).
+  `dummy/games-fake-api.ts`, which keeps the database's rules (list included). Its list of chapters is exactly
+  `dummy/games-sample-chapters.json` (the games list as of 25 November 2026, about 1,300 chapters, CBSE's Classes 9 to 12
+  electives and skill subjects less the rarest removed on 25 November 2026), so the Board dropdown's counts are the real
+  list's. The made-up questions and their topics sit on real chapters of it (`HOMES` in `games-fake-api.ts`: for example
+  the made-up Heat is the list's Heat Transfer in Nature), and their header lines are rewritten to match (`MOVED`).
+  The tests start with the made-up chapters only (`createFakeGamesApi(false, false)`).
+  Dummy mode is in its own chunk loaded only in the test build, so none of this reaches the live site.
   Its banner switches between admin, HoD, member, not on the team, and signed
   in with a password.
 - **Files:** `lib/games/` (rows and exports, `format.ts` the formatter,
@@ -100,6 +112,29 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   (`engine/index.ts` `usableIn`). Marking (`engine/answers.ts`) is strict on
   purpose: no synonym, unit, title or number-word lists. The user asked for the
   work to fall on the writer, not on sorting answers.
+- **The autocorrect** (`lib/games/tidy.ts`, run by the Questions box a second after typing stops and when the box is
+  left): only sure fixes, never the words of a question, answer, Fill or option. Board, Class and Subject the site's
+  way ("cbsu", "cBsE" → CBSE), Chapter and Topic lines in the list's wording when the number or name makes it clear,
+  label capitals ("q1:" → "Q:"), levels in lower case, commas to ";" in a Wrong line, a blank line before each Q:, and
+  the four chapter lines put back at the top if deleted, once the writer has moved below them. The caret's own line
+  only gets changes that keep its length; the rest waits until the writer moves on. It goes in as an edit of the box,
+  so Ctrl+Z still works.
+- **Colours in the Questions box:** each kind of line has its own colour (chapter lines grey, Topic purple, Q dark,
+  A green, Also teal, Fill blue, Wrong orange-brown, Level light grey; labels a little lighter). The textarea's text is
+  see-through and the copy behind it (`games-backdrop`, `kindOf` in `WriteQuestions.tsx`) is what shows, so the copy
+  must keep exactly the textarea's font, padding and width: no bold, no other font size.
+- **Write questions, small behaviours:** Clear (and "Start a new batch") removes the questions but keeps the chapter
+  lines; Try an example asks first when the box has questions of your own (Undo works either way); both keep the
+  pressed button where it was on screen (`steady`), so the page never jumps. Topic buttons show a tick and how many
+  questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs.
+- **Write questions, the layout pass (unslop):** a cross on each sent-back question removes it from the list for good
+  on that device (kept in `localStorage` under `games.sentBack.dismissed` by `pages/Games.tsx`, which leaves them out
+  of the list and the tab's count; the database has no place for it). The problem list has one entry per line, the
+  line number coloured red or amber and the text dark; clicking it centres the whole question in the box (measured on
+  the copy behind the box, as lines wrap). Under each result only the games it is left out of ("Not in: Word search").
+  Step 3 has the same card colour as the others, with a Full screen button by its heading; the small preview's
+  crossword uses at most 8 answers. Send for approval stays in view (sticky) beside the preview. The phone's "problems
+  to fix" button shows only while the results are still below.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.

@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Last updated 21 November 2026 (version 1.13). Lives at https://www.shikshaq.in/games/instructions.md
+Last updated 25 November 2026 (version 1.14). Lives at https://www.shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -42,9 +42,11 @@ Write each topic as "Topic 1: Name", "Topic 2: Name", and so on.
 
 The material is the teacher's notes, passage or rough questions. Facts come from three places, in this order:
 
-1. **The teacher's material**: when it is given, it is the only source.
-2. **With no material, standard content of that board's and class's textbook**: central ideas, standard definitions and commonly taught examples. Never invent textbook wording, examples, dates or numbers, and leave out anything that depends on one edition or syllabus. With exact numbers, dates and lesser-known names, leave one out rather than guess, and name any you kept but aren't sure of. Say after the block that the questions come from general knowledge of the textbook, not from the teacher's own book, and never imply you checked them against a particular edition.
+1. **The teacher's material**: when it is given, it comes first and is the only source. Never swap a fact in it for what you know, and never add facts it doesn't have.
+2. **With no material, standard content of that board's and class's textbook**: central ideas, standard definitions and commonly taught examples. Never invent textbook wording, examples, dates or numbers, and leave out anything that depends on one edition or syllabus. With exact numbers, dates and lesser-known names, leave one out rather than guess, and name any you kept but aren't sure of. Never imply you checked them against a particular edition.
 3. **Anything else**: leave it out.
+
+**Check the material against the chapter before you write a single question.** Read all of it and compare it with what this chapter teaches in that board's and class's textbook. If any part of it belongs to a different chapter, subject or class, or states a fact that disagrees with the textbook, stop: write no questions yet. Reply with one short message that lists each such part (quote its first few words) and says why it doesn't fit, ask the teacher whether to use it as written, leave it out, or replace it with the right fact, and wait. If most of the material belongs to another chapter, ask instead whether the chapter lines or the material are the wrong ones. Ask about anything missing (above) in the same message. Never quietly correct the material, drop it, or write questions on it anyway. If all of it fits, don't ask: go straight on.
 
 The Fill sentence, the wrong options and any Also lines are yours to write even when the material gives only the fact.
 
@@ -111,14 +113,20 @@ Go through the questions one by one and check each of these in order. Fix anythi
 6. **Also lines**: each one a different right answer, not the answer again with only capitals, spaces, hyphens, punctuation, brackets or "the" changed.
 7. **Wrong options**: 3 to 5, separated by `;`, the same kind as the answer, and none of them right, partly right, or arguably right under the question's exact wording.
 8. **Repeats**: no two questions test the same fact, even in different words, and no two questions in a topic have the same answer (capitals, spaces and "the" don't make answers different).
-9. **Worth asking**: the fact is central and certain, the level fits the thinking it needs, and a True/False tests a real misconception.
+9. **Worth asking**: the fact is central and certain, comes from the source you will name (step 5), the level fits the thinking it needs, and a True/False tests a real misconception.
 10. **Format**: labels, True/False and levels in English; no numbering, bullets, bold or quotation marks around lines.
 
 ## 5. Reply
 
 Start with one line that names this guide and says what follows: "Written with Shikshaq's question guide: [how many] questions for Chapter [number]: [the chapter's name]." For example: "Written with Shikshaq's question guide: 20 questions for Chapter 4: Heat." For a fix, say "fixed questions" instead. It shows the teacher you read this guide; the page ignores it.
 
-Then put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. After the block, at most three short sentences in the teacher's language, only those that apply: which answers you supplied because the material lacked them; that you wrote from general knowledge and the teacher should check; that there are fewer questions than asked because the topic or material has no more good ones; facts you left out because they fit none of the fixed topics. If asked for changes, write the whole block again.
+Then put everything in **one code block**: the chapter lines, then each Topic line with its questions. Nothing else inside the block, so the teacher can copy it in one click. Right after the block, always one line that names where the facts came from, in one of these shapes:
+
+- "Source: your notes." (or "your passage", "your questions": whatever the teacher gave)
+- "Source: general knowledge of the [board] Class [class] [subject] textbook, not your own book, so please check the facts before sending them."
+- If the teacher asked for both, say which topics came from which: "Source: your notes for Topics 1 and 2; general knowledge of the textbook for Topic 3, so please check those."
+
+Then at most three short sentences in the teacher's language, only those that apply: which answers you supplied because the material lacked them; that there are fewer questions than asked because the topic or material has no more good ones; facts you left out because they fit none of the fixed topics. If asked for changes, write the whole block again.
 
 **If it won't fit in one reply** (a long chapter, or a reply limit): stop at the end of a whole topic, never in the middle of one. After the block, say exactly what is done and what is left, for example "Topics 1 to 3 are done. Reply 'continue' for topics 4 to 6." Start the next reply with the chapter lines again, then carry on from the next topic, without repeating or skipping any question. Keep a running count and state it each time ("Questions 1 to 40 of 78"). Never say the set is complete when it isn't, and never summarise questions you haven't written.
 
@@ -431,6 +439,6 @@ A: False
 Level: medium
 ```
 
-I wrote these from general knowledge of the textbook, not from your own book, so please check them before using them.
+Source: general knowledge of the CBSE Class 10 Science textbook, not your own book, so please check the facts before sending them.
 
 ## End of instructions

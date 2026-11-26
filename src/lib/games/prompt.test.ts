@@ -116,7 +116,8 @@ describe('the prompt to fix problems', () => {
 describe('the guide for people', () => {
   it('has an example that the checker reads with no problems and nothing missing', () => {
     const guide = read('src/components/games/Guide.tsx');
-    const sample = guide.match(/data-testid="guide-sample"[^>]*>\{`([\s\S]*?)`\}<\/pre>/)![1];
+    const sample = guide.match(/const SAMPLE = `([\s\S]*?)`;/)![1];
+    expect(guide).toMatch(/data-testid="guide-sample"[^>]*><Coloured text=\{SAMPLE\} \/><\/pre>/);
     const { rows, issues } = format(sample);
     expect(issues).toEqual([]);
     expect(rows.length).toBeGreaterThan(2);

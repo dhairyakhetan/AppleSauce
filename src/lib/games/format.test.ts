@@ -190,6 +190,7 @@ describe('"Try an example"', () => {
     const { rows, issues } = format(EXAMPLE);
     expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
     expect(issues.map((x) => [x.level, x.text.slice(0, 20)])).toEqual([['warn', NO_FILL.slice(0, 20)], ['error', 'The question must ma'], ['warn', NO_FILL.slice(0, 20)]]);
+    expect(rows.length).toBeGreaterThanOrEqual(15);
     for (const line of EXAMPLE.split('\n').filter(Boolean)) {
       expect(line).toMatch(/^(Board|Class|Subject): \S|^(Chapter|Topic) \d+: \S|^(Q|A|Also|Fill|Wrong|Level): \S/);
     }
@@ -275,7 +276,7 @@ describe('output for the database', () => {
   const { rows } = format(EXAMPLE);
 
   it('has one flat record per question, with null for missing values', () => {
-    expect(toRecord(rows[2])).toEqual({
+    expect(toRecord(rows.find((r) => r.answer === 'Decomposition reaction')!)).toEqual({
       chapter_id: 'CBSE10SCI01', topic_id: 'CBSE10SCI01T02', board: 'CBSE', class: 10, subject: 'Science', chapter_no: 1,
       chapter: 'Chemical Reactions and Equations', topic_no: 2, topic: 'Types of Chemical Reactions', question_no: 1,
       question: 'Reaction in which a single reactant breaks down into simpler products', answer: 'Decomposition reaction', also: ['Decomposition'],
@@ -521,7 +522,7 @@ describe('the question bank (behind the HoD desk)', () => {
     const [a, b, c] = bank.questions.map((q) => q.id);
     let next = setStatus(bank, [a, b], 'approved', 'ignored', at);
     next = setStatus(next, [c], 'rejected', '  Answer should be Rusting  ', at);
-    expect(counts(next)).toEqual({ pending: 3, approved: 2, rejected: 1 });
+    expect(counts(next)).toEqual({ pending: bank.questions.length - 3, approved: 2, rejected: 1 });
     expect(next.questions.find((q) => q.id === a)).toMatchObject({ status: 'approved', note: '', reviewedAt: at });
     expect(next.questions.find((q) => q.id === c)).toMatchObject({ status: 'rejected', note: 'Answer should be Rusting' });
     const back = setStatus(next, [c], 'pending', '', at);

@@ -4,6 +4,7 @@ import { CROSSWORD } from '@/lib/games/engine/crossword';
 import { MATCHING } from '@/lib/games/engine/matching';
 import { loose } from '@/lib/games/engine/shared';
 import { WORDSEARCH } from '@/lib/games/engine/wordsearch';
+import { readMeta } from '@/lib/games/details';
 import { cn } from '@/lib/utils';
 
 /* Plain helpers the games pages share (no components here): button looks, dates, saving and copying, "Undo", and the
@@ -93,4 +94,16 @@ export function whyNot(type: GameType, items: Item[], made: boolean): string | n
   }
   if (type === 'fill') return 'Needs a question with a Fill: line (a sentence with ___ where the answer goes).';
   return 'Needs a question with a Wrong: line (wrong options), or a True/False question.';
+}
+
+/** The kinds of line in the Questions box, each with its own colour (`gl-*` in games.css). */
+export type LineKind = 'detail' | 'topic' | 'q' | 'a' | 'also' | 'fill' | 'wrong' | 'level';
+
+/** What kind of line it is, for its colour (null: a chatbot's sentence or anything else). */
+export function lineKind(line: string): LineKind | null {
+  const m = line.match(/^\s*(q|a|also|fill|wrong|level)\s*\d*\s*:/i);
+  if (m) return m[1].toLowerCase() as LineKind;
+  const meta = readMeta(line);
+  if (!meta) return null;
+  return meta.key === 'topic' ? 'topic' : meta.key === 'difficulty' ? 'level' : 'detail';
 }
