@@ -10,6 +10,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 import { verifierQuestionDiagrams, type QuestionDiagram } from '@/lib/checker-api';
 import { DIAGRAM_CHECK_LINE, diagramHeading, diagramItems, diagramPaths, diagramsKey, withoutShownFigureFlag } from '@/lib/checker-diagrams';
 import { QuestionDiagrams } from '@/components/checker/QuestionDiagrams';
+import { PartCard } from '@/components/checker/PartCard';
 import { createFakeCheckerApi } from '@/dummy/checker-fake-api';
 import { DUMMY_DIAGRAM_PATH, dummyQuestions } from '@/dummy/checker-fixtures';
 
@@ -166,19 +167,22 @@ describe('the verify screen draws it in both layouts', () => {
     expect(screen).toContain('const diagramShown = diagramItems(diagramList, diagramUrls);');
   });
 
-  it('draws the block with the question itself (the left side), once for a part of a bigger question and once for a plain one', () => {
-    // one block is built, and the question side uses it in both of its shapes
+  it('draws the block inside the part card, with the words, never at the top of the question side (owner, 26 Nov 2026)', () => {
+    // one block is built, and it goes into the part card the checker is reading
     expect([...screen.matchAll(/<QuestionDiagrams items=\{diagramShown\}/g)]).toHaveLength(1);
-    const uses = [...screen.matchAll(/\{diagramBlock\}/g)].map((m) => m.index as number);
-    expect(uses).toHaveLength(2);
+    expect(screen).toContain('diagram={hasDiagram ? diagramBlock : null}');
+    const partCard = screen.indexOf('const partCard');
+    expect(screen.indexOf('const diagramBlock')).toBeLessThan(partCard);
+    // with no card (no words) it still sits where the words would be, inside the checked part
+    const checkedPart = screen.indexOf('const checkedPart');
+    const fallback = screen.indexOf('{partCard ?? (hasDiagram ? <div className="mb-3">{diagramBlock}</div> : null)}');
+    expect(fallback).toBeGreaterThan(checkedPart);
+    // the left side no longer places it on its own (it used to sit above the whole question)
     const leftContent = screen.indexOf('const leftContent');
     const printedPane = screen.indexOf('const printedPane');
-    expect(screen.indexOf('const diagramBlock')).toBeLessThan(leftContent);
-    // both uses sit inside the question side and before the printed-page side
-    for (const u of uses) {
-      expect(u).toBeGreaterThan(leftContent);
-      expect(u).toBeLessThan(printedPane);
-    }
+    expect(screen.slice(leftContent, printedPane)).not.toContain('{diagramBlock}');
+    expect(screen.indexOf('{diagramBlock}', checkedPart)).toBe(fallback + '{partCard ?? (hasDiagram ? <div className="mb-3">'.length);
+    expect([...screen.matchAll(/\{diagramBlock\}/g)]).toHaveLength(1);
   });
 
   it('keeps the diagram off the page picture side, so it is never shown twice', () => {
@@ -190,6 +194,53 @@ describe('the verify screen draws it in both layouts', () => {
 
   it('opens a tapped diagram in the same viewer as the crop', () => {
     expect(screen).toContain('<QuestionDiagrams items={diagramShown} onEnlarge={(src, alt) => setLightbox({ src, alt })}');
+  });
+});
+
+describe('the part card places the diagram with the words (owner, 26 Nov 2026: "alongside the question, not at the top")', () => {
+  const item = [{ id: 'a', url: 'https://x/a.png', alt: 'The diagram for this question', fromStem: false }];
+  const diagram = <QuestionDiagrams items={item} onEnlarge={() => {}} />;
+  // digits only: the words are drawn through the copy shield, which swaps letters but not digits
+  const options = [{ label: 'a', text: '67890' }];
+
+  it('reading: the words, then the diagram, then the options, in one block that lays out by the card width', () => {
+    const html = renderToStaticMarkup(<PartCard mode="read" body="12345" options={options} diagram={diagram} />);
+    const words = html.indexOf('12345');
+    const block = html.indexOf('data-testid="question-diagrams"');
+    const option = html.indexOf('67890');
+    expect(words).toBeGreaterThan(-1);
+    expect(block).toBeGreaterThan(words);
+    expect(option).toBeGreaterThan(block);
+    // both sit in the one wrapper, which is a size container: beside on a wide card, under on a narrow one
+    expect(html).toContain('data-testid="words-and-diagram"');
+    expect(html).toContain('[container-type:inline-size]');
+    expect(html).toContain('[@container(min-width:30rem)]:flex-row');
+    // beside the words it is never wider than two fifths of the card
+    expect(html).toContain('[@container(min-width:30rem)]:w-2/5');
+    // the check line and the enlarge button stay with it
+    expect(html).toContain(DIAGRAM_CHECK_LINE);
+    expect(html).toContain('aria-label="Enlarge: The diagram for this question"');
+  });
+
+  it('without a diagram the card is as it was: no wrapper', () => {
+    const html = renderToStaticMarkup(<PartCard mode="read" body="Find x." options={null} diagram={null} />);
+    expect(html).not.toContain('words-and-diagram');
+    expect(html).not.toContain('question-diagrams');
+  });
+
+  it('fixing the words: the diagram waits under the typing box, still inside the card', () => {
+    const html = renderToStaticMarkup(<PartCard mode="edit" body="Find x." options={null} diagram={diagram} editFooter={<b>footer</b>} />);
+    const box = html.indexOf('<textarea');
+    const block = html.indexOf('data-testid="question-diagrams"');
+    expect(box).toBeGreaterThan(-1);
+    expect(block).toBeGreaterThan(box);
+    expect(block).toBeLessThan(html.indexOf('<b>footer</b>'));
+    expect(html).not.toContain('words-and-diagram');
+  });
+
+  it('splitting: the diagram stays in the card, under the place to tap', () => {
+    const html = renderToStaticMarkup(<PartCard mode="split" body="a b" options={null} diagram={diagram} splitBody={<u>pick</u>} />);
+    expect(html.indexOf('data-testid="question-diagrams"')).toBeGreaterThan(html.indexOf('<u>pick</u>'));
   });
 });
 

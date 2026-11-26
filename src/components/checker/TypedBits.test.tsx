@@ -384,7 +384,8 @@ describe('the verify screen lays the whole question out around the card', () => 
 
   it('puts the rules line, the card, the tools right under it, and the marks hint together as the checked part', () => {
     const checked = screen.slice(screen.indexOf('const checkedPart'), screen.indexOf('const leftContent'));
-    const order = ['{rulesLine}', '{partCard}', '{tools}', '{marksHint}'].map((p) => checked.indexOf(p));
+    // The card carries the diagram inside it; with no card the diagram stands in its place.
+    const order = ['{rulesLine}', '{partCard ??', '{tools}', '{marksHint}'].map((p) => checked.indexOf(p));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
@@ -403,8 +404,9 @@ describe('the verify screen lays the whole question out around the card', () => 
     expect((screen.match(/revealKey=/g) ?? []).length).toBe(5);
   });
 
-  it('a stand-alone question: the card, the tools, its diagram, then its passage and instructions', () => {
-    expect(left).toMatch(/\{questionTop\}\s+\{alerts\}\s+\{checkedPart\}\s+\{diagramBlock\}\s+\{passageBlock\}\s+\{instructionsBlock\}/);
+  it('a stand-alone question: the card (its diagram inside, owner 26 Nov 2026), the tools, then its passage and instructions', () => {
+    expect(left).toMatch(/\{questionTop\}\s+\{alerts\}\s+\{checkedPart\}\s+\{passageBlock\}\s+\{instructionsBlock\}/);
+    expect(left).not.toContain('{diagramBlock}');
   });
 });
 
