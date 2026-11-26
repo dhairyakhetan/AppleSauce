@@ -65,7 +65,8 @@ function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
     const here = list.filter((c) => c.board === ctx.board && c.class === ctx.cls && c.subject === ctx.subject);
     const byNo = no !== null ? here.find((c) => c.chapter_no === no) : undefined;
     const ch = byNo && (!name || close(name, byNo.name)) ? byNo : no === null && name ? onlyMatch(here, (c) => c.name, name) : undefined;
-    ctx.chapter = ch ?? byNo;
+    // only a chapter matched for sure: topics are never fixed against a chapter the writer may not mean
+    ctx.chapter = ch;
     return ch ? `Chapter ${ch.chapter_no}: ${ch.name}` : line;
   }
   if (meta?.key === 'topic') {
@@ -73,7 +74,8 @@ function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
     if (!ch || isOpen(ch)) return line;
     const { no, name } = parseNumbered(meta.value, 'topic');
     const byNo = no !== null ? ch.topics.find((t) => t.topic_no === no) : undefined;
-    const t = byNo && (!name || close(name, byNo.name)) ? byNo : name ? onlyMatch(ch.topics, (x) => x.name, name) : undefined;
+    // a number and a name that disagree are left for the writer: either could be the one meant
+    const t = byNo && (!name || close(name, byNo.name)) ? byNo : no === null && name ? onlyMatch(ch.topics, (x) => x.name, name) : undefined;
     return t ? `Topic ${t.topic_no}: ${t.name}` : line;
   }
   const m = line.match(QUESTION_LABEL);
@@ -87,7 +89,10 @@ function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
     if (LEVELS.has(l)) rest = l;
   }
   if (label === 'Wrong' && !rest.includes(';') && (rest.match(/,/g) ?? []).length >= 2 && !/\d,\d/.test(rest)) {
-    rest = rest.split(',').map((o) => o.trim()).filter(Boolean).join('; ');
+    const parts = rest.split(',').map((o) => o.trim()).filter(Boolean);
+    // only when each part is plainly one option: a part with "and"/"or" in it, or a long one, may be an option with a
+    // comma inside ("Copper, zinc and tin"), so the line is left for the writer
+    if (parts.every((o) => !/\b(and|or)\b/i.test(o) && o.split(/\s+/).length <= 4)) rest = parts.join('; ');
   }
   return `${m[1]}${label}: ${rest}`;
 }

@@ -43,6 +43,23 @@ describe('tidyText', () => {
     expect(run(odd).text).toBe(odd);
   });
 
+  it('leaves a Topic line whose number and name disagree', () => {
+    for (const t of ['Topic 2: Hot and Cold', 'Topic 5: Hot and Cold']) {
+      const text = HEAD.replace('Topic 1: Hot and Cold', t) + Q;
+      expect(run(text).text).toBe(text);
+    }
+  });
+
+  it('fixes no topic under a chapter it couldn\'t be sure of', () => {
+    const text = 'Board: CBSE\nClass: 7\nSubject: Science\nChapter 4: Light\nTopic: transfer of heat\n\n' + Q;
+    expect(run(text).text).toBe(text);
+  });
+
+  it('leaves a Wrong line whose commas may be inside an option', () => {
+    const text = HEAD + Q.replace('Wrong: Barometer; Hygrometer; Ammeter', 'Wrong: Copper, zinc and tin, Wood, Glass, Plastic');
+    expect(run(text).text).toBe(text);
+  });
+
   it('fixes labels, levels and commas, never the words', () => {
     const t = run(HEAD + 'q1: Instrument that measures temperature\na: Thermometer\nfill: Temperature is measured with a ___ here.\nwrong: Barometer, Hygrometer, Ammeter\nLEVEL: Easy.').text;
     expect(t).toBe(HEAD + 'Q: Instrument that measures temperature\nA: Thermometer\nFill: Temperature is measured with a ___ here.\nWrong: Barometer; Hygrometer; Ammeter\nLevel: easy');

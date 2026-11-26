@@ -300,6 +300,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   };
   /** "See why": opens the sent-back list at these questions. */
   const seeWhy = (ids: string[]) => {
+    onDismiss(ids, false); // removed with the cross earlier: back in the list, so the HoD's note can be read
     setBackOpen(true);
     setBackFocus(ids);
     requestAnimationFrame(() => scrollToEl(backPanel.current));
@@ -873,10 +874,12 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
    */
   const fixing = useRef(false);
   const fixTimer = useRef(0);
+  const composing = useRef(false);
   const runFix = (focused: boolean) => {
     const ta = boxRef.current;
     if (!ta || !autoFix) return;
     if (focused && ta.selectionStart !== ta.selectionEnd) return; // something is selected: leave it until later
+    if (focused && composing.current) return; // a phone or Indic keyboard is still composing a word: never cut in
     const old = ta.value;
     const at = focused ? ta.selectionStart : null;
     const fixed = autoFix(old, at);
@@ -906,7 +909,9 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
   };
   useEffect(() => {
     clearTimeout(fixTimer.current);
-    fixTimer.current = window.setTimeout(() => runFix(document.activeElement === boxRef.current), 1000);
+    // only while the box is being typed in (the boxes above it, typing boxes when the list can't load, are never fixed
+    // under the writer's fingers); leaving the box runs the rest
+    fixTimer.current = window.setTimeout(() => { if (document.activeElement === boxRef.current) runFix(true); }, 1000);
     return () => clearTimeout(fixTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, caret]);
@@ -976,7 +981,8 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
             if (pasted.current) { pasted.current = false; onCaret(e.target); onTyping(null); } else onTyping(lineOf(e.target));
           }}
           onPaste={(e) => { pasted.current = true; const t = e.currentTarget; onPaste(t.selectionStart === 0 && t.selectionEnd === t.value.length); }}
-          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => { onTyping(null); clearTimeout(fixTimer.current); runFix(false); }}
+          onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
+          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => { onTyping(null); clearTimeout(fixTimer.current); composing.current = false; runFix(false); }}
           onScroll={() => { sync(); onTopLine?.(topLine()); }} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
           placeholder={'One block per question, like this:\n\nTopic 1: Chemical Equations\n\nQ: The question\nA: The answer\nFill: A sentence with ___ where the answer goes\nWrong: Wrong option; another; another\nLevel: easy'} />
       </div>
