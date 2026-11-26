@@ -147,9 +147,11 @@ test.describe('questions sent back', () => {
     await panel.getByRole('button', { name: 'See why' }).click();
     const items = panel.getByRole('button', { name: 'Remove from this list' });
     const before = await items.count();
-    await panel.getByRole('button', { name: 'Fix it in the Questions box' }).first().click();
+    // a question sent back on its own: put it in the box, unchanged, then remove it from the list
+    const one = panel.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Fix it in the Questions box' }) }).first();
+    await one.getByRole('button', { name: 'Fix it in the Questions box' }).click();
     await expect(box).toHaveValue(/Q: /);
-    await items.first().click();
+    await one.getByRole('button', { name: 'Remove from this list' }).click();
     await expect(items).toHaveCount(before - 1);
     // keep only the first question block (the one sent back), unchanged
     const text = await box.inputValue();

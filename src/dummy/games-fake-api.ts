@@ -22,6 +22,7 @@ const MODERATOR = { email: 'asha.rao@example.com', name: 'Asha Rao' };
 const HOD = { email: 'vikram.singh@example.com', name: 'Vikram Singh' };
 const ROHAN = { email: 'rohan.mehta@example.com', name: 'Rohan Mehta' };
 const PRIYA = { email: 'priya.das@example.com', name: 'Priya Das' };
+const MEERA = { email: 'meera.iyer@example.com', name: 'Meera Iyer' };
 
 /** Approved: what "Try the games" plays with. Every question has each version the games use, as the prompt asks. */
 const APPROVED_HEAT = `Board: CBSE
@@ -634,7 +635,127 @@ Wrong: Sea breeze; Monsoon wind; Trade wind
 Level: medium`;
 
 /** Every made-up text, for the test that each one passes the checker. */
-export const DUMMY_TEXTS = { APPROVED_HEAT, APPROVED_LANDFORMS, APPROVED_TRADE, APPROVED_GEOMETRY, WAITING_CELL, WAITING_FLAME, SENT_BACK_HEAT };
+/**
+ * Waiting, from Meera: a batch like a chatbot's, mostly fine, with one of each thing the page asks the HoD to check
+ * ("Please check"): an answer that doesn't fit the gap (twice), × in the answer but x in an option, "always" in a
+ * True/False, a wrong option holding the answer, two questions in a topic with the same answer, and an answer much
+ * longer than its options. So "Approve all" asks first, and the flagged box has something to show.
+ */
+const WAITING_PHYSICS = `Board: ISC
+Class: 12
+Subject: Physics
+Chapter 3: Current Electricity
+
+Topic 1: Electric Current
+
+Q: SI unit of electric current
+A: Ampere
+Also: A
+Fill: The SI unit of electric current is the ___.
+Wrong: Volt; Ohm; Coulomb
+Level: easy
+
+Q: Charge on one electron, in coulombs
+A: -1.6 × 10^-19
+Also: -1.6e-19
+Fill: One electron carries a charge of ___ coulomb.
+Wrong: +1.6 × 10^-19; -1.6 × 10^-18; -1.6 x 10^-20
+Level: medium
+
+Q: Electrons in a metal wire always drift towards the positive end of a cell
+A: True
+Level: medium
+
+Q: Device used to measure the current in a circuit
+A: Ammeter
+Fill: The current in a circuit is measured with an ___.
+Wrong: Voltmeter; Barometer; Thermometer
+Level: easy
+
+Topic 2: Ohm's Law and Resistance
+
+Q: SI unit of electrical resistance
+A: Ohm
+Also: Ω
+Fill: Electrical resistance is measured in a unit called the ___.
+Wrong: Ohm metre; Siemens; Volt
+Level: easy
+
+Q: Unit of resistance equal to one volt per ampere
+A: Ohm
+Fill: One volt per ampere makes one ___ of resistance.
+Wrong: Watt; Joule; Farad
+Level: medium
+
+Q: Relation between potential difference, current and resistance
+A: V = IR
+Fill: Ohm's law for a conductor is written as ___.
+Wrong: V = I/R; V = R/I; V = I + R
+Level: easy
+
+Q: What happens to the resistance of a wire when its length is doubled
+A: Becomes double
+Fill: When a wire's length is doubled, its resistance becomes ___ its earlier value.
+Wrong: Half; Four times; One-fourth
+Level: medium
+
+Q: How the resistance of a metal wire changes as it gets hotter
+A: It goes up with temperature
+Fill: As a metal wire gets hotter, its resistance ___.
+Wrong: Falls; Stays same; Becomes zero
+Level: medium
+
+Topic 3: Combination of Resistors
+
+Q: Equivalent resistance of resistors joined in series
+A: Sum of resistances
+Fill: In series, the equivalent resistance is the ___ of the individual resistances.
+Wrong: Product; Difference; Reciprocal sum
+Level: easy
+
+Q: Equivalent resistance of two 6 ohm resistors joined in parallel, in ohms
+A: 3
+Fill: Two 6 ohm resistors in parallel have an equivalent resistance of ___ ohms.
+Wrong: 12; 6; 36
+Level: medium
+
+Q: Way of joining resistors so that the same current flows through each of them
+A: Series
+Fill: When the same current flows through every resistor, they are joined in ___.
+Wrong: Parallel; Mixed; Star
+Level: easy`;
+
+/** Sent back to you together, with one reason: Write questions shows them as one batch. Their answers don't fit the
+ * gaps, which is the reason given. */
+const SENT_BACK_REACTIONS = `Board: CBSE
+Class: 10
+Subject: Science
+Chapter 1: Chemical Reactions and Equations
+
+Topic 2: Types of Chemical Reactions
+
+Q: Reaction in which two or more substances join to form a single product
+A: Combination reaction
+Fill: When two substances join to form one product, a ___ reaction has taken place.
+Wrong: Decomposition reaction; Displacement reaction; Double displacement reaction
+Level: easy
+
+Q: What calcium carbonate does when it is heated strongly
+A: Breaks down
+Fill: When heated strongly, calcium carbonate breaks ___ into lime and carbon dioxide.
+Wrong: Melts; Boils; Freezes
+Level: medium
+
+Topic 3: Effects of Oxidation in Everyday Life
+
+Q: Slow damage of iron left in moist air
+A: Rusting of iron
+Fill: The slow damage of iron left in moist air is called ___ of iron.
+Wrong: Melting; Burning; Plating
+Level: easy`;
+const NOTE_GAPS = "The answers don't fit the gaps in the Fill sentences. Read each one with the answer in the gap, and write only the missing words.";
+
+export const DUMMY_TEXTS = { APPROVED_HEAT, APPROVED_LANDFORMS, APPROVED_TRADE, APPROVED_GEOMETRY, WAITING_CELL, WAITING_FLAME, WAITING_PHYSICS, SENT_BACK_HEAT, SENT_BACK_REACTIONS };
 
 const NOTE_WRONG_WAY = 'Heat flows from a hotter object to a colder one, never the other way. Please rewrite the question.';
 const NOTE_LAND_BREEZE = 'A land breeze blows at night. During the day the breeze comes from the sea.';
@@ -656,6 +777,7 @@ const MADE_UP: ListChapter[] = [
   listed('CBSE', 7, 'Science', 2, 'Nutrition in Animals', []),
   listed('CBSE', 9, 'Science', 5, 'The Fundamental Unit of Life', ['The Cell', 'Cell Organelles']),
   listed('CBSE', 10, 'Science', 1, 'Chemical Reactions and Equations', ['Chemical Equations', 'Types of Chemical Reactions', 'Effects of Oxidation in Everyday Life']),
+  listed('ISC', 12, 'Physics', 3, 'Current Electricity', ['Electric Current', "Ohm's Law and Resistance", 'Combination of Resistors']),
 ];
 
 /** The sample list of chapters (games-sample-chapters.json: the games list as it is, with CBSE's electives), with no topics. */
@@ -729,6 +851,7 @@ function seed(sample: boolean): State {
       { ...HOD, role: 'hod', moderator: false, added_at: hoursAgo(24 * 20), last_seen_at: hoursAgo(2), name: HOD.name },
       { ...ROHAN, role: 'member', moderator: false, added_at: hoursAgo(24 * 10), last_seen_at: hoursAgo(26), name: ROHAN.name },
       { ...PRIYA, role: 'member', moderator: false, added_at: hoursAgo(24 * 3), last_seen_at: null, name: PRIYA.name },
+      { ...MEERA, role: 'member', moderator: false, added_at: hoursAgo(24 * 2), last_seen_at: hoursAgo(0.5), name: MEERA.name },
       { ...DUMMY_ME, role: 'admin', moderator: false, added_at: hoursAgo(24 * 15), last_seen_at: hoursAgo(0.1) },
     ],
     batches: [],
@@ -756,6 +879,8 @@ function seed(sample: boolean): State {
   landBreeze.note = NOTE_LAND_BREEZE;
   put(WAITING_CELL, ROHAN, hoursAgo(3), 'pending', null);
   put(WAITING_FLAME, PRIYA, hoursAgo(1), 'pending', null);
+  put(WAITING_PHYSICS, MEERA, hoursAgo(0.5), 'pending', null);
+  put(SENT_BACK_REACTIONS, DUMMY_ME, hoursAgo(8), 'rejected', hoursAgo(6), NOTE_GAPS);
   return s;
 }
 

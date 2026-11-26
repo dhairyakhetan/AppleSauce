@@ -51,7 +51,7 @@ describe('the dummy games database', () => {
 
   it("doesn't take back a sent-back question unchanged (other answers, fill-in and options included), and points to why", async () => {
     const api = createFakeGamesApi(false, false);
-    const back = (await api.mySentBack()).find((x) => x.topic_no === 2)!;
+    const back = (await api.mySentBack()).find((x) => x.chapter_id === 'CBSE07SCI04' && x.topic_no === 2)!;
     const again = `${HEAT}${q(back.question, back.answer, `Fill: ${back.fill}\nWrong: ${back.wrong_options.join('; ')}`)}`;
     expect(await api.sendBatch(rows(again))).toMatchObject({ sent: 0, sentBack: 1, sentBackIds: [back.id], batchIds: [] });
     // a changed fill-in sentence is a changed question
@@ -185,7 +185,7 @@ describe('the dummy games database', () => {
     // the same thing twice changes nothing
     expect((await api.saveStatus([pending[0].id], 'approved')).changed).toEqual([]);
 
-    const back = (await api.mySentBack()).find((x) => x.topic_no === 2)!;
+    const back = (await api.mySentBack()).find((x) => x.chapter_id === 'CBSE07SCI04' && x.topic_no === 2)!;
     await api.sendBatch(rows(`${HEAT}${q(back.question, 'A different answer')}`));
     const kept = await api.saveStatus([back.id], 'pending');
     expect(kept).toMatchObject({ changed: [], skipped: [back.id] });

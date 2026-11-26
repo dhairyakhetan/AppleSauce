@@ -87,6 +87,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   electives and skill subjects less the rarest removed on 25 November 2026), so the Board dropdown's counts are the real
   list's. The made-up questions and their topics sit on real chapters of it (`HOMES` in `games-fake-api.ts`: for example
   the made-up Heat is the list's Heat Transfer in Nature), and their header lines are rewritten to match (`MOVED`).
+  It starts with something for every part: approved questions the games play with; waiting batches, one of them
+  (Meera Iyer's ISC Class 12 Physics, `WAITING_PHYSICS`) mostly fine but with one of each "Please check" note, so
+  Approve all asks first and the flagged box has work; and questions sent back to you, two on their own and three sent
+  back together with one reason (`SENT_BACK_REACTIONS`), which Write questions shows as one batch.
   The tests start with the made-up chapters only (`createFakeGamesApi(false, false)`).
   Dummy mode is in its own chunk loaded only in the test build, so none of this reaches the live site.
   Its banner switches between admin, HoD, member, not on the team, and signed
