@@ -646,7 +646,8 @@ export function buildMainStops(route: PipelineRoute, audience: Audience = 'admin
       track: 'main',
       step: 6,
       title: 'Ready to go live',
-      meaning: 'Every question settled. Waiting for a person to run the four checks and publish.',
+      meaning:
+        'Papers with every question settled, including ones a check still blocks. The HOD desk counts only the ones that can go live now (below).',
       count: ready ? ready.papers : null,
       unit: 'paper',
       facts: [],

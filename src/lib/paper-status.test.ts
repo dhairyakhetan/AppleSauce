@@ -42,7 +42,7 @@ describe('paper status: the stages and their words', () => {
     expect(STAGES.waiting.label).toBe('Checked, waiting to go live');
     expect(STAGES.live.label).toBe('Live');
     // The strip uses the short words.
-    expect(STAGE_ORDER.map((s) => STAGES[s].short)).toEqual(['Not ready', 'Ready', 'Being checked', 'Waiting approval', 'Live']);
+    expect(STAGE_ORDER.map((s) => STAGES[s].short)).toEqual(['Not ready', 'Waiting for a checker', 'Being checked', 'Can go live', 'Live']);
   });
 
   it('every stage has a plain sentence for the tooltip and for screen readers', () => {

@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
@@ -214,6 +215,31 @@ export function HodPage({
     row.scrollTo({ left: Math.max(0, Math.min(target, row.scrollWidth - view)), behavior: 'auto' });
   }, [active.key, allowed, countsQ.data, requestsWaiting, freePapers]);
 
+  // Eleven tabs do not fit on a phone or a 1366 px laptop. The row still scrolls, but it now says so: a fade and an
+  // arrow button at each edge that has tabs beyond it (owner, 26 Nov 2026: the last tabs were hidden with no sign).
+  const [edges, setEdges] = useState<{ left: boolean; right: boolean }>({ left: false, right: false });
+  const measureTabs = useCallback(() => {
+    const row = tabRowRef.current;
+    if (!row) return;
+    const next = { left: row.scrollLeft > 2, right: row.scrollLeft + row.clientWidth < row.scrollWidth - 2 };
+    setEdges((cur) => (cur.left === next.left && cur.right === next.right ? cur : next));
+  }, []);
+  useEffect(() => {
+    measureTabs();
+    const row = tabRowRef.current;
+    row?.addEventListener('scroll', measureTabs, { passive: true });
+    window.addEventListener('resize', measureTabs);
+    return () => {
+      row?.removeEventListener('scroll', measureTabs);
+      window.removeEventListener('resize', measureTabs);
+    };
+  }, [measureTabs, allowed, countsQ.data, requestsWaiting, freePapers, active.key]);
+  const scrollTabs = (dir: -1 | 1) => {
+    const row = tabRowRef.current;
+    if (!row) return;
+    row.scrollBy({ left: dir * Math.max(160, row.clientWidth * 0.6), behavior: 'smooth' });
+  };
+
   if (checkFailed && allowed === null) {
     return (
       <BentoStack className="min-h-screen bg-muted">
@@ -285,12 +311,14 @@ export function HodPage({
         {/* How many papers are at each stage; tapping one opens the list that holds them. */}
         <HodStageStrip api={api} scope={scope} />
 
-        {/* One row, never a wrap: when the tabs are wider than the card the row scrolls. */}
+        {/* One row, never a wrap: when the tabs are wider than the card the row scrolls, and each edge with tabs beyond
+            it shows a fade and an arrow, so the last tabs (AI trust, Reviewers) are never hidden without a sign. */}
+        <div className="relative mb-5 w-max max-w-full" data-testid="hod-tab-row">
         <div
           ref={tabRowRef}
           role="tablist"
           aria-label="HOD desk"
-          className="relative mb-5 flex w-max max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted p-1 scrollbar-hide"
+          className="relative flex w-max max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted p-1 scrollbar-hide"
         >
           {TABS.map((t) => {
             // Assignments counts the papers waiting to be handed out (its own read); every other tab keeps its badge as before.
@@ -325,6 +353,47 @@ export function HodPage({
             </button>
             );
           })}
+        </div>
+          {/* The arrows only scroll the row; the keyboard already moves between tabs with the arrow keys, so they are
+              left out of the Tab order and hidden from screen readers. */}
+          <span
+            aria-hidden
+            className={cn(
+              'pointer-events-none absolute inset-y-0 left-0 w-16 rounded-l-full bg-gradient-to-r from-muted to-transparent transition-opacity duration-150',
+              edges.left ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          <span
+            aria-hidden
+            className={cn(
+              'pointer-events-none absolute inset-y-0 right-0 w-16 rounded-r-full bg-gradient-to-l from-muted to-transparent transition-opacity duration-150',
+              edges.right ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          {edges.left ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              onClick={() => scrollTabs(-1)}
+              className="absolute left-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-card text-foreground shadow-button transition-transform duration-150 active:scale-press-small md:h-10 md:w-10"
+              data-testid="tabs-left"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          ) : null}
+          {edges.right ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              onClick={() => scrollTabs(1)}
+              className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-card text-foreground shadow-button transition-transform duration-150 active:scale-press-small md:h-10 md:w-10"
+              data-testid="tabs-right"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          ) : null}
         </div>
         {countsQ.isError ? (
           <p role="status" className="mt-1 text-[12px] text-warm-meta">

@@ -215,6 +215,30 @@ export function ProfileRow({ p, api, scope, choices }: { p: HodVerifierProfile; 
     }
   }
 
+  /** "Say no": their subjects are saved exactly as they are, which clears the request on the server (no new SQL). */
+  async function declineRequest() {
+    const ok = await confirm({
+      title: `Say no to ${name}'s request?`,
+      description: `They asked for ${p.requested_subjects.join(', ')}. Their subjects stay as they are${
+        p.preferred_subjects.length > 0 ? ` (${p.preferred_subjects.join(', ')})` : ''
+      } and the request is cleared. They can ask again later.`,
+      confirmLabel: 'Say no',
+      cancelLabel: 'Cancel',
+    });
+    if (!ok) return;
+    setRequestBusy(true);
+    setRequestError(null);
+    try {
+      await api.setPreferred(p.user_id, p.preferred_subjects);
+      toast.success('Request cleared. Their subjects did not change.');
+      refresh();
+    } catch (err) {
+      setRequestError(errorText(err));
+    } finally {
+      setRequestBusy(false);
+    }
+  }
+
   return (
     <li className="rounded-2xl bg-muted shadow-card p-4" data-testid="profile-row">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -291,6 +315,9 @@ export function ProfileRow({ p, api, scope, choices }: { p: HodVerifierProfile; 
           </span>
           <button type="button" disabled={requestBusy} className={cn(actionToneClass('brand'), 'h-[46.5px]')} onClick={() => void approveRequest()}>
             Approve
+          </button>
+          <button type="button" disabled={requestBusy} className={actionToneClass('muted')} onClick={() => void declineRequest()} data-testid="decline-request">
+            Say no
           </button>
           {requestError ? (
             <p role="alert" className="w-full text-destructive" data-testid="request-error">

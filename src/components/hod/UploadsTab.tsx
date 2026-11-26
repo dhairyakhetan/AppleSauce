@@ -25,7 +25,21 @@ import { loadGate } from '@/lib/verifier-papers';
 
 export const UPLOADS_KEY = (scope: string, status: UploadStatus) => ['hod', scope, 'uploads', status] as const;
 
-function Files({ api, upload }: { api: HodApi; upload: HodStudentUpload }) {
+/** What happens after Approve, in one plain line (shown under the buttons once Approve is on). */
+export const UPLOAD_NEXT_WORDS =
+  'Approve records your yes. The paper joins the checking route the next time the owner loads papers; then checkers and an HOD look at it before it can go live. Nothing goes on the site from here.';
+
+/** Why Approve is still off, or null when it can be pressed: every file must have been opened first. */
+export function approveGate(paths: readonly string[], opened: ReadonlySet<string>): string | null {
+  if (paths.length === 0) return 'No files came with this one, so there is nothing to approve. Reject it with a reason.';
+  const seen = paths.filter((p) => opened.has(p)).length;
+  if (seen >= paths.length) return null;
+  return paths.length === 1
+    ? 'Open the file first. Approve switches on once you have looked at it.'
+    : `Open every file first (${seen} of ${paths.length} opened). Approve switches on once you have looked at them all.`;
+}
+
+function Files({ api, upload, onOpened }: { api: HodApi; upload: HodStudentUpload; onOpened: (path: string) => void }) {
   const [links, setLinks] = useState<{ path: string; url: string | null }[] | null>(null);
   const [loading, setLoading] = useState(false);
   async function load() {
@@ -47,7 +61,14 @@ function Files({ api, upload }: { api: HodApi; upload: HodStudentUpload }) {
       {links.map((l, i) => (
         <li key={l.path}>
           {l.url ? (
-            <a href={l.url} target="_blank" rel="noreferrer" className="tap-44 inline-flex items-center text-[14px] font-semibold text-brand-blue underline underline-offset-2">
+            <a
+              href={l.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => onOpened(l.path)}
+              onAuxClick={() => onOpened(l.path)}
+              className="tap-44 inline-flex items-center text-[14px] font-semibold text-brand-blue underline underline-offset-2"
+            >
               File {i + 1}: {fileNameOf(l.path)}
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
@@ -66,6 +87,9 @@ function UploadCard({ api, upload, onDone }: { api: HodApi; upload: HodStudentUp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = upload.status === 'pending';
+  /** Which files the HOD has opened. Approve stays off until every file was looked at. */
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
+  const gate = approveGate(upload.file_paths, opened);
 
   async function decide(decision: 'approved' | 'rejected') {
     const problem = uploadDecisionProblem(decision, note);
@@ -107,7 +131,7 @@ function UploadCard({ api, upload, onDone }: { api: HodApi; upload: HodStudentUp
         </span>
       </div>
       <div className="mt-3">
-        <Files api={api} upload={upload} />
+        <Files api={api} upload={upload} onOpened={(path) => setOpened((s) => new Set(s).add(path))} />
       </div>
       {!pending ? (
         <p className="mt-2 text-[13px] text-warm-secondary">
@@ -137,12 +161,21 @@ function UploadCard({ api, upload, onDone }: { api: HodApi; upload: HodStudentUp
           <div className="flex flex-wrap gap-2">
             {mode === null ? (
               <>
-                <button type="button" className={cn(actionToneClass('brand'), 'h-[46.5px]')} disabled={busy} onClick={() => void decide('approved')}>
+                <button
+                  type="button"
+                  className={cn(actionToneClass('brand'), 'h-[46.5px]')}
+                  disabled={busy || gate !== null}
+                  aria-describedby={gate ? `upload-gate-${upload.id}` : undefined}
+                  onClick={() => void decide('approved')}
+                >
                   {busy ? 'Saving...' : 'Approve'}
                 </button>
                 <button type="button" className={quietButton} disabled={busy} onClick={() => setMode('rejected')}>
                   Reject
                 </button>
+                <p className="basis-full text-[13px] text-warm-secondary" id={`upload-gate-${upload.id}`} data-testid="upload-next">
+                  {gate ?? UPLOAD_NEXT_WORDS}
+                </p>
               </>
             ) : (
               <>

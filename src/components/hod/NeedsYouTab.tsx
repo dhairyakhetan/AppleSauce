@@ -25,6 +25,7 @@ import {
 } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
 import { loadGate } from '@/lib/verifier-papers';
+import { NEEDS_SORTS, nextNeedsPaper, sortNeedsPapers, type NeedsSort } from '@/lib/hod-desk';
 
 /* "Needs you": the questions only an HOD can settle, grouped by paper. The list
    shows each paper with how many are waiting and where it is on the route. Open a
@@ -289,7 +290,8 @@ function QuestionCard({
               </button>
             )}
             {canSendBack(q) ? (
-              <button type="button" className={cn(actionToneClass('brand'), 'h-[46.5px]')} disabled={busy} onClick={() => setPanel('back')}>
+              // Quieter than Pass on purpose (owner, 26 Nov 2026): only the main answer is orange.
+              <button type="button" className={quietButton} disabled={busy} onClick={() => setPanel('back')}>
                 Send back to students
               </button>
             ) : null}
@@ -393,7 +395,20 @@ export function SettledLine({ s, busy, onUndo }: { s: Pick<Settled, 'what' | 'un
   );
 }
 
-function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: string; paperId: string; paper: HodNeedsYouPaper | null }) {
+function PaperQuestions({
+  api,
+  scope,
+  paperId,
+  paper,
+  nextPaper,
+}: {
+  api: HodApi;
+  scope: string;
+  paperId: string;
+  paper: HodNeedsYouPaper | null;
+  /** The next paper with questions waiting, for the button after the last question. */
+  nextPaper: HodNeedsYouPaper | null;
+}) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: NEEDS_YOU_QUESTIONS_KEY(scope, paperId),
@@ -471,13 +486,28 @@ function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: st
                 Ready to go live.
               </Notice>
               <div className="flex flex-wrap gap-2">
-                <Link to={deskLink('ready', paperId)} className={cn(actionToneClass('brand'), 'h-[46.5px]')}>
+                {nextPaper ? (
+                  <Link
+                    to={deskLink('needs-you', nextPaper.audit_paper_id)}
+                    className={cn(actionToneClass('brand'), 'h-[46.5px]')}
+                    data-testid="next-needs-paper"
+                    aria-label={`Next paper waiting for you: ${nextPaper.title}`}
+                  >
+                    Next paper waiting for you
+                  </Link>
+                ) : null}
+                <Link to={deskLink('ready', paperId)} className={nextPaper ? actionToneClass('dark') : cn(actionToneClass('brand'), 'h-[46.5px]')}>
                   Open it in Ready to go live
                 </Link>
                 <Link to={deskLink('needs-you')} className={quietButton}>
                   Back to the list
                 </Link>
               </div>
+              {nextPaper ? (
+                <p className="text-[13px] text-warm-secondary">
+                  Next: {nextPaper.title}, {nextPaper.escalated + nextPaper.admin_bucket === 1 ? '1 question' : `${nextPaper.escalated + nextPaper.admin_bucket} questions`} waiting.
+                </p>
+              ) : null}
             </div>
           ) : (
             <p className="mb-3 text-[13px] text-warm-secondary" data-testid="needs-count">
@@ -510,14 +540,14 @@ function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: st
   );
 }
 
-function PaperList({ api, scope }: { api: HodApi; scope: string }) {
+function PaperList({ api, scope, sort, onSort }: { api: HodApi; scope: string; sort: NeedsSort; onSort: (s: NeedsSort) => void }) {
   const q = useQuery({ queryKey: NEEDS_YOU_KEY(scope), queryFn: () => api.needsYouPapers(), staleTime: 0, refetchOnMount: true });
   const trailQ = useQuery({ queryKey: TRAIL_KEY(scope), queryFn: () => api.paperTrail(), staleTime: 30_000 });
   const trail = useMemo(() => trailByPaper(trailQ.data ?? []), [trailQ.data]);
   // loadGate, not isLoading: offline pauses a read (isLoading stays false) and "Nothing is waiting for you" must not show.
   if (loadGate(q) === 'loading') return <ListSkeleton label="Loading the papers that need you" />;
   if (loadGate(q) === 'error') return <LoadError what="The papers that need you" onRetry={() => void q.refetch()} />;
-  const list = q.data ?? [];
+  const list = sortNeedsPapers(q.data ?? [], sort);
   if (list.length === 0) {
     return (
       <EmptyNote>
@@ -528,9 +558,26 @@ function PaperList({ api, scope }: { api: HodApi; scope: string }) {
   const total = list.reduce((n, p) => n + waitingOn(p), 0);
   return (
     <div>
-      <p className="mb-3 text-[13px] text-warm-secondary" data-testid="needs-summary">
-        {total === 1 ? '1 question' : `${total} questions`} on {list.length === 1 ? '1 paper' : `${list.length} papers`} need you. Open a paper to settle its questions.
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] text-warm-secondary" data-testid="needs-summary">
+          {total === 1 ? '1 question' : `${total} questions`} on {list.length === 1 ? '1 paper' : `${list.length} papers`} need you. Open a paper to settle its questions.
+        </p>
+        <label className="flex items-center gap-2 text-[13px] font-semibold text-warm-secondary">
+          <span className="shrink-0">Sort</span>
+          <select
+            value={sort}
+            onChange={(e) => onSort(e.target.value as NeedsSort)}
+            className="min-h-11 rounded-xl bg-muted px-3 text-[16px] sm:text-[14px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            data-testid="needs-sort"
+          >
+            {NEEDS_SORTS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <ul className="space-y-3">
         {list.map((p) => (
           <li key={p.audit_paper_id} className="rounded-[18px] bg-muted shadow-card p-4" data-testid="needs-paper">
@@ -570,9 +617,12 @@ export function NeedsYouTab({ api, scope }: { api: HodApi; scope: string }) {
   const [params] = useSearchParams();
   const paperId = params.get('paper');
   const listQ = useQuery({ queryKey: NEEDS_YOU_KEY(scope), queryFn: () => api.needsYouPapers(), staleTime: 15_000 });
+  // The order chosen on the list is also the order "Next paper waiting for you" follows.
+  const [sort, setSort] = useState<NeedsSort>('most');
   if (paperId) {
-    const paper = (listQ.data ?? []).find((p) => p.audit_paper_id === paperId) ?? null;
-    return <PaperQuestions api={api} scope={scope} paperId={paperId} paper={paper} />;
+    const ordered = sortNeedsPapers(listQ.data ?? [], sort);
+    const paper = ordered.find((p) => p.audit_paper_id === paperId) ?? null;
+    return <PaperQuestions key={paperId} api={api} scope={scope} paperId={paperId} paper={paper} nextPaper={nextNeedsPaper(ordered, paperId)} />;
   }
-  return <PaperList api={api} scope={scope} />;
+  return <PaperList api={api} scope={scope} sort={sort} onSort={setSort} />;
 }

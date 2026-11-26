@@ -25,7 +25,7 @@ import { PROFILES_KEY, TEAM_KEY } from '@/components/hod/VerifiersTab';
 import { refreshHod } from '@/lib/hod-refresh';
 import { useAuth } from '@/lib/auth-context';
 import { actionToneClass } from '@/lib/checker-button-styles';
-import { capUnassigned, UNASSIGNED_SHOWN } from '@/lib/hod-desk';
+import { capUnassigned, filterFreePapers, freeFilterChoices, freeFilterOn, NO_FREE_FILTER, UNASSIGNED_SHOWN, type FreeFilter } from '@/lib/hod-desk';
 import { checkBulk, didLand, notLandedMessage, UNCHECKED_NOTE, type IntendedGive } from '@/lib/hod-give-check';
 import { paperLabel } from '@/lib/checker-progress';
 import {
@@ -275,6 +275,69 @@ export function BulkBar({
   );
 }
 
+/** Search, subject and class over Papers nobody has. Every control is a 44 px row; "Clear" undoes all three at once. */
+export function FreeFilters({
+  filter,
+  onFilter,
+  choices,
+  shown,
+  total,
+}: {
+  filter: FreeFilter;
+  onFilter: (f: FreeFilter) => void;
+  choices: { subjects: string[]; classes: string[] };
+  shown: number;
+  total: number;
+}) {
+  const on = freeFilterOn(filter);
+  const select =
+    'min-h-11 min-w-0 rounded-xl bg-muted px-3 text-[16px] sm:text-[14px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus';
+  return (
+    <div className="mb-2" data-testid="free-filters">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <label className="relative block min-w-0 flex-1 sm:min-w-[14rem]">
+          <span className="sr-only">Search papers nobody has</span>
+          <input
+            type="search"
+            value={filter.q}
+            onChange={(e) => onFilter({ ...filter, q: e.target.value })}
+            placeholder="Search a subject, class, school or year"
+            className="min-h-11 w-full rounded-xl bg-muted px-3 text-[16px] sm:text-[14px] text-foreground outline-none placeholder:text-warm-meta focus-visible:ring-2 focus-visible:ring-focus"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <select aria-label="Subject" value={filter.subject} onChange={(e) => onFilter({ ...filter, subject: e.target.value })} className={select}>
+            <option value="">Every subject</option>
+            {choices.subjects.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Class" value={filter.cls} onChange={(e) => onFilter({ ...filter, cls: e.target.value })} className={select}>
+            <option value="">Every class</option>
+            {choices.classes.map((c) => (
+              <option key={c} value={c}>
+                Class {c}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {on ? (
+        <p role="status" className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px] text-warm-secondary" data-testid="free-showing">
+          <span>
+            Showing {shown} of {total} {total === 1 ? 'paper' : 'papers'}. Select all ticks only these.
+          </span>
+          <button type="button" onClick={() => onFilter(NO_FREE_FILTER)} className={DISMISS}>
+            Clear
+          </button>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** A Dismiss that is a real 44 px button, not a tiny underline. */
 const DISMISS = 'tap-44 inline-flex min-h-11 shrink-0 items-center rounded-full bg-card px-4 text-[14px] font-semibold text-foreground shadow-button transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus';
 
@@ -411,6 +474,8 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
   const [autoFailure, setAutoFailure] = useState<string | null>(null);
   /** Open a paper (or the stuck ones) in Who has what, from the Needs attention box. */
   const [whoRequest, setWhoRequest] = useState<WhoRequest | null>(null);
+  /** Search, subject and class on Papers nobody has. Select all and the ticks work on what they leave showing. */
+  const [freeFilter, setFreeFilter] = useState<FreeFilter>(NO_FREE_FILTER);
   /** Set by "Give papers to <name>" in Waiting for papers: who the assign bar is set to, in words. */
   const [givingTo, setGivingTo] = useState<string | null>(null);
   const outcomeRef = useRef<HTMLDivElement>(null);
@@ -642,8 +707,12 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
   /** Verifiers who hold nothing. Only known once both the team and the assignments are in. */
   const idle = teamGate === 'ready' ? verifiers.filter((m) => !groups.some((g) => g.user_id === m.user_id)) : [];
   const { shown: free, more: moreFree } = capUnassigned(unassignedQ.data ?? []);
-  /** The ticked papers still on the list, in list order (a paper given out meanwhile drops out by itself). */
-  const chosen = free.filter((p) => selected.has(p.paper_id));
+  const freeChoices = freeFilterChoices(free);
+  /** The papers the search and the two dropdowns leave showing. */
+  const shownFree = filterFreePapers(free, freeFilter);
+  const filteringFree = freeFilterOn(freeFilter);
+  /** The ticked papers still showing, in list order (a paper given out meanwhile, or filtered away, drops out by itself). */
+  const chosen = shownFree.filter((p) => selected.has(p.paper_id));
   /** Who a bulk assign can go to: the HOD themself first, then every active verifier. */
   const bulkOptions = [
     ...(myId ? [{ value: myId, label: 'Me' }] : []),
@@ -832,13 +901,20 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
           <EmptyNote>Every paper with questions waiting has a checker.</EmptyNote>
         ) : (
           <>
+          <FreeFilters filter={freeFilter} onFilter={setFreeFilter} choices={freeChoices} shown={shownFree.length} total={free.length} />
+          {shownFree.length === 0 ? (
+            <EmptyNote>No paper matches. Clear the search or a filter.</EmptyNote>
+          ) : (
           <SelectAllRow
-            listLength={free.length}
+            listLength={shownFree.length}
             selectedCount={chosen.length}
-            onChange={() => setSelected(chosen.length > 0 && chosen.length >= Math.min(free.length, MAX_BULK) ? new Set() : selectFirst(free.map((p) => p.paper_id)))}
+            onChange={() =>
+              setSelected(chosen.length > 0 && chosen.length >= Math.min(shownFree.length, MAX_BULK) ? new Set() : selectFirst(shownFree.map((p) => p.paper_id)))
+            }
           />
+          )}
           <ul className="mt-1 space-y-2">
-            {free.map((p: UnassignedPaper) => {
+            {shownFree.map((p: UnassignedPaper) => {
               const ticked = selected.has(p.paper_id);
               return (
               <li
@@ -853,7 +929,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
                     checked={ticked}
                     disabled={busy || (!ticked && chosen.length >= MAX_BULK)}
                     aria-label={`Select ${paperLabel(p)}`}
-                    onChange={() => setSelected((s) => toggleSelected(pruneSelected(s, free.map((f) => f.paper_id)), p.paper_id))}
+                    onChange={() => setSelected((s) => toggleSelected(pruneSelected(s, shownFree.map((f) => f.paper_id)), p.paper_id))}
                     className="h-5 w-5 shrink-0 accent-[hsl(var(--brand))]"
                   />
                   <span className="min-w-0">
