@@ -101,10 +101,12 @@ function CheckList({
   const junk = preview.questions.filter((q) => q.scanner_junk && q.state !== 'set_aside');
   const openIds = markedIds('open', preview.questions);
   const pictureIds = markedIds('pictures', preview.questions);
+  // The questions checked by the AI only, marked on the paper once the database says which ones (20261126310000).
+  const aiIds = markedIds('ai_only', preview.questions);
   return (
     <ul className="space-y-2" data-testid="check-list">
       {preview.checks.map((c) => {
-        const aiOnly = c.key === 'questions_checked' && !c.ok ? aiOnlyText(c.ai_only ?? 0) : null;
+        const aiOnly = c.key === 'questions_checked' && !c.ok ? aiOnlyText(c.ai_only ?? 0, aiIds.length > 0) : null;
         return (
           <li
             key={c.key}
@@ -146,6 +148,11 @@ function CheckList({
                             <p className="w-full text-[13px] text-foreground" data-testid="ai-only-note">
                               {aiOnly}
                             </p>
+                            {aiIds.length > 0 ? (
+                              <button type="button" className={SHOW_ME} onClick={() => showMarked('ai_only')} data-testid="show-ai-only">
+                                Show me the questions checked by the AI only
+                              </button>
+                            ) : null}
                             <button type="button" className={quietButton} onClick={() => go('publish')}>
                               Go to Publish anyway
                             </button>
@@ -545,6 +552,7 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
     else if (key === 'scanner_junk_gone' && ids('junk').length > 0) void showMarked('junk');
     else if (key === 'pictures_present' && ids('pictures').length > 0) void showMarked('pictures');
     else if (key === 'questions_checked' && ids('open').length > 0) void showMarked('open');
+    else if (key === 'questions_checked' && ids('ai_only').length > 0) void showMarked('ai_only');
     else void go('checks');
   }
 

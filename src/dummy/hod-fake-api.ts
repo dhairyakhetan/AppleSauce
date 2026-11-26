@@ -374,6 +374,10 @@ export function createFakeHodApi(): FakeHodApi {
       log.push(`distribute ${given}`);
       return given;
     },
+    // The fake has no database reasons, like a server before 20261126330000 is pasted: the screen words its own.
+    async handoutReasons() {
+      return null;
+    },
     async profiles() {
       return Object.values(profiles).map((x) => ({ ...x }));
     },
