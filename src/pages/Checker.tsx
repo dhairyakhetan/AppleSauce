@@ -36,6 +36,7 @@ import {
   normaliseProfile,
   PAPER_LIMIT_NOTE,
   paperCardProgress,
+  partDoneNote,
   checkerSignInPath,
   parseSubjectList,
   loadGate,
@@ -56,7 +57,7 @@ import { BAR_WELL } from '@/lib/chart-styles';
 /* My papers: the verifier's home (Kid Mode). Three views, chosen by the URL:
 
      /checker                       the verifier's papers, with progress
-     /checker?paper=<id>            one paper: all of its questions, then Start verifying
+     /checker?paper=<id>            one paper: all of its questions, then Start checking
      /checker?paper=<id>&verify=1   one question at a time, question left, picture right
      /checker?paper=<id>&verify=1&reopen=<question>   the same, opened on a Done question being edited
 
@@ -97,7 +98,7 @@ export function CheckerPage({
   dummy?: boolean;
   banner?: React.ReactNode;
 }) {
-  usePageMeta('My papers | Shikshaq', 'Verify one question at a time against the printed paper.');
+  usePageMeta('My papers | Shikshaq', 'Check one question at a time against the printed paper.');
   const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -475,7 +476,7 @@ function PaperList({
                   ) : null}
                 </div>
                 <p className="mt-2 text-[13px] text-foreground" data-testid="card-status-line">
-                  {checkerCardLine(p)}
+                  {partDoneNote(p) ?? checkerCardLine(p)}
                 </p>
                 <div className="mt-3">
                   <div className="mb-1 flex justify-between text-[13px] font-semibold tabular-nums text-warm-secondary">
@@ -504,7 +505,7 @@ function PaperList({
                   ) : (
                     <>
                       <ActionButton tone="mint" onClick={() => onStart(p.paper_id)}>
-                        {p.done > 0 ? 'Keep verifying' : 'Start verifying'}
+                        {p.done > 0 ? 'Keep checking' : 'Start checking'}
                       </ActionButton>
                       <ActionButton tone="muted" onClick={() => onOpen(p.paper_id)}>
                         See questions
@@ -689,7 +690,8 @@ function ProfileCard({ api, scope }: { api: CheckerApi; scope: string }) {
             </p>
           ) : null}
           <div className="flex gap-2 sm:col-span-2">
-            <ActionButton tone="dark" onClick={() => void saveDetails()} disabled={busy}>
+            {/* A submit button, so Enter in any box saves (the form's onSubmit does the saving). */}
+            <ActionButton tone="dark" type="submit" onClick={() => undefined} disabled={busy}>
               {busy ? 'Saving...' : 'Save my details'}
             </ActionButton>
             <ActionButton tone="muted" onClick={() => setEditing(false)} disabled={busy}>
@@ -844,7 +846,7 @@ function PaperOverview({
         </div>
         {todo > 0 ? (
           <ActionButton tone="mint" onClick={onStart}>
-            Start verifying
+            Start checking
           </ActionButton>
         ) : null}
       </div>

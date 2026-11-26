@@ -250,7 +250,7 @@ export function BodyEditor({
               data-testid="show-code"
               className="tap-44 ml-auto rounded-[6px] px-1 py-0.5 text-[13px] font-medium text-warm-secondary underline underline-offset-2 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-disabled"
             >
-              {codeMode ? 'Show as maths' : 'Show code'}
+              {codeMode ? 'Show as maths' : 'Show maths as plain text'}
             </button>
           </div>
           {afterHeader}
@@ -263,7 +263,7 @@ export function BodyEditor({
             disabled={disabled || (codeMode && fellBack)}
             className="rounded-full bg-muted px-3 py-1 text-[12px] font-semibold text-warm-secondary transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-disabled"
           >
-            {codeMode ? 'Show as maths' : 'Show code'}
+            {codeMode ? 'Show as maths' : 'Show maths as plain text'}
           </button>
         </div>
       )}

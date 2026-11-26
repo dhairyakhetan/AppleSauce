@@ -168,6 +168,14 @@ export const LANES: Record<string, Lane> = Object.fromEntries(
   Object.entries(LANE_TABLE).map(([id, l]) => [id, { id, ...l }]),
 );
 
+/* Flags that are not in the pipeline's lanes.json (so not in the tables above, which a test pins to it) but do reach a
+   checker. `spelling_suspect` (a word that may be misspelt) had no lane, so it fell to the bare code fallback and a
+   console warning (audit, 26 Nov 2026). It rides in the "read the words" lane, with its own plain sentence below. If
+   the pipeline ever adds it to lanes.json, move it into FLAG_LANES and drop it here. */
+export const WEBSITE_FLAG_LANES: Record<string, string> = {
+  spelling_suspect: 'read_words',
+};
+
 /* ---------------------------------------------------------------------------
    What a STUDENT reads. The tables above are a copy of the pipeline's
    lanes.json and are pinned to it by a test, so they keep the pipeline's own
@@ -186,13 +194,23 @@ const STUDENT_TITLE: Record<string, string> = {
   english_release: 'English question',
 };
 
+/** A heading for one code, where the lane's own name would say too little. */
+const STUDENT_CODE_TITLE: Record<string, string> = {
+  spelling_suspect: 'This word may be misspelt',
+};
+
 const STUDENT_TEXT: Record<string, string> = {
   options:
     'Check that every option is there, in order, and matches the page. You cannot change an option here: if one is wrong or missing, press Ask the HOD.',
+  // The number and marks boxes only appear after Fix it, so the tip says to tap it (audit, 26 Nov 2026).
+  number: 'Check the number printed beside the question. Tap Fix it to change the number. If none is printed, leave it empty.',
+  marks: 'Check the marks against the page. Tap Fix it to change them. If the page prints no marks for this question, leave the marks empty.',
 };
 
 /** A code that needs its own instruction inside a lane that is otherwise generic. */
 const STUDENT_CODE_TEXT: Record<string, string> = {
+  spelling_suspect:
+    'This word may be misspelt. Check it against the page. If the typed word is different from the page, tap Fix it and correct it. If the paper itself prints it wrong, leave it.',
   incomplete_text:
     'The end of this question may be missing. Look at the page and type any missing words. Press Looks right only when the whole question is there.',
 };
@@ -229,7 +247,7 @@ export const NOT_FOR_STUDENT_LINE = 'Other things the computer noticed are for y
 export function laneForCode(code: string): Lane | null {
   const c = (code ?? '').trim();
   if (!c) return null;
-  const id = FLAG_LANES[c] ?? Object.entries(PREFIX_LANES).find(([p]) => c.startsWith(p))?.[1];
+  const id = FLAG_LANES[c] ?? WEBSITE_FLAG_LANES[c] ?? Object.entries(PREFIX_LANES).find(([p]) => c.startsWith(p))?.[1];
   return (id && LANES[id]) || null;
 }
 
@@ -293,7 +311,11 @@ export function describeLanes(
     block.detail = block.detail ?? kidDetail(studentEvidence(byCode[code]));
     blocks.set(lane.id, block);
   }
-  for (const block of blocks.values()) block.text = studentText(block.lane, block.codes);
+  for (const block of blocks.values()) {
+    block.text = studentText(block.lane, block.codes);
+    const own = block.codes.map((c) => STUDENT_CODE_TITLE[c]).find(Boolean);
+    if (own && block.codes.length === 1) block.title = own;
+  }
   const ordered = [...blocks.values()].sort((a, b) => Number(!a.asked) - Number(!b.asked));
   return { blocks: ordered, unmapped, note: kidDetail(studentEvidence(general)) };
 }

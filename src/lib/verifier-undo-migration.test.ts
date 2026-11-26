@@ -241,7 +241,9 @@ describe('screen wiring', () => {
   it('has an Undo last button, enabled by canUndoNow, with the U shortcut', () => {
     expect(screen).toContain('Undo last');
     // enabled by canUndoNow (checker-aftermath.ts): an answer this visit, or done questions on the paper; held off after a refusal
-    expect(screen).toContain('disabled={submitting || !canUndo}');
+    // Switched off it still takes a tap and says why (aria-disabled), so a phone with no hover learns the reason.
+    expect(screen).toContain('aria-disabled={undoOff || undefined}');
+    expect(screen).toContain('const undoOff = !canUndo;');
     expect(screen).toContain("action === 'undo' && canUndo");
     expect(screen).toContain('api.undoLast(paperId)');
   });

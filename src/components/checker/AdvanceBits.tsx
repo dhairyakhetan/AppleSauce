@@ -56,18 +56,22 @@ export function PaperStrip({ info, compact = true }: { info: PaperStripInfo; com
  * lost, it is kept on this device and sent again. Shown only once a send has
  * failed; a save that is simply on its way shows nothing.
  *
- * `compact` puts it inside the bento grid's top tile instead of above the card.
+ * `compact` puts it inside the bento grid's top tile instead of above the card. On a phone the top tile has no room
+ * for it, so the screen shows the full one above the buttons instead (like the offline note), and `className` hides
+ * each where it does not belong.
  */
 export function SaveStatusChip({
   waiting,
   failing,
   onRetry,
   compact = false,
+  className,
 }: {
   waiting: number;
   failing: boolean;
   onRetry: () => void;
   compact?: boolean;
+  className?: string;
 }) {
   if (waiting === 0 || !failing) return null;
   return (
@@ -77,6 +81,7 @@ export function SaveStatusChip({
       className={cn(
         'flex flex-wrap items-center gap-x-3 gap-y-1 bg-brand-subtle font-semibold text-foreground',
         compact ? 'rounded-[12px] px-3 py-1 text-[13px]' : 'mb-3 rounded-2xl px-4 py-2.5 text-[14px]',
+        className,
       )}
     >
       <span>

@@ -125,7 +125,7 @@ describe('verifier_paper_questions mapping', () => {
 
   it('counts and summarises states, leaving out zeros', () => {
     expect(stateCounts(qs).to_verify).toBe(1);
-    expect(stateSummary(qs)).toBe('1 to verify, 1 done, 1 with the HOD, 1 not for checkers');
+    expect(stateSummary(qs)).toBe('1 to check, 1 done, 1 with the HOD, 1 not for checkers');
     expect(stateSummary([])).toBe('');
   });
 
@@ -179,7 +179,7 @@ describe('paper limit note', () => {
   it('says the limit in plain words', async () => {
     const { PAPER_LIMIT_NOTE } = await import('@/lib/verifier-papers');
     expect(PAPER_LIMIT_NOTE).toBe(
-      'You get up to 10 papers at a time; more arrive as you finish. A paper with nothing done on it for 7 days goes back to the pool.',
+      'You get up to 10 papers at a time. Your HOD gives out more papers. A paper with nothing done on it for 7 days goes back to the pool.',
     );
   });
 });

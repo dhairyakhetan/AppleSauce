@@ -16,7 +16,7 @@ import { tileForNextQuestion } from '@/lib/checker-bento';
 import { BentoTile, FadeScroll, ImageLightbox, TilePager, useBentoWide } from '@/components/checker/BentoParts';
 import { ChangesChip, ChangesPanel, MarksInsideHint, QuestionChips, ToolsToolbar } from '@/components/checker/TypedBits';
 import { toolBlockedByUnsavedEdit, toolById, type CheckerToolId } from '@/lib/checker-tools';
-import { CheckerSkeleton, Callout, CheckGuidance, ContextPart, Modal, SplitPreview, useSignedUrl, useSignedUrls } from '@/components/checker/CheckerBits';
+import { CheckerSkeleton, Callout, CheckGuidance, CheckTipLine, ContextPart, Modal, SplitPreview, useSignedUrl, useSignedUrls } from '@/components/checker/CheckerBits';
 import { PartPictures } from '@/components/checker/PartPictures';
 import { ArrowLeft, Check, CircleHelp, Maximize2, Pencil, SkipForward, Undo2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -53,7 +53,7 @@ import {
   moveMarksOut,
   BIG_EDIT_WARNING,
 } from '@/lib/checker-body';
-import { checkerErrorAdvice, nextLoadProblem, reopenErrorMessage, type NextLoadProblem, undoErrorMessage, UNDONE_NOTE, LOAD_FAILED_TITLE, LOAD_FAILED_NOTE, PAPER_GONE_TITLE, PAPER_GONE_NOTE } from '@/lib/checker-errors';
+import { checkerErrorAdvice, nextLoadProblem, reopenErrorMessage, type NextLoadProblem, undoErrorMessage, UNDONE_FIX_NOTE, UNDONE_NOTE, LOAD_FAILED_TITLE, LOAD_FAILED_NOTE, PAPER_GONE_TITLE, PAPER_GONE_NOTE } from '@/lib/checker-errors';
 import { type EditableOption } from '@/lib/option-editing';
 import {
   clearDraft,
@@ -105,7 +105,7 @@ import { decideAck, isConfirmedNotSaved } from '@/lib/checker-advance';
 import type { VerdictAndNext } from '@/lib/checker-verdict-next';
 import '@/components/checker/checker-motion.css';
 
-/* The verify screen ("Start verifying"): one question of one paper at a time.
+/* The verify screen ("Start checking"): one question of one paper at a time.
    The question and its details are on the left; the picture of the printed
    page is on the right and switches with the question. Pass, Fix it, Ask the
    HOD and Skip load the next question of the same paper. When nothing is left
@@ -126,6 +126,11 @@ const HELP_REASONS = [
 
 /** The server refuses a "send back to the AI" with fewer characters than this (checker_ask_for_ai_redo). */
 const MIN_AI_REDO_REASON = 5;
+
+/** A phone or tablet (a finger, not a mouse): there the keyboard covers half the screen as soon as a box has focus. */
+function coarsePointer(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+}
 
 export function VerifyScreen({
   api,
@@ -288,7 +293,10 @@ export function VerifyScreen({
   // The card that was just answered stays hidden until its replacement is here.
   const maskedRaw = rawQuestion != null && (maskedIds.has(rawQuestion.id) || pendingIds.has(rawQuestion.id));
   const question = rawQuestion && !maskedRaw ? rawQuestion : null;
-  const showIncoming = !question && !questionQuery.isLoading && (maskedRaw || advancing || pendingHere > 0);
+  // loadGate, not isLoading: on weak signal the read is paused (isLoading false, no data), and that must show the
+  // skeleton, never a false "Paper finished" (CLAUDE.md, Testing).
+  const questionGate = loadGate(questionQuery);
+  const showIncoming = !question && questionGate !== 'loading' && (maskedRaw || advancing || pendingHere > 0);
 
   // Where the verifier is in this paper: "3 of 12 done". The paper's row
   // is shared with the list, and the old answer stays on screen while the new
@@ -470,6 +478,8 @@ export function VerifyScreen({
   const [changesOpen, setChangesOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpReason, setHelpReason] = useState('');
+  // "Throw away your changes?": asked when Cancel would drop typed work (Esc has its own press-twice guard).
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   // What the verifier has answered in this visit, newest last, so Undo knows
   // whether there is anything to take back. The server decides what can
@@ -539,6 +549,7 @@ export function VerifyScreen({
       setChangesOpen(false);
       setHelpOpen(false);
       setHelpReason('');
+      setConfirmCancel(false);
       setError(null);
     }
   }
@@ -950,7 +961,7 @@ export function VerifyScreen({
     submitVerdict('ask_help', { reason: reason.trim() || 'Not sure how to fix this' }, 'Sent to your HOD.', includeSkipped, () => setHelpOpen(false));
   }
 
-  // "Send back to the AI": for a question that is badly wrong. It does NOT go to the AI at once: it goes to the
+  // "Send back to the computer": for a question that is badly wrong. It does NOT go to the AI at once: it goes to the
   // HOD, who says yes or no. A reason is required (the server refuses under 5 characters), so ask before sending.
   function doAskForAiRedo(reason: string) {
     if (!question || submitting) return;
@@ -959,7 +970,7 @@ export function VerifyScreen({
       setError('Say what is wrong with it first. A few words is enough.');
       return;
     }
-    submitVerdict('ask_ai_redo', { reason: why }, 'Sent to your HOD. If they agree, the AI will look at it again.', includeSkipped, () => setHelpOpen(false));
+    submitVerdict('ask_ai_redo', { reason: why }, 'Sent to your HOD. If they agree, the computer will read it again.', includeSkipped, () => setHelpOpen(false));
   }
 
   // Skip is always available, also on the last question left. A skipped
@@ -984,6 +995,9 @@ export function VerifyScreen({
         return;
       }
       const result = await api.undoLast(paperId);
+      // A fix that is taken back takes its changes with it (the words, the number, the marks, the options): say so,
+      // instead of the changes simply being gone (audit, 26 Nov 2026).
+      const undidFix = answered.slice(-1)[0]?.kind === 'fix';
       setAnswered((a) => a.slice(0, -1));
       // Anything still on its way is older than this and must not replace it.
       appliedSeq.current = ++fetchSeq.current;
@@ -996,7 +1010,7 @@ export function VerifyScreen({
       qc.invalidateQueries({ queryKey: ['checker-my-stats', scope] });
       qc.invalidateQueries({ queryKey: ['verifier-papers', scope] });
       qc.invalidateQueries({ queryKey: ['verifier-paper-questions', scope, paperId] });
-      setNotice({ text: UNDONE_NOTE, tone: 'ok' });
+      setNotice({ text: undidFix ? UNDONE_FIX_NOTE : UNDONE_NOTE, tone: 'ok' });
     } catch (err) {
       setError(undoErrorMessage(err));
     } finally {
@@ -1018,6 +1032,13 @@ export function VerifyScreen({
     setFixTool('fix');
     setRestored(false);
     setMode('check');
+  }
+
+  /** Cancel pressed (the bar's or the card's): typed changes are not thrown away without asking first. */
+  function requestCancel() {
+    if (submitting) return;
+    if (mode === 'fix' && unsavedEdit) setConfirmCancel(true);
+    else cancelEdit();
   }
 
   /** Open Fix it: the part card turns into the editor in place. On a phone the Question tile is the one with the card. */
@@ -1107,6 +1128,8 @@ export function VerifyScreen({
       if (e.key === 'Escape') setHelpOpen(false);
       return;
     }
+    // The "Throw away your changes?" dialog handles its own keys (Esc keeps editing).
+    if (confirmCancel) return;
     if (e.key === 'Escape' && mode !== 'check') {
       e.preventDefault();
       // Typed changes are not thrown away by one stray Esc: the first press asks, a second one soon after cancels.
@@ -1168,20 +1191,31 @@ export function VerifyScreen({
 
   // Rewind: enabled once the verifier has answered something in this visit, or the paper already has done
   // questions (after a refresh); held off after a refused answer (canUndoNow). Also shown on the "done" screens, where the last answer is the one most
-  // often clicked by mistake. On a phone it is icon-only, to leave the room to
-  // the two words that matter.
+  // often clicked by mistake. On a phone it says "Undo" (an icon alone was not understood, audit 26 Nov 2026).
+  // Switched off it still takes a tap (aria-disabled, not disabled): the tap says why, in the message area, because a
+  // phone has no hover to show the tooltip.
+  const undoOff = !canUndo;
   const undoButton = (
     <button
       type="button"
-      onClick={() => void doUndo()}
-      disabled={submitting || !canUndo}
+      onClick={() => {
+        if (submitting) return;
+        if (undoOff) {
+          setNotice({ text: undoTitle(false, undoHeld), tone: 'warn' });
+          return;
+        }
+        void doUndo();
+      }}
+      disabled={submitting}
+      aria-disabled={undoOff || undefined}
       data-testid="undo-last"
       data-tour="undo"
       aria-label="Undo last"
       title={undoTitle(canUndo, undoHeld)}
-      className="tap-44 order-3 inline-flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-full bg-muted text-[15px] font-bold text-warm-secondary transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-disabled md:order-none md:w-auto md:px-4"
+      className="tap-44 order-3 inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-muted px-3 text-[14px] font-bold text-warm-secondary transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-disabled aria-disabled:cursor-not-allowed aria-disabled:opacity-disabled aria-disabled:active:scale-100 md:order-none md:gap-2 md:px-4 md:text-[15px]"
     >
       <Undo2 className={ACTION_ICON_CLASS} aria-hidden="true" />
+      <span className="md:hidden">Undo</span>
       <span className="hidden md:inline">Undo last</span>
     </button>
   );
@@ -1193,6 +1227,9 @@ export function VerifyScreen({
      Menu. Only the title may shrink and cut off; it carries the whole name as
      its tooltip. On a phone the progress bar is a thin line along the foot of
      the tile. */
+  // Said to a screen reader inside the message after an answer, once the next question is on screen.
+  const nowUpLine = question && progress ? `Question ${progress.position} of ${progress.total} is up.` : null;
+
   const topTile = (
     <div
       data-tour="paper"
@@ -1212,7 +1249,7 @@ export function VerifyScreen({
         </button>
         <div className="min-w-0 flex-1 md:flex-none md:basis-[34%]">
           <p className="truncate text-[12px] font-semibold uppercase tracking-[.04em] text-warm-meta">
-            Verifying
+            Checking
             {question ? (
               <span className="ml-2 inline-flex gap-1 align-middle normal-case tracking-normal">
                 <DebugId label="question" value={question.id} />
@@ -1229,7 +1266,8 @@ export function VerifyScreen({
               </span>
             ) : null}
           </p>
-          <h2 className="truncate text-[15px] font-bold leading-snug text-foreground" title={currentPaperLabel}>
+          {/* On a phone the name may take two lines ("Mathematics, Clas..." told nobody which paper); one line from md up. */}
+          <h2 className="line-clamp-2 break-words text-[15px] font-bold leading-snug text-foreground md:truncate" title={currentPaperLabel} data-testid="verify-title">
             {currentPaperLabel}
           </h2>
         </div>
@@ -1252,7 +1290,8 @@ export function VerifyScreen({
         ) : (
           <div className="hidden md:block md:flex-1" aria-hidden="true" />
         )}
-        <SaveStatusChip compact waiting={outboxState.entries.length} failing={outboxState.failing} onRetry={box.retryNow} />
+        {/* On a phone there is no room up here: the full note sits above the buttons instead (the action bar). */}
+        <SaveStatusChip compact className="hidden md:flex" waiting={outboxState.entries.length} failing={outboxState.failing} onRetry={box.retryNow} />
         {toolbar ? <div className="flex shrink-0 items-center">{toolbar}</div> : null}
       </div>
     </div>
@@ -1285,7 +1324,9 @@ export function VerifyScreen({
               <div role="status" data-testid="offline-note" className="mb-2 rounded-[12px] bg-brand-subtle px-3 py-2 text-[14px] font-semibold text-foreground">
                 You are offline. Answers stay on this device and are sent when the connection is back.
               </div>
-            ) : null}
+            ) : (
+              <SaveStatusChip className="mb-2 md:hidden" waiting={outboxState.entries.length} failing={outboxState.failing} onRetry={box.retryNow} />
+            )}
             {error ? (
               <div role="alert" data-testid="save-error" className="mb-2 rounded-[12px] bg-destructive/10 px-3 py-2 text-[14px] text-destructive">
                 {error}
@@ -1316,7 +1357,9 @@ export function VerifyScreen({
                     tone={blank && !lost && mode === 'check' ? 'muted' : 'mint'}
                     className={answerButtonClass}
                     onClick={doPass}
-                    disabled={submitting || !canPass || marksInvalid}
+                    disabled={submitting}
+                    // Switched off it still takes a tap: doPass says why beside the buttons (no hover on a phone).
+                    ariaDisabled={!canPass || marksInvalid}
                     title={
                       !canPass
                         ? 'This question has no words, so it cannot be marked as right'
@@ -1342,7 +1385,7 @@ export function VerifyScreen({
                       Fix it
                     </ActionButton>
                   ) : (
-                    <ActionButton tone="muted" className={answerButtonClass} onClick={cancelEdit} disabled={submitting} title="Cancel (Esc)">
+                    <ActionButton tone="muted" className={answerButtonClass} onClick={requestCancel} disabled={submitting} title="Cancel (Esc)">
                       <X className={ACTION_ICON_CLASS} aria-hidden="true" />
                       Cancel
                     </ActionButton>
@@ -1560,6 +1603,32 @@ export function VerifyScreen({
         /** What sits under the words while the card is the editor: number and marks, the typo box, notes. */
         const editFooter = (
           <>
+            {/* Phone only: Save and Cancel right under the words. The screen is locked to the phone's height, so the
+                keyboard can cover the bar at the bottom; these stay next to what is being typed (audit, 26 Nov 2026). */}
+            <div className="flex flex-col gap-1.5 md:hidden" data-testid="fix-save-inline">
+              {error ? (
+                // The same words as the alert in the bar below (that one is read out; this one is only seen).
+                <p aria-hidden="true" className="rounded-[10px] bg-destructive/10 px-3 py-1.5 text-[13px] text-destructive">
+                  {error}
+                </p>
+              ) : null}
+              <div className="flex gap-2">
+                <ActionButton
+                  tone="mint"
+                  className="min-w-0 flex-1 px-3"
+                  onClick={doPass}
+                  disabled={submitting}
+                  ariaDisabled={!canPass || marksInvalid}
+                >
+                  <Check className={ACTION_ICON_CLASS} aria-hidden="true" />
+                  {submitting ? 'Saving...' : edited ? 'Save' : 'Looks right'}
+                </ActionButton>
+                <ActionButton tone="muted" className="min-w-0 flex-1 px-3" onClick={requestCancel} disabled={submitting}>
+                  <X className={ACTION_ICON_CLASS} aria-hidden="true" />
+                  Cancel
+                </ActionButton>
+              </div>
+            </div>
             <QuestionChips
               className="mb-0"
               number={numberDraft || null}
@@ -1613,6 +1682,9 @@ export function VerifyScreen({
         const splitBody = (
           <div>
             <p className="mb-2 text-[13px] text-warm-secondary">Tap right before where the second question starts, then press Split here.</p>
+            <p className="mb-2 rounded-[8px] bg-brand-subtle px-2.5 py-1.5 text-[13px] font-semibold text-foreground" data-testid="split-no-undo">
+              A split cannot be undone. Check the preview before you press Split here.
+            </p>
             <textarea
               readOnly
               value={bodyDraft}
@@ -1650,11 +1722,13 @@ export function VerifyScreen({
             />
           );
 
-        // Directly under the card. While the card is taller than the tile (a long
+        // Directly under the card. From md up, while the card is taller than the tile (a long
         // question in Fix it) the row stays pinned to the foot of the tile instead of
-        // scrolling away, so a tool is never a scroll from the words.
+        // scrolling away, so a tool is never a scroll from the words. On a phone the tile is
+        // small and a pinned row covered the end of a long question (audit, 26 Nov 2026), so
+        // there it simply follows the card and every word can be read.
         const tools = (
-          <div className="sticky bottom-0 z-[1] mb-3 bg-card pb-1 pt-1" data-testid="tools-dock">
+          <div className="z-[1] mb-3 bg-card pb-1 pt-1 md:sticky md:bottom-0" data-testid="tools-dock">
             <ToolsToolbar
               active={mode === 'split' ? 'split' : mode === 'fix' ? fixTool : null}
               available={{ fix: true, split: splitOffered, formula: true, or: orOnly }}
@@ -1741,7 +1815,9 @@ export function VerifyScreen({
         // goes for a question whose page is verified but whose picture is not in storage: the page
         // button used to lead to a one-line note and nothing else, while the paper's other pages
         // could be read (tracker of 2 Nov, "click to view full page not working").
-        const paperToggle = Boolean(hasCrop && !flipShown && (!pageToggle || pageUnavailable));
+        // And once the question's own page is open, the other pages are one tap away too: the page alone had no
+        // previous or next (audit, 26 Nov 2026).
+        const paperToggle = Boolean(!flipShown && ((hasCrop && (!pageToggle || pageUnavailable)) || pageViewerOn));
         const paperOpen = paperToggle && showPaper;
         const pageTileOn = pageViewerOn || flipShown || paperOpen;
         const PAGE_UNAVAILABLE = 'The whole page is not stored yet. The photo above is still right; you can open the whole paper instead.';
@@ -1966,7 +2042,7 @@ export function VerifyScreen({
                       {pageToggleButton('ml-auto shrink-0 bg-white')}
                     </div>
                   ) : null}
-                  {paperToggle && !paperOpen ? (
+                  {paperToggle && !paperOpen && !pageViewerOn ? (
                     <div
                       data-testid="paper-strip"
                       className="flex shrink-0 items-center gap-2 rounded-[20px] border-2 border-brand bg-brand-subtle px-3 py-1.5 shadow-card-bone md:rounded-[18px]"
@@ -1981,13 +2057,20 @@ export function VerifyScreen({
                       tabbed={false}
                       id="verify-panel-page"
                       tourId={cropVisible && !oneBox ? undefined : 'picture'}
-                      label={pageViewerOn ? PAGE_HEADING : paperOpen ? 'The whole paper' : 'Photo of the printed paper'}
-                      title={pageViewerOn ? PAGE_HEADING : paperOpen ? 'The whole paper' : pictureHeading(null)}
+                      label={paperOpen ? 'The whole paper' : pageViewerOn ? PAGE_HEADING : 'Photo of the printed paper'}
+                      title={paperOpen ? 'The whole paper' : pageViewerOn ? PAGE_HEADING : pictureHeading(null)}
                       panelClass={cn('flex min-h-0', oneBox ? 'flex-1' : 'flex-[3_1_0%]')}
                       headerExtra={
                         paperOpen
                           ? paperToggleButton('bg-white px-3 py-1 text-[12px]')
-                          : pageToggle
+                          : pageViewerOn && paperToggle
+                            ? (
+                              <span className="flex flex-wrap justify-end gap-1.5">
+                                {paperToggleButton('bg-white px-3 py-1 text-[12px]')}
+                                {pageToggle ? pageToggleButton('bg-white px-3 py-1 text-[12px]') : null}
+                              </span>
+                            )
+                            : pageToggle
                             ? pageToggleButton('bg-white px-3 py-1 text-[12px]')
                             : paperToggle
                               ? paperToggleButton('bg-white px-3 py-1 text-[12px]')
@@ -2000,14 +2083,16 @@ export function VerifyScreen({
                                 : null
                       }
                     >
-                      {pageViewerOn ? (
+                      {paperOpen ? (
+                        <FadeScroll>{paperBody}</FadeScroll>
+                      ) : pageViewerOn ? (
                         pageBody(true)
                       ) : oneBox ? (
                         <FadeScroll revealKey={rightRevealKey} revealSelector={FOCUSED_SELECTOR}>
                           {oneBoxBody}
                         </FadeScroll>
                       ) : (
-                        <FadeScroll>{paperOpen ? paperBody : flipBody}</FadeScroll>
+                        <FadeScroll>{flipBody}</FadeScroll>
                       )}
                     </PrintedFrame>
                   ) : null}
@@ -2023,11 +2108,24 @@ export function VerifyScreen({
         }
 
         /* --------------------------------------- phone: Question | Page | Fix */
+        // The full "How to check" stays at the foot; its first tip is one short line above the words, where it is seen.
+        const tipLine = guidance ? (
+          canCompare && laneSummary && (laneSummary.blocks.length > 0 || laneSummary.unmapped.length > 0) ? (
+            <CheckTipLine summary={laneSummary} targetId="check-guidance-phone" />
+          ) : whatToCheckLine.line ? (
+            <CheckTipLine line={whatToCheckLine.line} targetId="check-guidance-phone" />
+          ) : null
+        ) : null;
         const typedPane = (
           <TypedFrame tile chip={false} panelClass="flex min-h-0 flex-1">
             <FadeScroll revealKey={leftRevealKey} revealSelector={FOCUSED_SELECTOR}>
+              {tipLine}
               {leftContent}
-              {guidance ? <div className="mt-3">{guidance}</div> : null}
+              {guidance ? (
+                <div className="mt-3" id="check-guidance-phone">
+                  {guidance}
+                </div>
+              ) : null}
             </FadeScroll>
           </TypedFrame>
         );
@@ -2052,7 +2150,7 @@ export function VerifyScreen({
                   {PAGE_UNAVAILABLE}
                 </p>
               ) : null}
-              {pageViewerOn ? (
+              {pageViewerOn && !paperOpen ? (
                 <div className="flex min-w-0 flex-col">
                   <p className="mb-1 text-[12px] font-semibold text-warm-secondary">{PAGE_HEADING}</p>
                   {pageBody(false)}
@@ -2092,19 +2190,6 @@ export function VerifyScreen({
       {topTile}
 
       <div aria-live="polite" className="contents">
-        {notice ? (
-          <div
-            role="status"
-            // Floats over the page instead of pushing the question down
-            // (no layout shift on every save).
-            className={cn(
-              'fixed left-1/2 top-24 z-40 w-[min(92vw,28rem)] -translate-x-1/2 rounded-2xl px-4 py-3 text-center text-[14px] font-semibold text-foreground shadow-popover overlay-enter-menu',
-              notice.tone === 'ok' ? 'bg-mint' : 'bg-brand-subtle',
-            )}
-          >
-            {notice.text}
-          </div>
-        ) : null}
         {/* With a question open the error sits beside the buttons (the action
             bar below); this one is for the screens that have no buttons. */}
         {error && !question ? (
@@ -2135,7 +2220,7 @@ export function VerifyScreen({
 
       {/* The tiles take everything between the top tile and the action bar. */}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-y-auto">
-        {questionQuery.isLoading ? (
+        {questionGate === 'loading' ? (
           <CheckerSkeleton />
         ) : nextFailed || (nextIsError && !showIncoming) ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
@@ -2232,8 +2317,40 @@ export function VerifyScreen({
         )}
       </div>
 
-      {actionBar}
-      {incomingBar}
+      {/* The message after an answer ("Marked as right.") floats just ABOVE the buttons, not over the phone's
+          Question and Page tabs, where it swallowed taps (audit, 26 Nov 2026). It lets taps through to whatever is
+          under it (pointer-events-none), except its own close button, and never pushes the question about. */}
+      <div className="relative shrink-0">
+        <div aria-live="polite" className="pointer-events-none absolute inset-x-0 bottom-full z-40 mb-2 flex justify-center px-1">
+          {notice ? (
+            <div
+              role="status"
+              data-testid="checker-notice"
+              className={cn(
+                'flex w-[min(100%,28rem)] items-start gap-1 rounded-2xl py-1.5 pl-4 pr-1.5 text-[14px] font-semibold text-foreground shadow-popover overlay-enter-menu',
+                notice.tone === 'ok' ? 'bg-mint' : 'bg-brand-subtle',
+              )}
+            >
+              <p className="min-w-0 flex-1 text-pretty py-1.5">
+                {notice.text}
+                {/* A screen reader also hears where the checker now is, in the same message. */}
+                {notice.tone === 'ok' && nowUpLine ? <span className="sr-only"> {nowUpLine}</span> : null}
+              </p>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                aria-label="Close this message"
+                data-testid="checker-notice-close"
+                className="tap-44 pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-warm-secondary transition-transform duration-150 active:scale-press-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {actionBar}
+        {incomingBar}
+      </div>
 
       {tourOpen && question ? (
         <CheckerWalkthrough
@@ -2251,6 +2368,29 @@ export function VerifyScreen({
       ) : null}
 
       {lightbox ? <ImageLightbox src={lightbox.src} alt={lightbox.alt} rotation={lightbox.rotation} onClose={() => setLightbox(null)} /> : null}
+
+      {confirmCancel && question ? (
+        <Modal onClose={() => setConfirmCancel(false)} labelledBy="checker-cancel-title">
+          <h2 id="checker-cancel-title" className="mb-2 text-[16px] font-bold text-foreground">
+            Throw away your changes?
+          </h2>
+          <p className="mb-3 text-[14px] text-warm-secondary">What you changed on this question will be lost. The question stays as it was.</p>
+          <div className="flex flex-wrap gap-2" data-testid="cancel-confirm">
+            <ActionButton tone="mint" onClick={() => setConfirmCancel(false)}>
+              Keep editing
+            </ActionButton>
+            <ActionButton
+              tone="muted"
+              onClick={() => {
+                setConfirmCancel(false);
+                cancelEdit();
+              }}
+            >
+              Yes, throw them away
+            </ActionButton>
+          </div>
+        </Modal>
+      ) : null}
 
       {helpOpen && question ? (
         <Modal onClose={() => setHelpOpen(false)} labelledBy="checker-help-title">
@@ -2277,7 +2417,8 @@ export function VerifyScreen({
             ))}
           </div>
           <textarea
-            autoFocus
+            // On a touch screen the keyboard would open at once and hide the quick reasons above, so no auto-focus there.
+            autoFocus={!coarsePointer()}
             value={helpReason}
             onChange={(e) => setHelpReason(e.target.value)}
             placeholder="Or say it in your own words"
@@ -2300,7 +2441,7 @@ export function VerifyScreen({
               first, so nothing is sent to the computer until they agree.
             </p>
             <ActionButton tone="muted" onClick={() => doAskForAiRedo(helpReason)} disabled={submitting}>
-              Send back to the AI
+              Send back to the computer
             </ActionButton>
           </div>
         </Modal>

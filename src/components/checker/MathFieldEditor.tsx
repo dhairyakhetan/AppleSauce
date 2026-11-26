@@ -127,9 +127,9 @@ export default function MathFieldEditor({ initialLatex, display, onDone, onCance
   }
 
   return (
+    // An editing panel inside the card, not a dialog: nothing behind it is blocked, so it does not claim to be one.
     <div
-      role="dialog"
-      aria-modal="true"
+      role="group"
       aria-label="Edit this maths"
       className="rounded-2xl bg-card p-3 shadow-card"
       onKeyDown={(e) => {
@@ -163,13 +163,14 @@ export default function MathFieldEditor({ initialLatex, display, onDone, onCance
         <MathPreview latex={liveLatex} display={display} className="text-[16px] text-foreground" />
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <p className="mt-3 text-[12px] text-warm-secondary">Press Use this formula, then press Save to keep the question.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={done}
           className="tap-44 rounded-full bg-brand px-4 py-2 text-[13px] font-semibold text-foreground transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
-          Done
+          Use this formula
         </button>
         <button
           type="button"

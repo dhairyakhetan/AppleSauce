@@ -418,7 +418,11 @@ export function createFakeCheckerApi(): FakeCheckerApi {
         .filter((q) => paperOf.get(q.id) === key)
         .map((q) => {
           const served = outcome.get(q.id);
-          const state: PaperQuestionState = served ?? (servable(q) ? 'to_verify' : 'not_for_verifiers');
+          // To check only while it is really waiting for this checker (in the queue), the same rule myPapers counts
+          // `remaining` by. Before, "Empty the queue" left the card saying "Your part is done" while this list
+          // still said "2 to check" (audit, 26 Nov 2026).
+          const open = queue.some((x) => x.id === q.id) && servable(q);
+          const state: PaperQuestionState = served ?? (open ? 'to_verify' : 'not_for_verifiers');
           return {
             id: q.id,
             ord: q.ord,

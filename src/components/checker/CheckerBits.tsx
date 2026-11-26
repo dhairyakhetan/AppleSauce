@@ -178,6 +178,45 @@ export function CheckGuidance({
   );
 }
 
+/**
+ * The first tip in one short line, for a phone, where the full "How to check" sits at the foot of a long tile and is
+ * easily never seen (audit, 26 Nov 2026). It sits above the typed words. "More tips" scrolls to the full guidance
+ * (`targetId`). Shows nothing when the checker has hidden the tips, or when there is no tip a student is asked to act on.
+ */
+export function CheckTipLine({
+  summary,
+  line,
+  targetId,
+  className,
+}: {
+  summary?: ReturnType<typeof describeLanes> | null;
+  line?: string | null;
+  targetId?: string;
+  className?: string;
+}) {
+  const [hidden] = useState(readTipsHidden);
+  const text = line || summary?.blocks.find((b) => b.asked)?.text || summary?.unmapped[0]?.sentence || '';
+  if (hidden || !text) return null;
+  return (
+    <div className={cn('mb-3 flex items-start gap-1.5 rounded-[10px] bg-muted px-2.5 py-1.5', className)} data-testid="check-tip-line">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-warm-meta" aria-hidden="true" />
+      <p className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-snug text-warm-secondary">
+        <span className="font-semibold text-foreground">Tip: </span>
+        {text}
+      </p>
+      {targetId ? (
+        <button
+          type="button"
+          onClick={() => document.getElementById(targetId)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}
+          className="tap-44 shrink-0 rounded-full px-1.5 text-[13px] font-medium text-warm-secondary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          More tips
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /* Shaped like what it replaces: a picture box and a question box. */
 export function CheckerSkeleton() {
   return (

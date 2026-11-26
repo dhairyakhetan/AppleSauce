@@ -38,8 +38,8 @@ export const KID_SENTENCE: Record<string, string> = {
   figure_missing:
     'This question talks about a picture or diagram that is not attached yet. You cannot add it here, and that is fine. Just check the words read right.',
   short_body: 'This looks too short to be a whole question. Check it was not cut off.',
-  missing_marks: 'No marks are set. Fill in the marks if the paper shows them.',
-  display_number_missing: 'No question number is set. Fill in the number printed on the paper.',
+  missing_marks: 'No marks are set. Tap Fix it and fill in the marks if the paper shows them.',
+  display_number_missing: 'No question number is set. Tap Fix it and fill in the number printed on the paper.',
   unbalanced_math_delim: 'A maths part may be broken, like a bracket or symbol without its pair.',
   ocr_junk: 'Some letters look like random noise, not real words.',
   merged_subparts: 'Two parts of this question may be stuck together.',
@@ -49,6 +49,8 @@ export const KID_SENTENCE: Record<string, string> = {
   ocr_fused: 'A few questions got stuck together. Split them.',
   figure_text_mixed: 'This may be a picture, real words, or both. Check against the paper.',
   other: 'Something else looked wrong. Read the note below.',
+  // Written by the website's own spelling check, not the pipeline (see checker-lanes.ts, WEBSITE_FLAG_LANES).
+  spelling_suspect: 'This word may be misspelt. Check it against the paper.',
 
   // W14, English (no pictures; UnlimitedOCR/auditor/pipeline/english_release.py
   // GATE_SENTENCE holds the same words, keep them in sync by hand). A hidden

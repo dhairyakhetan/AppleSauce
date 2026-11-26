@@ -418,8 +418,8 @@ describe('the card stays the only editor', () => {
     expect(screen).toContain('FIX_RULE_LINE');
   });
 
-  it('keeps the tools docked at the foot of the pane while the card is long', () => {
-    expect(screen).toContain('sticky bottom-0 z-[1]');
+  it('keeps the tools docked at the foot of the pane while the card is long (tablet and up; on a phone it follows the card)', () => {
+    expect(screen).toContain('md:sticky md:bottom-0" data-testid="tools-dock"');
     expect(screen).toContain('data-testid="tools-dock"');
   });
 });

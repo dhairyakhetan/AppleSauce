@@ -99,10 +99,12 @@ describe('the screens', () => {
   const needs = readFileSync('src/components/hod/NeedsYouTab.tsx', 'utf8');
 
   it('the student sheet has the button, needs a reason, and says the HOD decides first', () => {
-    expect(verify).toContain('Send back to the AI');
+    // One name on the checker screens: "the computer" (audit, 26 Nov 2026).
+    expect(verify).toContain('Send back to the computer');
+    expect(verify).not.toContain('Send back to the AI<');
     expect(verify).toContain("submitVerdict('ask_ai_redo'");
     expect(verify).toContain('MIN_AI_REDO_REASON = 5');
-    expect(verify).toMatch(/If they agree, the AI will look at it again/);
+    expect(verify).toMatch(/If they agree, the computer will read it again/);
   });
 
   it('the HOD card asks yes or no and calls the new function', () => {

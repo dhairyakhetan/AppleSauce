@@ -22,9 +22,10 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object'
 // -------------------------------------------------------------------- papers
 
 /** A verifier holds at most 10 unfinished papers at a time (an HOD can still assign more by hand).
+ *  Since 26 Nov 2026 papers go out only when an HOD presses Auto assign all, so nothing "arrives as you finish".
  *  The 7 days are verifier_idle_days() (20261007140000): say so, or papers seem to change for no reason. */
 export const PAPER_LIMIT_NOTE =
-  'You get up to 10 papers at a time; more arrive as you finish. A paper with nothing done on it for 7 days goes back to the pool.';
+  'You get up to 10 papers at a time. Your HOD gives out more papers. A paper with nothing done on it for 7 days goes back to the pool.';
 
 export interface MyPaper {
   assignment_id: number;
@@ -125,7 +126,22 @@ export function paperCardProgress(
     : Math.max(p.total, p.done + p.remaining, 0);
   const done = Math.min(whole ? (p.paper_passed ?? 0) : p.done, total);
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-  return { label: `${done} of ${total} done`, percent, finished: p.remaining === 0 };
+  const finished = p.remaining === 0;
+  // "Your part is done" above a bare "0 of 12 done" read as a contradiction (audit, 26 Nov 2026): when the
+  // checker's part is over but the paper is not, the count says it is the whole paper's.
+  const label = finished && whole && done < total ? `${done} of ${total} done on the whole paper` : `${done} of ${total} done`;
+  return { label, percent, finished };
+}
+
+/**
+ * The card's status line when the checker's part is over, nothing is with the HOD, and yet the paper is not all
+ * passed (its other questions are for the HOD or an admin, never for a checker). The shared line would say "it waits
+ * for approval", which is not true yet. Null: use the shared line (checkerCardLine).
+ */
+export function partDoneNote(p: Pick<MyPaper, 'remaining' | 'with_hod'> & Partial<Pick<MyPaper, 'paper_total' | 'paper_passed'>>): string | null {
+  const total = p.paper_total ?? 0;
+  if (p.remaining > 0 || p.with_hod > 0 || total === 0) return null;
+  return (p.paper_passed ?? 0) < total ? 'Your part is done. Your HOD settles the rest of this paper.' : null;
 }
 
 /** How a subject family from verifier_subjects_with_papers reads on screen. */
@@ -190,7 +206,7 @@ export function sortPapers(list: MyPaper[]): MyPaper[] {
 export type PaperQuestionState = 'to_verify' | 'done' | 'with_hod' | 'set_aside' | 'not_for_verifiers';
 
 export const QUESTION_STATE_LABEL: Record<PaperQuestionState, string> = {
-  to_verify: 'To verify',
+  to_verify: 'To check',
   done: 'Done',
   with_hod: 'With the HOD',
   set_aside: 'Set aside',
@@ -253,11 +269,11 @@ export function stateCounts(list: Pick<PaperQuestion, 'state'>[]): Record<PaperQ
   return out;
 }
 
-/** "5 to verify, 4 done, 1 with the HOD", leaving out zeros. */
+/** "5 to check, 4 done, 1 with the HOD", leaving out zeros. */
 export function stateSummary(list: Pick<PaperQuestion, 'state'>[]): string {
   const c = stateCounts(list);
   const parts: string[] = [];
-  if (c.to_verify) parts.push(`${c.to_verify} to verify`);
+  if (c.to_verify) parts.push(`${c.to_verify} to check`);
   if (c.done) parts.push(`${c.done} done`);
   if (c.with_hod) parts.push(`${c.with_hod} with the HOD`);
   if (c.set_aside) parts.push(`${c.set_aside} set aside`);
