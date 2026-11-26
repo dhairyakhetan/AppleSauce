@@ -141,7 +141,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs, and tapping it says so under the tabs (for phones).
 - **Write questions, the layout pass (unslop):** a cross on each sent-back question removes it from the list for good
   on that device (kept in `localStorage` under `games.sentBack.dismissed` by `pages/Games.tsx`, which leaves them out
-  of the list and the tab's count; the database has no place for it). "See why" after a send brings a removed one back. The problem list has one entry per line, the
+  of the list and the tab's count; the database has no place for it). A removed one comes back only when the same question is sent again unchanged (the send says so, with "See why"). The problem list has one entry per line, the
   line number coloured red or amber and the text dark; clicking it centres the whole question in the box (measured on
   the copy behind the box, as lines wrap). Under each result only the games it is left out of ("Not in: Word search").
   Step 3 has the same card colour as the others, with a Full screen button by its heading; the small preview's

@@ -278,6 +278,8 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     try {
       const result = await api.sendBatch(these);
       setSent(result);
+      // a sent-back question removed with the cross comes back only when it is sent again unchanged
+      if (result.sentBackIds.length) onDismiss(result.sentBackIds, false);
       setKept(text);
       if (result.sent) { flash('send'); onSent(); setBankTry((n) => n + 1); }
     } catch (e) {
@@ -303,7 +305,6 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   };
   /** "See why": opens the sent-back list at these questions. */
   const seeWhy = (ids: string[]) => {
-    onDismiss(ids, false); // removed with the cross earlier: back in the list, so the HoD's note can be read
     setBackOpen(true);
     setBackFocus(ids);
     requestAnimationFrame(() => scrollToEl(backPanel.current));

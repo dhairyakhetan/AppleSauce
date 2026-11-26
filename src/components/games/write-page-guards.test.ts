@@ -19,8 +19,9 @@ describe('Write questions: guards', () => {
     expect(write).toMatch(/if \(focused && composing\.current\) return;/);
   });
 
-  it('brings a removed sent-back question back when "See why" points at it', () => {
-    expect(write).toMatch(/const seeWhy = \(ids: string\[\]\) => \{\s*onDismiss\(ids, false\);/);
+  it('brings a removed sent-back question back only when it is sent again unchanged', () => {
+    expect(write).toContain('if (result.sentBackIds.length) onDismiss(result.sentBackIds, false);');
+    expect(write.match(/onDismiss\([^)]*, false\)/g)).toHaveLength(2); // that, and the cross's own Undo
   });
 
   it('says under the tabs what a tapped greyed-out game needs (a hover note never shows on a phone)', () => {
