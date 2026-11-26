@@ -36,6 +36,7 @@ import {
   normaliseProfile,
   PAPER_LIMIT_NOTE,
   paperCardProgress,
+  partDoneNote,
   checkerSignInPath,
   parseSubjectList,
   loadGate,
@@ -56,12 +57,12 @@ import { BAR_WELL } from '@/lib/chart-styles';
 /* My papers: the verifier's home (Kid Mode). Three views, chosen by the URL:
 
      /checker                       the verifier's papers, with progress
-     /checker?paper=<id>            one paper: all of its questions, then Start verifying
+     /checker?paper=<id>            one paper: all of its questions, then Start checking
      /checker?paper=<id>&verify=1   one question at a time, question left, picture right
      /checker?paper=<id>&verify=1&reopen=<question>   the same, opened on a Done question being edited
 
    Reachable only by an account an admin or HOD has set up as a verifier. Papers
-   are handed out automatically (a whole paper to one verifier, never above their
+   are handed out when an HOD presses Auto assign all (a whole paper to one verifier, never above their
    grade); a verifier does not pick subjects or classes, an HOD does.
 
    In a test build (VITE_PREVIEW_TOOLS) with dummy mode on, the same page runs
@@ -97,7 +98,7 @@ export function CheckerPage({
   dummy?: boolean;
   banner?: React.ReactNode;
 }) {
-  usePageMeta('My papers | Shikshaq', 'Verify one question at a time against the printed paper.');
+  usePageMeta('My papers | Shikshaq', 'Check one question at a time against the printed paper.');
   const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -165,6 +166,15 @@ export function CheckerPage({
     refetchOnMount: 'always',
   });
 
+  // Papers finished, next to the questions count. Null (shown as nothing) until the database function is pasted.
+  const paperStatsQuery = useQuery({
+    queryKey: ['checker-my-paper-stats', scope],
+    queryFn: api.myPaperStats,
+    enabled: allowed === true,
+    staleTime: 30 * 1000,
+    refetchOnMount: 'always',
+  });
+
   if (accessFailed) {
     return (
       <BentoStack className="min-h-screen bg-muted">
@@ -220,14 +230,26 @@ export function CheckerPage({
   // the page's small controls moved into the screen's top tile.
   const verifyView = Boolean(paperId && verifying);
 
-  const countsText = statsQuery.data ? `Today ${statsQuery.data.today_count} · Total ${statsQuery.data.total_count}` : 'Counting...';
+  const countsText = statsQuery.data ? `${paperStatsQuery.data ? 'Questions: ' : ''}Today ${statsQuery.data.today_count} · Total ${statsQuery.data.total_count}` : 'Counting...';
+  const paperCounts = paperStatsQuery.data;
   const counts = statsQuery.isError && !statsQuery.data ? null : (
-    <span
-      className={cn('rounded-full bg-muted px-3 py-1 text-[13px] font-semibold', statsQuery.data ? 'tabular-nums text-warm-secondary' : 'text-warm-meta')}
-      data-testid="my-counts"
-    >
-      {countsText}
-    </span>
+    <>
+      <span
+        className={cn('rounded-full bg-muted px-3 py-1 text-[13px] font-semibold', statsQuery.data ? 'tabular-nums text-warm-secondary' : 'text-warm-meta')}
+        data-testid="my-counts"
+      >
+        {countsText}
+      </span>
+      {paperCounts ? (
+        <span
+          className="rounded-full bg-muted px-3 py-1 text-[13px] font-semibold tabular-nums text-warm-secondary"
+          data-testid="my-paper-counts"
+          title="Papers you have finished: you gave your answers and nothing is left on them for students"
+        >
+          Papers: Today {paperCounts.papers_today} · Total {paperCounts.papers_total}
+        </span>
+      ) : null}
+    </>
   );
 
   // The verify screen's top tile holds one Menu button and nothing else (owner, 12 Oct 2026:
@@ -433,7 +455,7 @@ function PaperList({
         <div className="rounded-2xl bg-muted px-4 py-8 text-center" data-testid="no-papers">
           <p className="text-[16px] font-bold text-foreground">No papers for you yet</p>
           <p className="mx-auto mt-1 max-w-md text-pretty text-[14px] text-warm-secondary">
-            Papers are given out automatically to match your grade, your board and the subjects your HOD has set for you. Check back soon, or ask your
+            Your HOD gives papers out to match your grade, your board and the subjects your HOD has set for you. Check back soon, or ask your
             HOD.
           </p>
           <AskForPapers api={asksApi} scope={scope} />
@@ -454,7 +476,7 @@ function PaperList({
                   ) : null}
                 </div>
                 <p className="mt-2 text-[13px] text-foreground" data-testid="card-status-line">
-                  {checkerCardLine(p)}
+                  {partDoneNote(p) ?? checkerCardLine(p)}
                 </p>
                 <div className="mt-3">
                   <div className="mb-1 flex justify-between text-[13px] font-semibold tabular-nums text-warm-secondary">
@@ -483,7 +505,7 @@ function PaperList({
                   ) : (
                     <>
                       <ActionButton tone="mint" onClick={() => onStart(p.paper_id)}>
-                        {p.done > 0 ? 'Keep verifying' : 'Start verifying'}
+                        {p.done > 0 ? 'Keep checking' : 'Start checking'}
                       </ActionButton>
                       <ActionButton tone="muted" onClick={() => onOpen(p.paper_id)}>
                         See questions
@@ -668,7 +690,8 @@ function ProfileCard({ api, scope }: { api: CheckerApi; scope: string }) {
             </p>
           ) : null}
           <div className="flex gap-2 sm:col-span-2">
-            <ActionButton tone="dark" onClick={() => void saveDetails()} disabled={busy}>
+            {/* A submit button, so Enter in any box saves (the form's onSubmit does the saving). */}
+            <ActionButton tone="dark" type="submit" onClick={() => undefined} disabled={busy}>
               {busy ? 'Saving...' : 'Save my details'}
             </ActionButton>
             <ActionButton tone="muted" onClick={() => setEditing(false)} disabled={busy}>
@@ -823,7 +846,7 @@ function PaperOverview({
         </div>
         {todo > 0 ? (
           <ActionButton tone="mint" onClick={onStart}>
-            Start verifying
+            Start checking
           </ActionButton>
         ) : null}
       </div>

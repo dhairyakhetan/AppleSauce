@@ -24,7 +24,7 @@ export interface VerdictAndNextInput {
   /** The version the checker saw (CheckerQuestion.version). Required for pass and fix. */
   version?: number | null;
   /** fix: what to change. */
-  patch?: { body?: string | null; display_number?: string | null; marks?: number | null };
+  patch?: { body?: string | null; display_number?: string | null; marks?: number | null; options?: unknown[] };
   /** fix: the printed paper itself has a typo and the checker corrected it. */
   printedTypo?: boolean;
   typoNote?: string | null;

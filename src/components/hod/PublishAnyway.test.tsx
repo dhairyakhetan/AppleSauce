@@ -41,7 +41,7 @@ describe('the Publish anyway box', () => {
     expect(out).toContain('Or publish anyway');
     expect(out).toContain('I know this paper has a problem. I want to publish it anyway.');
     expect(out).not.toContain('data-testid="publish-anyway-reason"');
-    expect(out).toMatch(/<button[^>]*disabled=""[^>]*>Publish anyway<\/button>/);
+    expect(out).toMatch(/<button[^>]*disabled=""[^>]*>(?:<svg.*?<\/svg>)?Publish anyway<\/button>/);
     expect(out).toContain('Tick the box to say you know about the problem.');
     expect(out).toContain('Visitors will not see anything different.');
   });
@@ -51,12 +51,12 @@ describe('the Publish anyway box', () => {
     expect(out).toContain('Why are you publishing with this problem? This is saved in the paper&#x27;s history.');
     expect(out).toContain('data-testid="publish-anyway-reason"');
     expect(out).toContain('7 more characters needed.');
-    expect(out).toMatch(/<button[^>]*disabled=""[^>]*>Publish anyway<\/button>/);
+    expect(out).toMatch(/<button[^>]*disabled=""[^>]*>(?:<svg.*?<\/svg>)?Publish anyway<\/button>/);
   });
 
   it('turns the button on when the tick and a good reason are there', () => {
     const out = box({ ticked: true, reason: 'Exam is tomorrow', canOverride: true, whyOff: '' });
-    expect(out).not.toMatch(/<button[^>]*disabled=""[^>]*>Publish anyway<\/button>/);
+    expect(out).not.toMatch(/<button[^>]*disabled=""[^>]*>(?:<svg.*?<\/svg>)?Publish anyway<\/button>/);
     expect(out).toContain('Your name and reason go in the paper&#x27;s history.');
   });
 
@@ -76,14 +76,23 @@ describe('the Publish anyway box', () => {
 describe('the page', () => {
   const src = read('./PublishFlow.tsx');
 
-  it('puts the box right under the red "Not yet. Fix these first" list, before the left-out tick', () => {
+  it('puts the left-out tick under the red list and above both buttons (Publish anyway and Publish)', () => {
     const blocked = src.indexOf('data-testid="publish-blocked"');
+    const leftOut = src.indexOf('data-testid="left-out-confirm"', blocked);
     const anyway = src.indexOf('<PublishAnywayBox', blocked);
-    const leftOut = src.indexOf('data-testid="left-out-confirm"');
+    const publish = src.indexOf("alreadyLive ? 'Record the approval' : 'Publish'", blocked);
     expect(blocked).toBeGreaterThan(-1);
-    expect(anyway).toBeGreaterThan(blocked);
-    expect(anyway).toBeLessThan(leftOut);
+    expect(leftOut).toBeGreaterThan(blocked);
+    expect(anyway).toBeGreaterThan(leftOut);
+    expect(publish).toBeGreaterThan(anyway);
     expect(src).toContain('Not yet. Fix {failed.length === 1');
+  });
+
+  it('gives Publish anyway a warning look of its own, not the dark look of Publish', () => {
+    const box = src.slice(src.indexOf('export function PublishAnywayBox'), src.indexOf('export function PublishFlow'));
+    expect(box).toContain('border-destructive text-destructive');
+    expect(box).toContain('<AlertTriangle');
+    expect(box).not.toContain("actionToneClass('dark')");
   });
 
   it('asks again in a plain confirm box before it publishes, and saves nothing until the person says yes', () => {

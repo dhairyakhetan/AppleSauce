@@ -39,7 +39,7 @@ export interface VerdictPayload {
   /** The version of the question the checker saw (pass and fix). */
   version?: number | null;
   /** Fix: the changes. `body` is null unless the words were edited. */
-  patch?: { body?: string | null; display_number?: string | null; marks?: number | null };
+  patch?: { body?: string | null; display_number?: string | null; marks?: number | null; options?: unknown[] };
   printedTypo?: boolean;
   typoNote?: string | null;
   /** Ask the HOD: what to look at. */

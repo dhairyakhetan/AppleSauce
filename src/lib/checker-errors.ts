@@ -67,6 +67,9 @@ export function checkerErrorAdvice(err: unknown): CheckerErrorAdvice {
       moveOn: true,
     };
   }
+  if (/changing options is not switched on/i.test(text)) {
+    return { message: 'Changing options is not switched on yet. Ask the HOD. Your typing is kept.', moveOn: false };
+  }
   if (/typo corrections are not switched on/i.test(text)) {
     return {
       message: 'Typo corrections are not switched on yet. Fix only reading mistakes for now, or press Ask the HOD.',
@@ -123,6 +126,8 @@ export const PAPER_GONE_NOTE = 'You may have finished it, or it went back to the
 
 /** Shown after a successful Undo (verifier_undo_last). */
 export const UNDONE_NOTE = 'Undone. Here is that question again.';
+/** Undo of a fix: the changes (words, number, marks, options) go with it, so the message says so. */
+export const UNDONE_FIX_NOTE = 'Undone. Your changes were removed. Here is that question again, as it was.';
 
 /**
  * What the verifier reads when Undo is refused or fails. The server's refusals

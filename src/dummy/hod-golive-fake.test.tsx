@@ -125,8 +125,10 @@ describe('dummy desk: Ready to go live', () => {
     expect(await api.unqueuedCount()).toBeGreaterThanOrEqual(0);
     expect(unqueuedBannerText(0)).toBeNull();
     expect(unqueuedBannerText(Number.NaN)).toBeNull();
-    expect(unqueuedBannerText(1)).toBe('1 paper is fully checked and waiting to be queued. It will appear here after the next queue run.');
-    expect(unqueuedBannerText(7)).toMatch(/^7 papers are fully checked and waiting to be queued\./);
+    // Plain words for the HOD: no "queue run".
+    expect(unqueuedBannerText(1)).toBe('1 more paper is fully checked but is not on this list yet. The owner adds it here. Tell the owner if it is still missing tomorrow.');
+    expect(unqueuedBannerText(7)).toMatch(/^7 more papers are fully checked but are not on this list yet\./);
+    expect(unqueuedBannerText(7)).not.toMatch(/queue/);
     expect(unqueuedBannerText(7)).not.toMatch(/[–—]/);
   });
 

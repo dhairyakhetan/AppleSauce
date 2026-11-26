@@ -245,6 +245,25 @@ export async function checkerMyStats(): Promise<CheckerStats> {
   return rpcRow<CheckerStats>(data) ?? { today_count: 0, total_count: 0 };
 }
 
+/** Papers this checker has finished (verdicts given and nothing left for students to do), today and ever. */
+export interface CheckerPaperStats {
+  papers_today: number;
+  papers_total: number;
+}
+
+/**
+ * The papers count next to the questions count (owner, 25 Nov 2026: "tasks are given on number of papers").
+ * Null when the database function (20261125100000_checker_papers_verified.sql) is not pasted yet or the call fails:
+ * the screen then shows the questions count only, never a made-up 0.
+ */
+export async function checkerMyPaperStats(): Promise<CheckerPaperStats | null> {
+  const { data, error } = await supabase.rpc('checker_my_paper_stats' as never);
+  if (error) return null;
+  const row = rpcRow<CheckerPaperStats>(data);
+  if (!row) return null;
+  return { papers_today: Number(row.papers_today) || 0, papers_total: Number(row.papers_total) || 0 };
+}
+
 export interface LeaderboardRow {
   rank: number;
   first_name: string;
@@ -440,10 +459,37 @@ export async function peekNextInPaper(paperId: string, count = 2): Promise<Peeke
  *  the same error as the plain function and claims nothing: treat it exactly
  *  like a failed passQuestion / fixQuestion. */
 export async function verdictAndNext(input: VerdictAndNextInput): Promise<VerdictAndNext> {
-  const params = verdictAndNextArgs(input);
+  let sent = input;
+  // A fix that also changes the answer options saves them first (verifier_set_options, 20261125110000), then gives
+  // the verdict on the version that save returned. Setting the same options twice is harmless, so a retry is safe.
+  if (input.action === 'fix' && input.patch?.options) {
+    const version = await checkerSetOptions(input.questionId, input.version, input.patch.options);
+    sent = { ...input, version };
+  }
+  const params = verdictAndNextArgs(sent);
   const { data, error } = await timedRpc('verifier_verdict_and_next', params);
   if (error) throw error;
   return normaliseVerdictAndNext(data);
+}
+
+/** Shown when the options function has not been pasted into the database yet. The typed changes are kept. */
+export const OPTIONS_NOT_SWITCHED_ON = 'Changing options is not switched on yet. Ask the HOD.';
+
+/** Save the answer options of the question the caller holds (verifier_set_options, 20261125110000) and get the
+ *  version it is at afterwards. Same options as already stored: nothing is written. A stale version throws 40001. */
+export async function checkerSetOptions(questionId: string, version: number | null | undefined, options: unknown[]): Promise<number | null> {
+  const { data, error } = await timedRpc('verifier_set_options', {
+    p_question_id: questionId,
+    p_expected_version: version ?? null,
+    p_options: options,
+  });
+  if (error) {
+    const e = error as { code?: unknown; message?: unknown };
+    const missing = e.code === 'PGRST202' || e.code === '42883' || /could not find the function|does not exist/i.test(String(e.message ?? ''));
+    if (missing) throw new Error(OPTIONS_NOT_SWITCHED_ON);
+    throw error;
+  }
+  return typeof data === 'number' ? data : (version ?? null);
 }
 
 /** Pass ("Looks right") and get the next question in one call
@@ -623,6 +669,7 @@ export interface CheckerApi {
   markOrSeparator: typeof checkerMarkOrSeparator;
   checkedTodayCount: typeof checkerCheckedTodayCount;
   myStats: typeof checkerMyStats;
+  myPaperStats: typeof checkerMyPaperStats;
   leaderboard: typeof checkerLeaderboard;
   getPreferences: typeof checkerGetPreferences;
   setPreferences: typeof checkerSetPreferences;
@@ -658,6 +705,7 @@ export const realCheckerApi: CheckerApi = {
   markOrSeparator: checkerMarkOrSeparator,
   checkedTodayCount: checkerCheckedTodayCount,
   myStats: checkerMyStats,
+  myPaperStats: checkerMyPaperStats,
   leaderboard: checkerLeaderboard,
   getPreferences: checkerGetPreferences,
   setPreferences: checkerSetPreferences,

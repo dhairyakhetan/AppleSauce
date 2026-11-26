@@ -33,7 +33,17 @@ import {
 /* "Who has what", built for a long list: a summary line, a search, a sort, filter chips, one line per
    person (closed until opened), and one line per paper inside an opened person. The buttons that act on
    a paper (Take it myself, Move, Unassign) and "Why this paper?" / "Where this paper has been" appear only
-   when a paper is opened. The actions themselves stay in AssignmentsTab and are handed in. */
+   when a paper is opened. The actions themselves stay in AssignmentsTab and are handed in.
+
+   `request` lets the "Needs attention" box above open one paper here (its person and the paper itself, scrolled into
+   view) or show only the people with stuck papers. Each request carries a new `n`, so the same one can be made twice. */
+
+export type WhoRequest = { kind: 'paper'; userId: string; assignmentId: number; n: number } | { kind: 'stuck'; n: number };
+
+/** Who handed a paper out, in words. Since 26 Nov 2026 nothing is given out by itself, so "Automatic" means the button. */
+export function givenByLine(name: string | null | undefined): string {
+  return !name || name === 'Automatic' ? 'Given by Auto assign all' : `Given by ${name}`;
+}
 
 const flagChip = 'inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[12px] font-semibold';
 
@@ -53,6 +63,7 @@ export function WhoHasWhat({
   reasonsOf,
   renderActions,
   renderMore,
+  request,
 }: {
   scope: string;
   assignments: HodAssignment[];
@@ -62,6 +73,8 @@ export function WhoHasWhat({
   renderActions: (a: HodAssignment) => ReactNode;
   /** "Why this paper?" and "Where this paper has been". */
   renderMore: (a: HodAssignment) => ReactNode;
+  /** Open one paper, or show only the stuck ones (from the Needs attention box). */
+  request?: WhoRequest | null;
 }) {
   const [query, setQuery] = useState('');
   const [chips, setChips] = useState<ChipKey[]>([]);
@@ -72,12 +85,34 @@ export function WhoHasWhat({
   const [openPapers, setOpenPapers] = useState<Set<number>>(() => new Set());
   const [peopleShown, setPeopleShown] = useState(PEOPLE_PAGE);
   const [papersShown, setPapersShown] = useState<Record<string, number>>({});
+  /** The person a "Open this paper" request is about: always inside the shown page, however long the list. */
+  const [pinned, setPinned] = useState<string | null>(null);
 
   useEffect(() => saveViewState(tabStorage(), scope, { sort, expanded: [...expanded] }), [scope, sort, expanded]);
   useEffect(() => {
     setSearchClosed(new Set());
     setPeopleShown(PEOPLE_PAGE);
   }, [query, chips, sort]);
+
+  // A request from the Needs attention box: open that paper (clearing any search or filter that would hide it), or
+  // show only the people with stuck papers. Then bring it into view.
+  useEffect(() => {
+    if (!request) return;
+    setQuery('');
+    if (request.kind === 'stuck') {
+      setChips(['stuck']);
+    } else {
+      setChips([]);
+      setExpanded((s) => new Set(s).add(request.userId));
+      setOpenPapers((s) => new Set(s).add(request.assignmentId));
+      // Make sure the person and the paper are inside the shown page of the list.
+      setPinned(request.userId);
+      setPapersShown((m) => ({ ...m, [request.userId]: Number.MAX_SAFE_INTEGER }));
+    }
+    const target = request.kind === 'paper' ? `who-paper-row-${request.assignmentId}` : 'who-has-what-list';
+    const t = setTimeout(() => document.getElementById(target)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 50);
+    return () => clearTimeout(t);
+  }, [request]);
 
   // A few hundred rows at most: working the list out on every render is cheap, and only a page of it is drawn.
   const now = new Date();
@@ -96,13 +131,14 @@ export function WhoHasWhat({
     if (searching) setSearchClosed(flip);
     else setExpanded(flip);
   };
-  const { visible, hidden } = windowRows(view, peopleShown);
+  const pinnedAt = pinned ? view.findIndex((p) => p.user_id === pinned) : -1;
+  const { visible, hidden } = windowRows(view, Math.max(peopleShown, pinnedAt + 1));
   const openable = view.filter((p) => !p.idle);
 
   if (everyone.length === 0) return <EmptyNote>No paper is assigned to anyone right now.</EmptyNote>;
 
   return (
-    <div data-testid="who-has-what">
+    <div data-testid="who-has-what" id="who-has-what-list" className="scroll-mt-24">
       <p role="status" aria-live="polite" className="mb-3 rounded-2xl bg-muted px-4 py-3 text-[14px] text-foreground" data-testid="who-summary">
         <span className="font-bold">{totals.holding}</span> {totals.holding === 1 ? 'person holds' : 'people hold'} <span className="font-bold">{totals.papers}</span>{' '}
         {totals.papers === 1 ? 'paper' : 'papers'} · <span className="font-bold">{totals.questionsLeft}</span> questions left
@@ -226,7 +262,7 @@ export function WhoHasWhat({
                             return next;
                           });
                         return (
-                          <li key={a.assignment_id} className="rounded-2xl bg-card" data-testid="assignment-row">
+                          <li key={a.assignment_id} id={`who-paper-row-${a.assignment_id}`} className="scroll-mt-24 rounded-2xl bg-card" data-testid="assignment-row">
                             <button
                               type="button"
                               aria-expanded={paperOpen}
@@ -251,7 +287,7 @@ export function WhoHasWhat({
                             {paperOpen ? (
                               <div id={detail} className="px-3 pb-3">
                                 <p className="text-[12px] text-warm-meta">
-                                  {!a.given_by_name || a.given_by_name === 'Automatic' ? 'Given automatically' : `Given by ${a.given_by_name}`}
+                                  {givenByLine(a.given_by_name)}
                                 </p>
                                 {flags.stuck ? (
                                   <p className="mt-1 text-[13px] font-semibold text-destructive" data-testid="stuck-reason">

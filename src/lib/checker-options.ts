@@ -1,3 +1,5 @@
+import type { EditableOption } from '@/lib/option-editing';
+
 /**
  * Multiple-choice options as the checker shows them.
  *
@@ -33,4 +35,13 @@ export function normaliseOptions(options: RawOption[] | null | undefined): Shown
     }
   }
   return out;
+}
+
+/** Undo of a removed answer option (OptionsEditor): the list with `option` put back at `index` (or at the end, when the
+ * list has since become shorter). Never adds it twice. */
+export function restoreOption(list: EditableOption[], option: EditableOption, index: number): EditableOption[] {
+  if (list.some((o) => o.id === option.id)) return list;
+  const next = [...list];
+  next.splice(Math.min(Math.max(index, 0), next.length), 0, option);
+  return next;
 }

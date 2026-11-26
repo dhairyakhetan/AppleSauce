@@ -11,8 +11,10 @@
  * Every word on screen is plain: "checks", "left out", never "bucket" or "RPC".
  */
 
+import { createContext, useContext, useEffect } from 'react';
 import { normaliseOptions, type ReviewOption } from '@/lib/admin-approval-shape';
 import { marksTextInvalid } from '@/lib/hod-desk';
+import { optionsChange, type EditableOption } from '@/lib/option-editing';
 import { isSlowError, SLOW_WORDS } from '@/lib/checker-timeout';
 import { isNotSwitchedOn } from '@/lib/paper-asks';
 
@@ -157,7 +159,7 @@ export const CHECKS: { key: CheckKey; label: string; short: string; fixHint: str
     key: 'pictures_present',
     label: 'Pictures are in place',
     short: 'Pictures present',
-    fixHint: 'Pictures are copied to the site by themselves when the paper is opened here. If one is still missing, press Try again at the top of the paper.',
+    fixHint: 'Pictures are copied to the site by themselves when the paper is opened here. Press Show me to see which question, or Try again.',
   },
   {
     key: 'header_complete',
@@ -169,7 +171,7 @@ export const CHECKS: { key: CheckKey; label: string; short: string; fixHint: str
     key: 'scanner_junk_gone',
     label: 'No scanner junk left',
     short: 'Scanner junk gone',
-    fixHint: 'Fix the words of the marked questions, or set them aside.',
+    fixHint: 'Fix the words of each marked question, or leave it out.',
   },
 ];
 
@@ -178,6 +180,8 @@ export interface HodCheck {
   label: string;
   ok: boolean;
   detail: string;
+  /** Questions passed by the AI with no person checking them (the questions check only). */
+  ai_only?: number;
 }
 
 /**
@@ -195,8 +199,18 @@ export function normaliseChecks(raw: unknown): HodCheck[] {
   return CHECKS.map((c) => {
     const r = byKey.get(c.key);
     if (!r) return { key: c.key, label: c.label, ok: false, detail: 'This check did not load. Refresh the page.' };
-    return { key: c.key, label: str(r.label) ?? c.label, ok: r.ok === true, detail: plainCheckDetail(c.key, str(r.detail) ?? '') };
+    const out: HodCheck = { key: c.key, label: str(r.label) ?? c.label, ok: r.ok === true, detail: plainCheckDetail(c.key, str(r.detail) ?? '') };
+    if (c.key === 'questions_checked' && num(r.ai_only) > 0) out.ai_only = num(r.ai_only);
+    return out;
   });
+}
+
+/** The sentence under the questions check when some questions were passed by the AI only. The preview cannot point to
+ *  them yet (the paper preview does not say which ones), so it says what the HOD can do instead. */
+export function aiOnlyText(count: number): string | null {
+  if (!Number.isFinite(count) || count <= 0) return null;
+  const which = count === 1 ? '1 question was' : `${count} questions were`;
+  return `${which} passed by the AI with no person checking. This screen cannot point to ${count === 1 ? 'it' : 'them'} yet. Tell the owner, or use Publish anyway if the paper cannot wait.`;
 }
 
 /**
@@ -616,6 +630,8 @@ export interface PreviewQuestion {
   instructions: string | null;
   body: string;
   options: ReviewOption[];
+  /** The options exactly as stored, so an edit sends back what it was given. */
+  options_raw: unknown;
   marks: number | null;
   /** A picture already on the site (paper-figures bucket). */
   figure_path: string | null;
@@ -630,6 +646,8 @@ export interface PreviewQuestion {
   flag_reasons: string[];
   set_aside_reason: string | null;
   scanner_junk: boolean;
+  /** The OR group the live page draws an "OR" between. Optional: the preview function does not send it yet. */
+  alternative_group?: string | null;
 }
 
 export interface PreviewHeader {
@@ -696,6 +714,7 @@ export function normalisePreviewQuestion(raw: unknown): PreviewQuestion | null {
     instructions: str(r.instructions),
     body: typeof r.body === 'string' ? r.body : '',
     options: normaliseOptions(r.options),
+    options_raw: r.options ?? null,
     marks: numOrNull(r.marks),
     figure_path: str(r.figure_path),
     figure_storage_path: str(r.figure_storage_path),
@@ -708,6 +727,7 @@ export function normalisePreviewQuestion(raw: unknown): PreviewQuestion | null {
     flag_reasons: strList(r.flag_reasons),
     set_aside_reason: str(r.set_aside_reason),
     scanner_junk: bool(r.scanner_junk),
+    alternative_group: str(r.alternative_group),
   };
 }
 
@@ -806,7 +826,7 @@ export const OVERRIDE_REASON_LABEL = "Why are you publishing with this problem? 
 
 /** The line shown when the database file has not been pasted yet. Nothing was published or changed. */
 export const OVERRIDE_NOT_ON_WORDS =
-  'Publish anyway is not switched on yet. Nothing was published and nothing was changed. The owner needs to paste one database file first.';
+  'Publish anyway is not switched on yet. Nothing was published and nothing was changed. Tell the owner.';
 
 /** Null when the reason is good enough; otherwise what is still needed, in plain words. */
 export function overrideReasonProblem(reason: string): string | null {
@@ -920,8 +940,8 @@ export function leftOutConfirmText(count: number): string {
 export function unqueuedBannerText(count: number): string | null {
   if (!Number.isFinite(count) || count <= 0) return null;
   return count === 1
-    ? '1 paper is fully checked and waiting to be queued. It will appear here after the next queue run.'
-    : `${count} papers are fully checked and waiting to be queued. They will appear here after the next queue run.`;
+    ? '1 more paper is fully checked but is not on this list yet. The owner adds it here. Tell the owner if it is still missing tomorrow.'
+    : `${count} more papers are fully checked but are not on this list yet. The owner adds them here. Tell the owner if they are still missing tomorrow.`;
 }
 
 /** "3 questions left out", "1 question left out", or null when none are. */
@@ -957,7 +977,8 @@ export function questionDepths(qs: Pick<PreviewQuestion, 'id' | 'parent_id'>[]):
 
 // ---------------------------------------------------------------- header fields
 
-export type FieldKind = 'text' | 'number' | 'longtext' | 'yesno';
+/** 'tick' is a plain tick box that saves the moment it changes ("This paper prints no time"). */
+export type FieldKind = 'text' | 'number' | 'longtext' | 'yesno' | 'tick';
 
 export type PublishField =
   | 'cls'
@@ -999,18 +1020,18 @@ export const PUBLISH_FIELDS: FieldDef[] = [
   { key: 'allowed_time_minutes', label: 'Time allowed (minutes)', kind: 'number', hint: 'A whole number of minutes, 1 to 600.' },
   {
     key: 'time_not_printed',
-    label: 'No time is printed on the paper',
-    kind: 'yesno',
+    label: 'This paper prints no time',
+    kind: 'tick',
     noUnset: true,
-    hint: 'Choose Yes only if you checked the paper and it gives no time. The details check then passes without a time.',
+    hint: 'Tick it only if you checked the printed paper. The details check then passes without a time. It saves as soon as you tick.',
   },
   { key: 'general_instructions', label: 'General instructions', kind: 'longtext', hint: 'As printed on the paper.' },
   {
     key: 'instructions_not_printed',
-    label: 'No general instructions are printed on the paper',
-    kind: 'yesno',
+    label: 'This paper prints no general instructions',
+    kind: 'tick',
     noUnset: true,
-    hint: 'Choose Yes only if you checked the paper and it has none. The details check then passes without them.',
+    hint: 'Tick it only if you checked the printed paper. The details check then passes without them. It saves as soon as you tick.',
   },
   { key: 'incomplete_note', label: 'Note', kind: 'longtext', hint: 'Shown with the paper, for example if a page is missing.' },
 ];
@@ -1342,10 +1363,181 @@ export function errorWords(err: unknown, fallback = 'That did not go through. No
   if (!err || typeof err !== 'object') return fallback;
   const e = err as { code?: unknown; message?: unknown };
   if (e.code === '42501') return 'Your account is not set up for the HOD desk, so nothing was changed. Ask an admin to add you.';
-  if (e.code === '40001') return 'Someone changed this question while you had it open, so nothing was saved. It has been refreshed.';
+  if (isConflict(err)) return CONFLICT_WORDS;
   const m = typeof e.message === 'string' ? e.message.trim() : '';
-  return m || fallback;
+  if (/still with the student checkers/i.test(m)) return STILL_WITH_STUDENTS_WORDS;
+  if (e.code === 'P0002') return plainServerWords(m) ?? 'That could not be found any more. Go back to the list and open the paper again.';
+  return plainServerWords(m) ?? fallback;
 }
+
+/** Someone else saved the same question first (a stale version). */
+export function isConflict(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: unknown; message?: unknown };
+  if (e.code === '40001') return true;
+  return typeof e.message === 'string' && /\bstale\b|changed since/i.test(e.message);
+}
+
+export const CONFLICT_WORDS =
+  'Someone else saved this first, so your change was not saved. The box now shows their words. Make your change again and save.';
+
+export const STILL_WITH_STUDENTS_WORDS =
+  'A student checker still has this question, so it cannot be changed from here yet. Nothing was changed.';
+
+/**
+ * The server's refusals are written for people ("This paper is not waiting to go live."), and are shown as they are.
+ * A raw database message (a function or column name, an id, "violates ... constraint") is never shown: null then,
+ * and the caller uses its own plain sentence. Same rule as the admin screens (admin-approval-shape writeErrorWords).
+ */
+export function plainServerWords(message: string | null | undefined): string | null {
+  const m = (message ?? '').trim();
+  if (!m || m.length > 400) return null;
+  if (/[{}]|\b[a-z]+_[a-z_]+\b|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(m)) return null;
+  if (/\b(violates|constraint|relation|column|schema cache|syntax error|null value|permission denied|does not exist|PGRST)\b/i.test(m)) return null;
+  return /[.!?]$/.test(m) ? m : `${m}.`;
+}
+
+// ------------------------------------------------------------------ what the live page shows
+
+/**
+ * The answer options exactly as the live page gets them: the same rule as the database's approval_flatten_options
+ * (a stored label is put in brackets in front of the words unless the words already start with their own letter).
+ * Only decides the label in front; the words themselves are never changed.
+ */
+export function liveOptionTexts(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((e) => {
+    if (typeof e === 'string') return e;
+    if (e && typeof e === 'object') {
+      const o = e as { label?: unknown; text?: unknown };
+      const text = typeof o.text === 'string' ? o.text : '';
+      const label = typeof o.label === 'string' ? o.label.trim() : '';
+      if (label !== '' && !/^\s*\(?[A-Za-z0-9]{1,4}[.)]/.test(text)) return `(${label}) ${text}`;
+      return text;
+    }
+    return JSON.stringify(e);
+  });
+}
+
+/** A real question of the paper (not a heading or instruction line). */
+export function isRealQuestion(q: Pick<PreviewQuestion, 'kind' | 'state'>): boolean {
+  return q.kind === 'question' && q.state !== 'section';
+}
+
+/**
+ * Leave it out (set aside) is accepted by the server only for a question that came to the HOD (hod_set_question_state:
+ * buckets escalated and admin) or one already left out. For the rest the server refuses, so the button is not offered.
+ */
+export function canLeaveOut(q: Pick<PreviewQuestion, 'review_bucket' | 'state'>): boolean {
+  return q.state !== 'set_aside' && (q.review_bucket === 'escalated' || q.review_bucket === 'admin');
+}
+
+/** Which questions a "Show me" walks through. */
+export type MarkKind = 'junk' | 'pictures' | 'open';
+
+export function markedIds(kind: MarkKind, qs: PreviewQuestion[]): string[] {
+  return qs
+    .filter((q) => isRealQuestion(q) && q.state !== 'set_aside')
+    .filter((q) =>
+      kind === 'junk' ? q.scanner_junk : kind === 'pictures' ? q.has_picture && !q.picture_staged && !q.figure_path : q.state === 'open',
+    )
+    .map((q) => q.id);
+}
+
+export const MARK_WORDS: Record<MarkKind, { one: string; chip: string }> = {
+  junk: { one: 'question with scanner junk', chip: 'Scanner junk' },
+  pictures: { one: 'question whose picture is not on the site yet', chip: 'Picture not copied yet' },
+  open: { one: 'question still open', chip: 'Still open' },
+};
+
+/** "Question 7 saved." (or "Question saved." when the paper gave it no number). */
+export function savedWords(q: Pick<PreviewQuestion, 'display_number' | 'number_path'>): string {
+  const n = (q.display_number ?? q.number_path ?? '').trim();
+  return n && n !== '?' ? `Question ${n} saved.` : 'Question saved.';
+}
+
+const squash = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * Where a heading or instruction line of the preview really shows on the live site. Such lines are never copied to
+ * the live site as rows; the live page draws a heading from each question's own heading box (section_label), a
+ * question's instructions from its own box, and the paper's General instructions from the Details step.
+ *   heading:     the questions under the line (up to the next heading line) take its words as their heading.
+ *   instruction: the first question under the line takes its words as its own instructions.
+ *   general:     a whole-paper instruction line goes into the paper's General instructions.
+ * `covered` is true when the live page already shows these words there, so the line is not drawn twice.
+ */
+export interface LinePlan {
+  target: 'heading' | 'instruction' | 'general' | 'none';
+  questionIds: string[];
+  covered: boolean;
+}
+
+export function planLine(qs: PreviewQuestion[], lineId: string, generalInstructions: string | null): LinePlan {
+  const i = qs.findIndex((q) => q.id === lineId);
+  const line = qs[i];
+  if (!line || isRealQuestion(line)) return { target: 'none', questionIds: [], covered: false };
+  const words = squash(line.body);
+  if (line.kind === 'section_break') {
+    const ids: string[] = [];
+    for (let j = i + 1; j < qs.length && qs[j].kind !== 'section_break'; j++) if (isRealQuestion(qs[j])) ids.push(qs[j].id);
+    if (ids.length === 0) return { target: 'none', questionIds: [], covered: false };
+    const first = qs.find((q) => q.id === ids[0]);
+    return { target: 'heading', questionIds: ids, covered: words !== '' && squash(first?.section_label) === words };
+  }
+  if (line.kind === 'master_instruction') {
+    return { target: 'general', questionIds: [], covered: words !== '' && squash(generalInstructions).includes(words) };
+  }
+  const next = qs.slice(i + 1).find(isRealQuestion);
+  if (!next) return { target: 'none', questionIds: [], covered: false };
+  return { target: 'instruction', questionIds: [next.id], covered: words !== '' && squash(next.instructions).includes(words) };
+}
+
+/** The question's instructions with a line's words put in front, on their own line (an empty box takes the words as they are). */
+export function withLineInFront(lineWords: string, existing: string | null): string {
+  const e = (existing ?? '').trim();
+  return e === '' ? lineWords : `${lineWords}\n${existing}`;
+}
+
+/** The ids of the questions that share one heading on the live page: the run that starts at `firstId`. */
+export function headingRun(qs: PreviewQuestion[], firstId: string): string[] {
+  const real = qs.filter(isRealQuestion);
+  const start = real.findIndex((q) => q.id === firstId);
+  if (start < 0) return [];
+  const label = (real[start].section_label ?? '').trim();
+  const out: string[] = [];
+  for (let j = start; j < real.length && (real[j].section_label ?? '').trim() === label; j++) out.push(real[j].id);
+  return out;
+}
+
+/** The next paper on the Ready list after publishing: one whose checks all pass first, else any other one. */
+export function nextReadyPaper(list: HodReadyPaper[], currentId: string): HodReadyPaper | null {
+  const others = list.filter((p) => p.audit_paper_id !== currentId);
+  return others.find((p) => allChecksPass(p.checks)) ?? others[0] ?? null;
+}
+
+// ------------------------------------------------------------------ unsaved work
+
+/* Every editor on the go-live screen says whether it holds typed words that are not saved yet. The page asks
+   "You have unsaved changes" before a step change or leaving, and the browser asks before a reload. Outside the
+   go-live screen (no provider) this does nothing. */
+export interface UnsavedRegistry {
+  mark: (key: string, dirty: boolean) => void;
+}
+
+export const UnsavedContext = createContext<UnsavedRegistry | null>(null);
+
+export function useUnsavedMark(key: string, dirty: boolean): void {
+  const reg = useContext(UnsavedContext);
+  useEffect(() => {
+    if (!reg) return undefined;
+    reg.mark(key, dirty);
+    return () => reg.mark(key, false);
+  }, [reg, key, dirty]);
+}
+
+export const UNSAVED_TITLE = 'You have unsaved changes';
+export const UNSAVED_TEXT = 'What you typed is not saved yet. If you go on, it is lost.';
 
 // ------------------------------------------------------------------ Fix a question
 
@@ -1353,6 +1545,8 @@ export interface QuestionDraft {
   body: string;
   number: string;
   marks: string;
+  /** The answer options as edited; left out when the form does not edit them. */
+  options?: EditableOption[];
 }
 
 export type QuestionChangesResult = { error: string } | { changes: Record<string, unknown> };
@@ -1364,7 +1558,7 @@ export type QuestionChangesResult = { error: string } | { changes: Record<string
  * missing key as "keep".
  */
 export function buildQuestionChanges(
-  orig: { body: string; display_number: string | null; marks: number | null },
+  orig: { body: string; display_number: string | null; marks: number | null; options?: unknown },
   draft: QuestionDraft,
 ): QuestionChangesResult {
   if (marksTextInvalid(draft.marks)) return { error: 'Marks must be a number, like 2 or 0.5.' };
@@ -1382,5 +1576,68 @@ export function buildQuestionChanges(
   if (number !== (orig.display_number ?? '').trim()) changes.display_number = number;
   const newMarks = marks === '' ? null : Number(marks);
   if (newMarks !== orig.marks) changes.marks = newMarks;
+  if (draft.options) {
+    const opts = optionsChange(orig.options, draft.options);
+    if (opts) changes.options = opts;
+  }
+  return { changes };
+}
+
+// ------------------------------------------------------------------ Edit any line of the paper
+
+/** The kinds of line on a paper. Only a real question is copied to the live site as its own row. */
+export function isQuestionRow(kind: string): boolean {
+  return kind === 'question';
+}
+
+export interface RowDraft {
+  body: string;
+  number: string;
+  marks: string;
+  /** The question's own instructions ("Answer any three"), shown above its words on the site. */
+  instructions: string;
+  /** The heading shown once above the question on the site ("Part I", "Section A"). */
+  sectionLabel: string;
+  /** The answer options as edited (questions only). */
+  options?: EditableOption[];
+}
+
+export interface RowOriginal {
+  kind: string;
+  body: string;
+  display_number: string | null;
+  marks: number | null;
+  instructions: string | null;
+  section_label: string | null;
+  /** The options exactly as stored. */
+  options?: unknown;
+}
+
+/**
+ * What an edit of ANY line sends (hod_edit_question's p_changes): only the keys that really changed, the words
+ * exactly as typed. A question keeps its words (never emptied); a heading or instruction line may be emptied,
+ * which removes it from the preview (such lines are never copied to the live site as rows). A question's own
+ * instructions and heading may be cleared, which sends null.
+ */
+export function buildRowChanges(orig: RowOriginal, draft: RowDraft): QuestionChangesResult {
+  const isQuestion = isQuestionRow(orig.kind);
+  const changes: Record<string, unknown> = {};
+
+  if (draft.body !== orig.body) {
+    if (isQuestion && draft.body.trim() === '') return { error: 'The question needs its words. Type them, or press Cancel.' };
+    changes.body = draft.body;
+  }
+  if (isQuestion) {
+    const built = buildQuestionChanges(orig, draft);
+    if ('error' in built) return built;
+    // body is already decided above; take only the number and the marks from the question rules.
+    if ('display_number' in built.changes) changes.display_number = built.changes.display_number;
+    if ('marks' in built.changes) changes.marks = built.changes.marks;
+    if ('options' in built.changes) changes.options = built.changes.options;
+  }
+  const instructions = draft.instructions.trim();
+  if (instructions !== (orig.instructions ?? '').trim()) changes.instructions = instructions === '' ? null : draft.instructions;
+  const heading = draft.sectionLabel.trim();
+  if (heading !== (orig.section_label ?? '').trim()) changes.section_label = heading === '' ? null : draft.sectionLabel;
   return { changes };
 }

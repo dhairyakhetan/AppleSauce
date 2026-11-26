@@ -21,6 +21,7 @@
  */
 
 import { stripLeadingNumberPrefix } from '@/lib/checker-body';
+import { fromEditable, optionsChange, toEditable, type EditableOption } from '@/lib/option-editing';
 
 export interface DraftQuestion {
   id: string;
@@ -28,6 +29,8 @@ export interface DraftQuestion {
   body: string | null;
   display_number: string | null;
   marks: number | null;
+  /** The answer options as stored (checkers can change them since 25 Nov 2026). */
+  options?: unknown;
 }
 
 export interface Drafts {
@@ -36,6 +39,8 @@ export interface Drafts {
   marks: string;
   printedTypo: boolean;
   typoNote: string;
+  /** The answer options as edited. Left out (or empty) means none; drafts kept before options could be edited have none. */
+  options?: EditableOption[];
 }
 
 /** The marks box shows a number as text, empty when there are none. */
@@ -52,7 +57,13 @@ export function draftsFromQuestion(q: DraftQuestion, lost: string | null = null)
     marks: marksText(q.marks),
     printedTypo: false,
     typoNote: '',
+    options: toEditable(q.options),
   };
+}
+
+/** The options as they would be stored, for comparing two edits of them (ids and blank rows do not count). */
+function optionsKey(list: EditableOption[] | undefined): string {
+  return JSON.stringify(fromEditable(list ?? []));
 }
 
 /** True when two sets of boxes hold the same things. */
@@ -62,13 +73,19 @@ export function sameDrafts(a: Drafts, b: Drafts): boolean {
     a.number === b.number &&
     a.marks === b.marks &&
     a.printedTypo === b.printedTypo &&
-    a.typoNote === b.typoNote
+    a.typoNote === b.typoNote &&
+    optionsKey(a.options) === optionsKey(b.options)
   );
 }
 
 /** True when the boxes differ from the stored question. */
-export function isEdited(q: DraftQuestion, d: Pick<Drafts, 'body' | 'number' | 'marks'>): boolean {
-  return d.body !== (q.body ?? '') || d.number !== (q.display_number ?? '') || d.marks !== marksText(q.marks);
+export function isEdited(q: DraftQuestion, d: Pick<Drafts, 'body' | 'number' | 'marks' | 'options'>): boolean {
+  return (
+    d.body !== (q.body ?? '') ||
+    d.number !== (q.display_number ?? '') ||
+    d.marks !== marksText(q.marks) ||
+    (d.options !== undefined && optionsChange(q.options, d.options) !== null)
+  );
 }
 
 /** How long a first Esc on unsaved changes stays "armed" for a second one. */
@@ -89,7 +106,7 @@ export type AnswerPlan =
   | { kind: 'pass' }
   | {
       kind: 'fix';
-      patch: { body: string | null; display_number: string | null; marks: number | null };
+      patch: { body: string | null; display_number: string | null; marks: number | null; options?: unknown[] };
       printedTypo: boolean;
       /** Whether the words themselves are part of this save. */
       bodyChanged: boolean;
@@ -137,12 +154,15 @@ export function planAnswer(input: PlanInput, ownerNow: string): AnswerPlan {
     strippedPrefix = removed;
     body = stripped !== stored ? stripped : null;
   }
+  // The options go along only when the checker really changed them, so a fix of the words never touches them.
+  const options = drafts.options ? optionsChange(question.options, drafts.options) : null;
   return {
     kind: 'fix',
     patch: {
       body,
       display_number: savedNumber,
       marks: drafts.marks.trim() === '' ? null : Number(drafts.marks),
+      ...(options ? { options } : {}),
     },
     printedTypo: mode === 'fix' && drafts.printedTypo,
     bodyChanged: body !== null,
@@ -163,6 +183,8 @@ interface StoredDraft {
   marks: string;
   printedTypo: boolean;
   typoNote: string;
+  /** Absent in drafts kept before options could be edited. */
+  options?: EditableOption[];
 }
 
 function storageKey(scope: string, questionId: string): string {
@@ -187,6 +209,7 @@ export function saveDraft(scope: string, q: DraftQuestion, d: Drafts, storage: S
       marks: d.marks,
       printedTypo: d.printedTypo,
       typoNote: d.typoNote,
+      options: d.options,
     };
     storage.setItem(storageKey(scope, q.id), JSON.stringify(value));
   } catch {
@@ -226,6 +249,21 @@ export interface RestoredDraft {
   current: boolean;
 }
 
+/** The kept options when they are well formed, else the question's own (a draft from before options were editable). */
+function storedOptions(raw: unknown, q: DraftQuestion): EditableOption[] {
+  if (!Array.isArray(raw)) return toEditable(q.options);
+  const ok = raw.every(
+    (o) =>
+      o &&
+      typeof o === 'object' &&
+      typeof (o as EditableOption).id === 'number' &&
+      ((o as EditableOption).shape === 'string' || (o as EditableOption).shape === 'object') &&
+      typeof (o as EditableOption).label === 'string' &&
+      typeof (o as EditableOption).text === 'string',
+  );
+  return ok ? (raw as EditableOption[]) : toEditable(q.options);
+}
+
 /** The draft kept for this question, or null. Never throws. */
 export function loadDraft(
   scope: string,
@@ -245,6 +283,7 @@ export function loadDraft(
       marks: typeof s.marks === 'string' ? s.marks : '',
       printedTypo: Boolean(s.printedTypo),
       typoNote: typeof s.typoNote === 'string' ? s.typoNote : '',
+      options: storedOptions(s.options, q),
     };
     // Same version = the draft still sits on the question it was typed on.
     const current = (s.v ?? null) === (q.version ?? null);

@@ -119,6 +119,8 @@ export interface Outcome {
   lines: string[];
   /** One entry per paper that was refused, with the server's reason. */
   failures: { label: string; reason: string }[];
+  /** A place to fix what stopped the hand-out (for example Checkers, when details expired). */
+  link?: { to: string; label: string };
 }
 
 /** The honest result of a bulk assign: how many went, and each refusal by name. */
@@ -147,6 +149,17 @@ export function summariseBulk(results: readonly BulkResult[], targetName: string
 
 // ---------------------------------------------------------------- auto assign
 
+/**
+ * Why "Auto assign all" is switched off, in words shown under it, or null when it can be pressed. `gate` is loadGate
+ * of the list of papers nobody has; `count` is how many are on it.
+ */
+export function autoAssignOffReason(gate: 'loading' | 'error' | 'ready', count: number): string | null {
+  if (gate === 'loading') return 'Still counting the papers. The button switches on in a moment.';
+  if (gate === 'error') return 'The papers waiting could not be counted, so the button stays off. Try again below.';
+  if (count <= 0) return 'Nothing to hand out: every paper that is ready already has a checker.';
+  return null;
+}
+
 export interface HeldPaper {
   paper_id: string;
   user_id: string;
@@ -172,19 +185,132 @@ export function newlyHeld(before: readonly HeldPaper[], after: readonly HeldPape
   return [...tally.values()].sort((x, y) => y.count - x.count || x.name.localeCompare(y.name));
 }
 
+// ------------------------------------------------- why papers or people got nothing
+
+/** A checker holds at most this many papers with work (verifier_paper_cap() on the server). */
+export const PAPER_CAP = 10;
+
+/** Where details are fixed: the Checkers tab. */
+export const CHECKERS_LINK = { to: '/hod?tab=verifiers', label: 'Open Checkers to fix their details' } as const;
+
+export interface LeftoverInput {
+  /** The class grade (1 to 12) of each paper still listed after the run; null when its class is not known. */
+  leftPapers: { grade: number | null }[];
+  /** The list of papers left was cut short, so the paper counts are "at least". */
+  leftIsAtLeast?: boolean;
+  /** The active checkers. */
+  people: { user_id: string }[];
+  /** Their details, or null when the details did not load. A grade of null means not recorded (the server reads it as Class 12). */
+  profiles: { user_id: string; grade: number | null; expired: boolean; preferred_subjects: string[] }[] | null;
+  /** Who holds what after the run, with the questions left for them. */
+  held: { user_id: string; remaining: number }[];
+  /** Who got at least one paper in this run. */
+  gotSome: readonly string[];
+  cap?: number;
+}
+
+export interface LeftoverWhy {
+  lines: string[];
+  /** True when something is fixed on the Checkers tab (expired details, no subjects set). */
+  fixOnCheckers: boolean;
+}
+
+const checkers = (n: number) => `${n} ${n === 1 ? 'checker' : 'checkers'}`;
+
+/**
+ * Why papers stayed without a checker, and why checkers got nothing, from what the screen already holds. It follows
+ * the hand-out's own rules (distribute_unassigned_papers): only active checkers whose details have not expired, at most
+ * 10 papers with work each, never a paper above their grade. Two of its rules cannot be seen from here (a checker's
+ * own school, and a paper a checker let sit for 7 days), so a paper blocked only by those is said to be so in words,
+ * not guessed at. Subjects never stop a paper; they only help pick who gets it.
+ */
+export function explainLeftovers(input: LeftoverInput): LeftoverWhy {
+  const cap = input.cap ?? PAPER_CAP;
+  const lines: string[] = [];
+  let fixOnCheckers = false;
+  const profileOf = new Map((input.profiles ?? []).map((p) => [p.user_id, p]));
+  const holding = new Map<string, number>();
+  for (const h of input.held) if (h.remaining > 0) holding.set(h.user_id, (holding.get(h.user_id) ?? 0) + 1);
+  const expired = (id: string) => profileOf.get(id)?.expired === true;
+  const gradeOf = (id: string) => profileOf.get(id)?.grade ?? 12;
+  const eligible = input.people.filter((p) => !expired(p.user_id));
+  const withRoom = eligible.filter((p) => (holding.get(p.user_id) ?? 0) < cap);
+
+  // The papers.
+  if (input.leftPapers.length > 0) {
+    let full = 0;
+    let grade = 0;
+    let nobody = 0;
+    let other = 0;
+    for (const paper of input.leftPapers) {
+      if (eligible.length === 0) nobody++;
+      else if (withRoom.length === 0) full++;
+      else if (paper.grade !== null && withRoom.every((p) => gradeOf(p.user_id) < (paper.grade as number))) grade++;
+      else other++;
+    }
+    const of = input.leftIsAtLeast ? 'Of the papers still listed, ' : '';
+    const n = (k: number) => `${k} ${k === 1 ? 'paper' : 'papers'}`;
+    if (nobody > 0) lines.push(`${of}${n(nobody)}: no checker can take papers right now (none is active, or their details expired).`);
+    if (full > 0) lines.push(`${of}${n(full)}: every checker who can take papers already holds ${cap} papers with work, the most anyone can hold.`);
+    if (grade > 0) lines.push(`${of}${n(grade)}: the class is above the grade of every checker who has room.`);
+    if (other > 0) {
+      lines.push(
+        `${of}${n(other)}: no rule we can see here stops ${other === 1 ? 'it' : 'them'}. The hand-out also keeps a paper from a checker at its own school, and from one who let it sit for 7 days.`,
+      );
+    }
+  }
+
+  // The people who got nothing.
+  const got = new Set(input.gotSome);
+  const none = input.people.filter((p) => !got.has(p.user_id));
+  if (none.length > 0) {
+    if (input.profiles === null) {
+      lines.push('The details of the checkers did not load, so why each person got nothing is not shown.');
+    } else {
+      const exp = none.filter((p) => expired(p.user_id)).length;
+      const current = none.filter((p) => !expired(p.user_id));
+      const atCap = current.filter((p) => (holding.get(p.user_id) ?? 0) >= cap).length;
+      const room = current.filter((p) => (holding.get(p.user_id) ?? 0) < cap);
+      const below =
+        input.leftPapers.length > 0 && input.leftPapers.every((x) => x.grade !== null)
+          ? room.filter((p) => input.leftPapers.every((x) => (x.grade as number) > gradeOf(p.user_id))).length
+          : 0;
+      const ranOut = input.leftPapers.length === 0 ? room.length : 0;
+      const noSubjects = current.filter((p) => (profileOf.get(p.user_id)?.preferred_subjects.length ?? 0) === 0).length;
+      if (exp > 0) {
+        lines.push(`${checkers(exp)} got nothing because their details have expired. Update them on Checkers.`);
+        fixOnCheckers = true;
+      }
+      if (atCap > 0) lines.push(`${checkers(atCap)} already ${atCap === 1 ? 'holds' : 'hold'} ${cap} papers with work, the most anyone can hold.`);
+      if (below > 0) lines.push(`${checkers(below)} ${below === 1 ? 'is' : 'are'} below the class of every paper left.`);
+      if (ranOut > 0) lines.push(`${checkers(ranOut)} got nothing because no paper was left to give.`);
+      if (noSubjects > 0) {
+        lines.push(
+          `${checkers(noSubjects)} who got nothing ${noSubjects === 1 ? 'has' : 'have'} no subjects set. That does not stop papers, but setting subjects on Checkers helps Auto assign match them.`,
+        );
+        fixOnCheckers = true;
+      }
+    }
+  }
+  return { lines, fixOnCheckers };
+}
+
 /**
  * What to say after "Auto assign all". `gave` is the number the server returned;
  * `perPerson` and `left` come from a fresh read afterwards (null when that read
  * failed, in which case only the server's number is shown). `leftIsAtLeast`
- * means the list is longer than the screen asks for.
+ * means the list is longer than the screen asks for. `why` (explainLeftovers) says
+ * why papers or people got nothing, and adds a link to Checkers when that is where
+ * the fix is.
  */
 export function summariseAutoAssign(input: {
   gave: number;
   perPerson: { name: string; count: number }[] | null;
   left: number | null;
   leftIsAtLeast?: boolean;
+  why?: LeftoverWhy | null;
 }): Outcome {
-  const { gave, perPerson, left, leftIsAtLeast } = input;
+  const { gave, perPerson, left, leftIsAtLeast, why } = input;
   const lines: string[] = [];
   if (perPerson && perPerson.length > 0) {
     lines.push(perPerson.map((p) => `${p.name}: ${papers(p.count)}`).join(', '));
@@ -197,8 +323,10 @@ export function summariseAutoAssign(input: {
       lines.push(`${count} could not be given out by the rules, so ${left === 1 && !leftIsAtLeast ? 'it is' : 'they are'} still listed below. You can assign them yourself.`);
     }
   }
+  if (why) lines.push(...why.lines);
+  const link = why?.fixOnCheckers ? { link: { ...CHECKERS_LINK } } : {};
   if (gave <= 0) {
-    return { tone: 'bad', headline: 'Nothing could be given out by the rules right now.', lines, failures: [] };
+    return { tone: 'bad', headline: 'Nothing could be given out by the rules right now.', lines, failures: [], ...link };
   }
-  return { tone: left === 0 || left === null ? 'good' : 'mixed', headline: `Gave out ${papers(gave)}.`, lines, failures: [] };
+  return { tone: left === 0 || left === null ? 'good' : 'mixed', headline: `Gave out ${papers(gave)}.`, lines, failures: [], ...link };
 }

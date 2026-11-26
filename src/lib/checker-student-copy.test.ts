@@ -96,7 +96,8 @@ describe('guidance that used to mislead', () => {
 
   it('with no picture, the sentences say the paper cannot be seen; with a picture or page-flip they do not', () => {
     expect(whatToCheck(['display_number_missing'], null, { hasPicture: false }).line).toContain('You cannot see the paper');
-    expect(whatToCheck(['display_number_missing'], null, { hasPicture: true }).line).toContain('Fill in the number printed on the paper');
+    // The number box only exists after Fix it, so the sentence says to tap it (audit, 26 Nov 2026).
+    expect(whatToCheck(['display_number_missing'], null, { hasPicture: true }).line).toContain('Tap Fix it and fill in the number printed on the paper');
   });
 
   it('a stale lease says the same question may come back', () => {

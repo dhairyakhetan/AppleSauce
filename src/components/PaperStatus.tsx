@@ -116,8 +116,26 @@ export function StageStrip({
 /**
  * The papers that are stuck, each with its reason in plain words. Shows nothing when none are. A long list is cut
  * at `max` and says how many more there are, so the group stays a glance and not a page.
+ *
+ * With `onOpen` each item gets an "Open this paper" button; with `onMore` the "and N more" line is a button that
+ * goes to the full list (the HOD Assignments tab uses both). Without them it reads as before.
  */
-export function AttentionGroup({ id, items, max = 6 }: { id: string; items: AttentionItem[]; max?: number }) {
+export function AttentionGroup({
+  id,
+  items,
+  max = 6,
+  onOpen,
+  onMore,
+  moreLabel,
+}: {
+  id: string;
+  items: AttentionItem[];
+  max?: number;
+  onOpen?: (key: string) => void;
+  onMore?: () => void;
+  /** The words on the "more" button, for example "See all 9 stuck papers". */
+  moreLabel?: string;
+}) {
   if (items.length === 0) return null;
   const shown = items.slice(0, max);
   const rest = items.length - shown.length;
@@ -138,10 +156,30 @@ export function AttentionGroup({ id, items, max = 6 }: { id: string; items: Atte
             <p className="mt-1 text-[13px] text-foreground" data-testid="attention-reason">
               {it.reason}
             </p>
+            {onOpen ? (
+              <button
+                type="button"
+                onClick={() => onOpen(it.key)}
+                className="tap-44 mt-2 inline-flex min-h-11 items-center rounded-full bg-muted px-4 text-[13px] font-semibold text-foreground shadow-button transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                aria-label={`Open ${it.label}`}
+                data-testid="attention-open"
+              >
+                Open this paper
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>
-      {rest > 0 ? (
+      {rest > 0 && onMore ? (
+        <button
+          type="button"
+          onClick={onMore}
+          className="tap-44 mt-2 inline-flex min-h-11 items-center rounded-full bg-card px-4 text-[13px] font-semibold text-foreground shadow-button transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          data-testid="attention-more"
+        >
+          {moreLabel ?? `and ${rest} more: see them all`}
+        </button>
+      ) : rest > 0 ? (
         <p className="mt-2 text-[12px] text-warm-secondary" data-testid="attention-more">
           and {rest} more below
         </p>

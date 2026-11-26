@@ -155,6 +155,11 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
   DISABLED in GitHub (turn it back on from the Actions tab, Daily redeploy, Enable workflow, and add the secret
   `VERCEL_DEPLOY_HOOK_URL`). Until then a new paper's own search page and sitemap entry appear at the next merge or
   a manual redeploy in Vercel.
+  **CONFIRMED 25 Nov 2026 (owner): keep it off, and let Claude ask for a rebuild whenever a session finds one is
+  needed** (a paper went live after the last merge to `main`). The way: a one-line pull request to
+  `docs/LAST_REBUILD.md` that the owner merges, because Claude cannot reach the live site's Vercel account. The
+  rule is in `CLAUDE.md` (Architecture worth knowing, "Pages freeze at build time") and the check is in
+  `docs/SESSION_START.md` section 4.
 - **A student can ask for a question to be sent back to the AI, but only an HOD can say yes (18 Nov 2026, owner).** In the
   student's "Ask for help" sheet there is a second button, "Send back to the AI", and it needs a reason (5 characters or
   more). Nothing goes to the AI at that moment. The question leaves the student and waits in the HOD's Needs you tab,
@@ -169,3 +174,5 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
   verdict word `ask_ai_redo` in `verifier_verdict_and_next`. Migration `20261118100000_ai_redo_requests.sql`: the owner
   pastes it before the pull request is merged, or the new student button shows an error. The audit-and-redo tool itself
   lives in the Papers folder and is not built yet.
+- **Papers are given to checkers ONLY when an HOD presses Auto assign all (owner, 26 Nov 2026: "stop auto assigning, only auto assign when orange button is pressed").** The 2-minute job and the fallback when a checker opens their list no longer assign; the 2-minute job still takes back papers idle for 7 days. Migration `20261126100000_assign_only_on_button.sql`, pasted by the owner.
+- **If the question cannot be found on the paper, the checker is shown the pages (owner, 26 Nov 2026: "If you can't find the question on the paper, just fall back to showing the pages").** A question whose page was looked for and not found (`source.page_verified = false`) now counts as having a picture when every printed page of its paper is stored, so it is no longer parked with an admin as "page not found". The checker sees the whole paper from page 1 with the line "We could not find this question on the page; look through the pages below." Migration `20261126200000_page_fallback_when_not_found.sql`, pasted by the owner before the merge; then the Papers folder's `enforce_picture_rule.py` returns the already-parked questions to students.

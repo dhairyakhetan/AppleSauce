@@ -24,7 +24,7 @@ export function AskForPapersView({ state, busy, onAsk }: { state: AskState; busy
   if (state.kind === 'off') {
     return (
       <p className="mx-auto mt-4 max-w-md text-pretty text-[13px] text-warm-secondary" data-testid="ask-off">
-        Asking for more papers is not switched on yet. Your HOD gives papers out automatically, so please check back soon.
+        Asking for more papers is not switched on yet. Your HOD gives papers out, so please check back soon.
       </p>
     );
   }
@@ -75,6 +75,9 @@ export function AskForPapers({ api, scope }: { api: PaperAsksApi; scope: string 
   });
 
   const off = (mine.isError && isNotSwitchedOn(mine.error)) || (ask.isError && isNotSwitchedOn(ask.error));
+  // Until we know whether this person already asked, show nothing (the same height, so nothing jumps): the button
+  // flashed up and then turned into "You asked 2 hours ago" (audit, 26 Nov 2026).
+  if (mine.isPending && !off) return <div className="mt-4 h-11" aria-hidden="true" data-testid="ask-checking" />;
   let state: AskState;
   if (off) state = { kind: 'off' };
   else if (message) state = { kind: 'asked', message };

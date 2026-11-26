@@ -34,30 +34,51 @@ export function RouteTrail({ stage, className }: { stage: TrailStage; className?
   );
 }
 
-/** One check as a chip: a tick or a cross and the short name, with the result also in words. */
-export function CheckChip({ check }: { check: Pick<HodCheck, 'key' | 'ok'> }) {
-  return (
-    <li
-      data-check={check.key}
-      data-ok={check.ok}
-      className={cn(
-        'inline-flex min-h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold',
-        check.ok ? 'bg-mint text-foreground' : 'bg-destructive/10 text-destructive',
-      )}
-    >
+/** One check as a chip: a tick or a cross and the short name, with the result also in words. With `onPick`, a red
+ *  chip is a button that takes the person to the fix (the go-live screen); without it the chip is plain text, as on
+ *  the Ready list. */
+export function CheckChip({ check, onPick }: { check: Pick<HodCheck, 'key' | 'ok'>; onPick?: (key: CheckKey) => void }) {
+  const look = cn(
+    'inline-flex min-h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold',
+    check.ok ? 'bg-mint text-foreground' : 'bg-destructive/10 text-destructive',
+  );
+  const inner = (
+    <>
       {check.ok ? <Check className="h-3 w-3" aria-hidden /> : <X className="h-3 w-3" aria-hidden />}
       {checkShort(check.key)}
       <span className="sr-only">{check.ok ? ': passes' : ': needs fixing'}</span>
+    </>
+  );
+  if (onPick && !check.ok) {
+    return (
+      <li data-check={check.key} data-ok={check.ok}>
+        <button
+          type="button"
+          onClick={() => onPick(check.key as CheckKey)}
+          className={cn(
+            look,
+            'min-h-11 underline decoration-dotted underline-offset-2 transition-transform duration-150 hover:bg-destructive/15 active:scale-press-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-9',
+          )}
+          aria-label={`${checkShort(check.key)}: needs fixing. Show me how to fix it`}
+        >
+          {inner}
+        </button>
+      </li>
+    );
+  }
+  return (
+    <li data-check={check.key} data-ok={check.ok} className={look}>
+      {inner}
     </li>
   );
 }
 
-export function CheckChips({ checks }: { checks: HodCheck[] }) {
+export function CheckChips({ checks, onPick }: { checks: HodCheck[]; onPick?: (key: CheckKey) => void }) {
   const byKey = new Map<string, HodCheck>(checks.map((c) => [c.key, c]));
   return (
     <ul aria-label="The four checks" className="flex flex-wrap gap-1.5" data-testid="check-chips">
       {CHECKS.map((c) => (
-        <CheckChip key={c.key} check={{ key: c.key as CheckKey, ok: byKey.get(c.key)?.ok === true }} />
+        <CheckChip key={c.key} check={{ key: c.key as CheckKey, ok: byKey.get(c.key)?.ok === true }} onPick={onPick} />
       ))}
     </ul>
   );

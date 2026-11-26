@@ -309,7 +309,7 @@ describe('the stops', () => {
   it('every link on the route opens a tab of the HOD desk, for admins and HODs alike', () => {
     for (const audience of ['admin', 'hod'] as const) {
       const stops = by(audience);
-      expect(stops.students.action).toMatchObject({ kind: 'link', href: '/hod?tab=assignments' });
+      expect(stops.students.action).toMatchObject({ kind: 'link', href: '/hod?tab=assignments&stage=ready' });
       expect(stops.needsYou.action).toMatchObject({ kind: 'link', href: '/hod?tab=needs-you' });
       expect(stops.ready.action).toMatchObject({ kind: 'link', href: '/hod?tab=ready' });
       expect(stops.live.action).toMatchObject({ kind: 'link', href: '/hod?tab=live' });

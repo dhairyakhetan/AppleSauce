@@ -46,7 +46,8 @@ export const STAGES: Record<PaperStage, StageMeta> = {
   ready: {
     key: 'ready',
     label: 'Ready, waiting for a checker',
-    short: 'Ready',
+    // Not "Ready": that word is also the Ready to go live tab (owner, 26 Nov 2026).
+    short: 'Waiting for a checker',
     hint: 'Every picture and page is in. Nobody has it yet, so it can be given out now.',
   },
   checking: {
@@ -58,7 +59,9 @@ export const STAGES: Record<PaperStage, StageMeta> = {
   waiting: {
     key: 'waiting',
     label: 'Checked, waiting to go live',
-    short: 'Waiting approval',
+    // The strip counts only the papers that pass all four checks (ready_ok), the same number as the Ready to go live
+    // tab, so its words say exactly that. The papers route page counts every settled paper and says so in its own words.
+    short: 'Can go live',
     hint: 'Every question is settled. It waits for a yes before it goes on the site.',
   },
   live: {

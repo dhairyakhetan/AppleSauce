@@ -24,24 +24,49 @@ import {
   type HodNeedsYouPaper,
 } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
+import { loadGate } from '@/lib/verifier-papers';
+import { NEEDS_SORTS, nextNeedsPaper, sortNeedsPapers, type NeedsSort } from '@/lib/hod-desk';
 
 /* "Needs you": the questions only an HOD can settle, grouped by paper. The list
    shows each paper with how many are waiting and where it is on the route. Open a
    paper to see its questions one by one, each with the printed picture (or the
    whole paper when no page matched) and four ways to settle it: Pass, Fix, Send
    back to students, Set aside. After each one the card folds into a line with
-   Undo, which puts the question back as it was. The question text is shown as
-   stored and sent only when changed, exactly as typed. */
+   Undo, which puts the question back in the list. Undo is honest about what it
+   can do: it is not offered after a send back (the question is with the students
+   then) or after a pass on a paper that is already live (the server refuses it),
+   and after a Fix it says the word changes stay. On a live paper a pass puts the
+   question on the site at once, so it asks first, and Set aside is not offered
+   (the server only lets a live paper's question be passed). The question text is
+   shown as stored and sent only when changed, exactly as typed. */
 
 export const NEEDS_YOU_KEY = (scope: string) => ['hod', scope, 'needs-you'] as const;
 export const NEEDS_YOU_QUESTIONS_KEY = (scope: string, paperId: string) => ['hod', scope, 'needs-you', paperId] as const;
 export const TRAIL_KEY = (scope: string) => ['hod', scope, 'trail'] as const;
 
-type Panel = null | 'fix' | 'back' | 'aside';
+type Panel = null | 'fix' | 'back' | 'aside' | 'golive';
+
+/** What Undo can do for a settled question: put it back, put it back but keep the new words, or nothing. */
+export type UndoKind = 'reopen' | 'reopen-words-stay' | 'none-with-students' | 'none-live';
 
 interface Settled {
   q: HodNeedsQuestion;
   what: string;
+  undo: UndoKind;
+}
+
+/** The plain line under a settled question when Undo is limited or not offered. */
+export function undoNote(kind: UndoKind): string | null {
+  switch (kind) {
+    case 'reopen-words-stay':
+      return 'Undo puts it back in the list, but your word changes stay. Fix them again if needed.';
+    case 'none-with-students':
+      return 'It is with the students now, so there is nothing to undo here.';
+    case 'none-live':
+      return 'It is on the site now. A question on a live paper cannot be put back from here.';
+    default:
+      return null;
+  }
 }
 
 function labelOf(q: Pick<HodNeedsQuestion, 'display_number' | 'number_path'>): string {
@@ -51,12 +76,15 @@ function labelOf(q: Pick<HodNeedsQuestion, 'display_number' | 'number_path'>): s
 function QuestionCard({
   q,
   api,
+  paperLive,
   onSettled,
   onChanged,
 }: {
   q: HodNeedsQuestion;
   api: HodApi;
-  onSettled: (what: string) => void;
+  /** The paper is already on the site (approved). */
+  paperLive: boolean;
+  onSettled: (what: string, undo: UndoKind) => void;
   onChanged: () => void;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
@@ -69,13 +97,17 @@ function QuestionCard({
   // "figure missing" tip is no longer true, so it is left out, as on the checker's screen.
   const diagrams = useHodDiagrams(api, q.id);
   const why = adminFlagLines(withoutShownFigureFlag(q.flag_reasons, diagrams.length > 0), null);
+  // On a paper that is already live, a pass copies this question onto the site straight away (the late pass), and
+  // the server refuses Set aside and reopen there. A question that is itself already live is not copied again.
+  const goesLiveOnPass = paperLive && !q.live_bank_question_id;
+  const passUndo: UndoKind = paperLive ? 'none-live' : 'reopen';
 
-  async function run(action: () => Promise<unknown>, done?: string) {
+  async function run(action: () => Promise<unknown>, done?: string, undo: UndoKind = 'reopen') {
     setBusy(true);
     setError(null);
     try {
       await action();
-      if (done) onSettled(done);
+      if (done) onSettled(done, undo);
     } catch (err) {
       setError(errorWords(err));
       // A refusal often means the card is out of date.
@@ -156,7 +188,7 @@ function QuestionCard({
                 void run(async () => {
                   if (Object.keys(changes).length > 0) await api.editQuestion(q.id, q.version, changes, '');
                   await api.setQuestionState(q.id, 'pass');
-                }, `Question ${label} fixed and passed.`)
+                }, `Question ${label} fixed and passed.`, paperLive ? 'none-live' : Object.keys(changes).length > 0 ? 'reopen-words-stay' : 'reopen')
               }
               secondary={{
                 label: 'Save, keep open',
@@ -248,7 +280,7 @@ function QuestionCard({
               type="button"
               className={cn(actionToneClass('brand'), 'h-[46.5px]')}
               disabled={busy || !q.body.trim()}
-              onClick={() => void run(() => api.setQuestionState(q.id, 'pass'), `Question ${label} passed.`)}
+              onClick={() => (goesLiveOnPass ? setPanel('golive') : void run(() => api.setQuestionState(q.id, 'pass'), `Question ${label} passed.`, passUndo))}
             >
               {busy ? 'Saving...' : 'Pass'}
             </button>
@@ -258,22 +290,39 @@ function QuestionCard({
               </button>
             )}
             {canSendBack(q) ? (
-              <button type="button" className={cn(actionToneClass('brand'), 'h-[46.5px]')} disabled={busy} onClick={() => setPanel('back')}>
+              // Quieter than Pass on purpose (owner, 26 Nov 2026): only the main answer is orange.
+              <button type="button" className={quietButton} disabled={busy} onClick={() => setPanel('back')}>
                 Send back to students
               </button>
             ) : null}
-            <button type="button" className={quietButton} disabled={busy} onClick={() => setPanel('aside')}>
-              Set aside
+            {paperLive ? null : (
+              <button type="button" className={quietButton} disabled={busy} onClick={() => setPanel('aside')}>
+                Set aside
+              </button>
+            )}
+          </>
+        ) : panel === 'fix' ? null : panel === 'golive' ? (
+          <>
+            <button
+              type="button"
+              className={cn(actionToneClass('brand'), 'h-[46.5px]')}
+              disabled={busy}
+              onClick={() => void run(() => api.setQuestionState(q.id, 'pass'), `Question ${label} passed. It is on the site now.`, 'none-live')}
+            >
+              {busy ? 'Saving...' : 'Pass, put it on the site'}
+            </button>
+            <button type="button" className={quietButton} disabled={busy} onClick={cancel}>
+              Cancel
             </button>
           </>
-        ) : panel === 'fix' ? null : (
+        ) : (
           <>
             {panel === 'back' ? (
               <button
                 type="button"
                 className={cn(actionToneClass('brand'), 'h-[46.5px]')}
                 disabled={busy}
-                onClick={() => void run(() => api.sendBack(q.id, note.trim()), `Question ${label} sent back to the students.`)}
+                onClick={() => void run(() => api.sendBack(q.id, note.trim()), `Question ${label} sent back to the students.`, 'none-with-students')}
               >
                 {busy ? 'Sending...' : 'Send it back'}
               </button>
@@ -293,38 +342,73 @@ function QuestionCard({
           </>
         )}
       </div>
+      {panel === 'golive' ? (
+        <p role="status" className="mt-3 rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] font-semibold text-foreground" data-testid="goes-live-warning">
+          This goes on the site now. The paper is already live, so passing this question shows it to every visitor straight away, and it cannot
+          be put back from here.
+        </p>
+      ) : null}
+      {panel === null && goesLiveOnPass ? (
+        <p className="mt-2 text-[12px] text-warm-meta" data-testid="live-paper-note">
+          This paper is already live. Pass puts this question on the site at once, so you are asked first. Leaving it out is not possible on a live paper.
+        </p>
+      ) : null}
       {panel === null && q.live_bank_question_id ? (
         <p className="mt-2 text-[12px] text-warm-meta" data-testid="live-question-note">
-          This question is already on the live site, so only an admin can change its words. You can pass it, send it back to the students, or leave it out.
+          This question is already on the live site, so only an admin can change its words. {paperLive ? 'You can pass it or send it back to the students.' : 'You can pass it, send it back to the students, or leave it out.'}
         </p>
       ) : null}
       {panel === null && !q.body.trim() ? (
         <p className="mt-2 text-[12px] text-warm-meta">Pass is off because this question has no text. Fix it to add the words, or leave it out.</p>
       ) : null}
       {panel === null && q.review_bucket !== 'escalated' ? (
-        <p className="mt-2 text-[12px] text-warm-meta">A student did not send this one up, so it cannot go back to them. Pass it, fix it or leave it out.</p>
+        <p className="mt-2 text-[12px] text-warm-meta">A student did not send this one up, so it cannot go back to them. {paperLive ? 'Pass it or fix it.' : 'Pass it, fix it or leave it out.'}</p>
       ) : null}
     </li>
   );
 }
 
-function SettledLine({ s, busy, onUndo }: { s: Settled; busy: boolean; onUndo: () => void }) {
+export function SettledLine({ s, busy, onUndo }: { s: Pick<Settled, 'what' | 'undo'>; busy: boolean; onUndo: () => void }) {
+  const canUndo = s.undo === 'reopen' || s.undo === 'reopen-words-stay';
+  const note = undoNote(s.undo);
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 rounded-[18px] bg-mint px-4 py-3" data-testid="settled-line">
-      <p className="text-[14px] font-semibold text-foreground">{s.what}</p>
-      <button
-        type="button"
-        className="tap-44 rounded-full bg-card px-4 py-2 text-[14px] font-bold text-foreground transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-disabled"
-        disabled={busy}
-        onClick={onUndo}
-      >
-        {busy ? 'Putting it back...' : 'Undo'}
-      </button>
+      <div className="min-w-0">
+        <p className="text-[14px] font-semibold text-foreground">{s.what}</p>
+        {note ? (
+          <p className="mt-0.5 text-[13px] text-warm-secondary" data-testid="undo-note">
+            {note}
+          </p>
+        ) : null}
+      </div>
+      {canUndo ? (
+        <button
+          type="button"
+          className="tap-44 rounded-full bg-card px-4 py-2 text-[14px] font-bold text-foreground transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-disabled"
+          disabled={busy}
+          onClick={onUndo}
+        >
+          {busy ? 'Putting it back...' : 'Undo'}
+        </button>
+      ) : null}
     </li>
   );
 }
 
-function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: string; paperId: string; paper: HodNeedsYouPaper | null }) {
+function PaperQuestions({
+  api,
+  scope,
+  paperId,
+  paper,
+  nextPaper,
+}: {
+  api: HodApi;
+  scope: string;
+  paperId: string;
+  paper: HodNeedsYouPaper | null;
+  /** The next paper with questions waiting, for the button after the last question. */
+  nextPaper: HodNeedsYouPaper | null;
+}) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: NEEDS_YOU_QUESTIONS_KEY(scope, paperId),
@@ -334,6 +418,8 @@ function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: st
   });
   const trailQ = useQuery({ queryKey: TRAIL_KEY(scope), queryFn: () => api.paperTrail(), staleTime: 30_000 });
   const stage = trailByPaper(trailQ.data ?? []).get(paperId)?.stage ?? 'needs_you';
+  /** Already on the site: the list row says so, and the route trail says "live" for an approved paper. */
+  const paperLive = Boolean(paper?.is_live) || stage === 'live';
   const [settled, setSettled] = useState<Record<string, Settled>>({});
   const [undoing, setUndoing] = useState<string | null>(null);
   const [undoError, setUndoError] = useState<string | null>(null);
@@ -381,9 +467,10 @@ function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: st
         ) : null}
         <RouteTrail stage={stage} className="mt-3" />
       </div>
-      {q.isLoading ? (
+      {/* loadGate, not isLoading: offline pauses a read (isLoading stays false) and "Nothing on this paper needs you" must not show. */}
+      {loadGate(q) === 'loading' ? (
         <ListSkeleton label="Loading the questions" />
-      ) : q.isError ? (
+      ) : loadGate(q) === 'error' ? (
         <LoadError what="The questions" onRetry={() => void q.refetch()} />
       ) : (
         <>
@@ -399,13 +486,28 @@ function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: st
                 Ready to go live.
               </Notice>
               <div className="flex flex-wrap gap-2">
-                <Link to={deskLink('ready', paperId)} className={cn(actionToneClass('brand'), 'h-[46.5px]')}>
+                {nextPaper ? (
+                  <Link
+                    to={deskLink('needs-you', nextPaper.audit_paper_id)}
+                    className={cn(actionToneClass('brand'), 'h-[46.5px]')}
+                    data-testid="next-needs-paper"
+                    aria-label={`Next paper waiting for you: ${nextPaper.title}`}
+                  >
+                    Next paper waiting for you
+                  </Link>
+                ) : null}
+                <Link to={deskLink('ready', paperId)} className={nextPaper ? actionToneClass('dark') : cn(actionToneClass('brand'), 'h-[46.5px]')}>
                   Open it in Ready to go live
                 </Link>
                 <Link to={deskLink('needs-you')} className={quietButton}>
                   Back to the list
                 </Link>
               </div>
+              {nextPaper ? (
+                <p className="text-[13px] text-warm-secondary">
+                  Next: {nextPaper.title}, {nextPaper.escalated + nextPaper.admin_bucket === 1 ? '1 question' : `${nextPaper.escalated + nextPaper.admin_bucket} questions`} waiting.
+                </p>
+              ) : null}
             </div>
           ) : (
             <p className="mb-3 text-[13px] text-warm-secondary" data-testid="needs-count">
@@ -421,9 +523,10 @@ function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: st
                   key={item.id}
                   q={item}
                   api={api}
+                  paperLive={paperLive}
                   onChanged={refresh}
-                  onSettled={(what) => {
-                    setSettled((m) => ({ ...m, [item.id]: { q: item, what } }));
+                  onSettled={(what, undo) => {
+                    setSettled((m) => ({ ...m, [item.id]: { q: item, what, undo } }));
                     toast.success(what);
                     refresh();
                   }}
@@ -437,13 +540,14 @@ function PaperQuestions({ api, scope, paperId, paper }: { api: HodApi; scope: st
   );
 }
 
-function PaperList({ api, scope }: { api: HodApi; scope: string }) {
+function PaperList({ api, scope, sort, onSort }: { api: HodApi; scope: string; sort: NeedsSort; onSort: (s: NeedsSort) => void }) {
   const q = useQuery({ queryKey: NEEDS_YOU_KEY(scope), queryFn: () => api.needsYouPapers(), staleTime: 0, refetchOnMount: true });
   const trailQ = useQuery({ queryKey: TRAIL_KEY(scope), queryFn: () => api.paperTrail(), staleTime: 30_000 });
   const trail = useMemo(() => trailByPaper(trailQ.data ?? []), [trailQ.data]);
-  if (q.isLoading) return <ListSkeleton label="Loading the papers that need you" />;
-  if (q.isError) return <LoadError what="The papers that need you" onRetry={() => void q.refetch()} />;
-  const list = q.data ?? [];
+  // loadGate, not isLoading: offline pauses a read (isLoading stays false) and "Nothing is waiting for you" must not show.
+  if (loadGate(q) === 'loading') return <ListSkeleton label="Loading the papers that need you" />;
+  if (loadGate(q) === 'error') return <LoadError what="The papers that need you" onRetry={() => void q.refetch()} />;
+  const list = sortNeedsPapers(q.data ?? [], sort);
   if (list.length === 0) {
     return (
       <EmptyNote>
@@ -454,9 +558,26 @@ function PaperList({ api, scope }: { api: HodApi; scope: string }) {
   const total = list.reduce((n, p) => n + waitingOn(p), 0);
   return (
     <div>
-      <p className="mb-3 text-[13px] text-warm-secondary" data-testid="needs-summary">
-        {total === 1 ? '1 question' : `${total} questions`} on {list.length === 1 ? '1 paper' : `${list.length} papers`} need you. Open a paper to settle its questions.
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] text-warm-secondary" data-testid="needs-summary">
+          {total === 1 ? '1 question' : `${total} questions`} on {list.length === 1 ? '1 paper' : `${list.length} papers`} need you. Open a paper to settle its questions.
+        </p>
+        <label className="flex items-center gap-2 text-[13px] font-semibold text-warm-secondary">
+          <span className="shrink-0">Sort</span>
+          <select
+            value={sort}
+            onChange={(e) => onSort(e.target.value as NeedsSort)}
+            className="min-h-11 rounded-xl bg-muted px-3 text-[16px] sm:text-[14px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            data-testid="needs-sort"
+          >
+            {NEEDS_SORTS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <ul className="space-y-3">
         {list.map((p) => (
           <li key={p.audit_paper_id} className="rounded-[18px] bg-muted shadow-card p-4" data-testid="needs-paper">
@@ -496,9 +617,12 @@ export function NeedsYouTab({ api, scope }: { api: HodApi; scope: string }) {
   const [params] = useSearchParams();
   const paperId = params.get('paper');
   const listQ = useQuery({ queryKey: NEEDS_YOU_KEY(scope), queryFn: () => api.needsYouPapers(), staleTime: 15_000 });
+  // The order chosen on the list is also the order "Next paper waiting for you" follows.
+  const [sort, setSort] = useState<NeedsSort>('most');
   if (paperId) {
-    const paper = (listQ.data ?? []).find((p) => p.audit_paper_id === paperId) ?? null;
-    return <PaperQuestions api={api} scope={scope} paperId={paperId} paper={paper} />;
+    const ordered = sortNeedsPapers(listQ.data ?? [], sort);
+    const paper = ordered.find((p) => p.audit_paper_id === paperId) ?? null;
+    return <PaperQuestions key={paperId} api={api} scope={scope} paperId={paperId} paper={paper} nextPaper={nextNeedsPaper(ordered, paperId)} />;
   }
-  return <PaperList api={api} scope={scope} />;
+  return <PaperList api={api} scope={scope} sort={sort} onSort={setSort} />;
 }

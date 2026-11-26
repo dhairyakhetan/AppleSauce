@@ -6,10 +6,14 @@ import { UNASSIGNED_SHOWN } from '@/lib/hod-desk';
 import type { HodApi } from '@/lib/hod-api';
 import { STAGE_PARAM, STAGE_TAB, parseStageParam, type PaperStage } from '@/lib/paper-status';
 
-/* The strip of counts at the top of the HOD desk: Not ready, Ready, Being checked, Waiting approval, Live.
+/* The strip of counts at the top of the HOD desk: Not ready, Waiting for a checker, Being checked, Can go live, Live.
    Tapping a stage opens the list that holds it (the three before-checking stages are lists on Assignments,
-   filtered with ?stage=; "Waiting approval" is the Ready to go live tab and "Live" is Live papers). Tapping the
+   filtered with ?stage=; "Can go live" is the Ready to go live tab and "Live" is Live papers). Tapping the
    chosen one again goes back to the whole Assignments view.
+
+   "Can go live" is the same number as the Ready to go live tab's badge (ready_ok: papers passing all four checks).
+   The pipeline page's Ready to go live stop counts every settled paper, blocked ones too, and says so in its own
+   words, with "Can go live now" as its figure, so the two pages no longer show one label with two numbers.
 
    It reads the same queries the lists use (same keys), so opening a tab afterwards finds the answer already
    there, and one that fails shows "?" without stopping the others. */

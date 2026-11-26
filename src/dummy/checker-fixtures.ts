@@ -152,6 +152,20 @@ export function dummyQuestions(): CheckerQuestion[] {
       // An older row: no first reading and no change log. The page is shown with a box.
       source: { page: 3, page_verified: true, dpi: 72, bbox: [44, 206, 552, 274] },
     }),
+    // No crop, and the pipeline LOOKED for the page and did not find it (page_verified false; the page number
+    // left on the row is only a guess). Every page of the paper is stored, so the checker gets the whole
+    // paper from page 1 with "We could not find this question on the page" (owner, 26 Nov 2026).
+    q({
+      id: 'd0000022-0000-4000-8000-000000000022',
+      ord: 0.4,
+      subject: 'Biology',
+      cls: 'IX',
+      display_number: '3',
+      marks: 2,
+      body: '3. Name the two kinds of cells that make up blood, and give one job of each. [2]',
+      flag_reasons: [],
+      source: { page: 6, page_verified: false },
+    }),
     // A trusted crop AND a verified page (owner round 24: the verified page
     // sits beside every question that has one). The made-up "printed paper"
     // has a made-up typo ("compleetly"), so the typo box can be tried here.
@@ -162,6 +176,8 @@ export function dummyQuestions(): CheckerQuestion[] {
       marks: 2,
       version: 3,
       body: 'Factorise compleetly: $3x^2 - 12$ [2]',
+      // Answer options, so the checker's option boxes can be tried here (owner, 25 Nov 2026).
+      options: ['3(x - 2)(x + 2)', '3(x - 4)', '3(x^2 - 4)', '(3x - 6)(x + 2)'],
       flag_reasons: ['spelling_suspect'],
       flag_detail: JSON.stringify({ spelling_suspect: 'Computer check: "compleetly" may be misspelt on the paper itself.' }),
       // The marks are still inside the text ("[2]"), so the screen offers Move marks out.

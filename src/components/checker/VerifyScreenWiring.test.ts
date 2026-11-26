@@ -52,8 +52,11 @@ describe('verify screen wiring (QA 2026-10-11)', () => {
     expect(screen).toContain('{ hasPicture: canCompare }');
   });
 
-  it('finding 10: Fix it says the options cannot be changed, and who can', () => {
-    expect(screen).toContain('You cannot change the options here. If one is wrong or missing, press Ask the HOD.');
+  it('finding 10 (changed 25 Nov 2026): Fix it lets a checker change the options, and the old "cannot change" note is gone', () => {
+    expect(screen).toContain('<OptionsEditor value={optionsDraft} onChange={setOptionsDraft} disabled={submitting} />');
+    expect(screen).not.toContain('You cannot change the options here');
+    // Check mode keeps the read-only list; fix mode shows the editor instead, never both.
+    expect(screen).toContain("options={mode === 'fix' ? null : question.options}");
   });
 
   it('a closed paper never sends a signed-in verifier to sign in again (Nov 2026)', () => {
@@ -72,7 +75,8 @@ describe('verify screen wiring (QA 2026-10-11)', () => {
   it('a question with a crop but no verified page still opens the whole paper on a tap (Nov 2026, tracker #3)', () => {
     // A crop with no verified page of its own gets the toggle. So does a question whose verified page
     // could not be loaded (picture not stored): "See the whole page" must never be a dead end.
-    expect(screen).toContain('const paperToggle = Boolean(hasCrop && !flipShown && (!pageToggle || pageUnavailable));');
+    // Since 26 Nov 2026 the open page offers every page too (the page alone had no previous or next).
+    expect(screen).toContain('const paperToggle = Boolean(!flipShown && ((hasCrop && (!pageToggle || pageUnavailable)) || pageViewerOn));');
     expect(screen).toContain('const pageTileOn = pageViewerOn || flipShown || paperOpen;');
     // pageUnavailable is read by paperToggle, so it must be declared first (a const is not usable before its line).
     expect(screen.indexOf('const pageUnavailable = Boolean(')).toBeGreaterThan(-1);
@@ -133,7 +137,9 @@ describe('verify screen wiring (check and fix, Nov 2026)', () => {
 
   it('B: the Undo button, its key and the shortcuts list all read canUndo, not the visit list', () => {
     expect(screen).toContain('canUndoNow(answered, paperRow?.done, undoHeld)');
-    expect(screen).toMatch(/disabled=\{submitting \|\| !canUndo\}/);
+    // Switched off by canUndo through aria-disabled, so a tap still says why (audit, 26 Nov 2026).
+    expect(screen).toContain('const undoOff = !canUndo;');
+    expect(screen).toContain('aria-disabled={undoOff || undefined}');
     expect(screen).toMatch(/action === 'undo' && canUndo/);
     expect(screen).not.toMatch(/answered\.length/);
   });

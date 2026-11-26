@@ -151,7 +151,7 @@ describe('the route with the example payload', () => {
   });
 
   it('stops lead to the HOD desk tabs, never to an admin page', () => {
-    expect(html).toContain('href="/hod?tab=assignments"');
+    expect(html).toContain('href="/hod?tab=assignments&amp;stage=ready"');
     expect(html).toContain('href="/hod?tab=needs-you"');
     expect(html).toContain('href="/hod?tab=ready"');
     expect(html).toContain('href="/hod?tab=live"');

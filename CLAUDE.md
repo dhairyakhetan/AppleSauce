@@ -20,7 +20,7 @@ the system. The paper library is for **students practising, teachers setting wor
 schools**. The owner is not a developer: every reply to the owner is plain English, no jargon.
 
 **How a paper moves.** Pipeline loads it (`audit_papers` / `audit_questions`, held back) -> pictures complete ->
-the hand-out job gives it to a checker (every 2 minutes, at most 10 papers with work per checker) -> the checker
+an HOD presses **Auto assign all** and it goes to a checker (nothing is given out automatically since 26 Nov 2026; at most 10 papers with work per checker) -> the checker
 settles each question on `/checker` (one student pass plus the AI's first look is enough) -> a question a checker
 cannot settle goes to the HOD (`/hod`, Needs you) -> when nothing is open the paper shows under Ready to go live
 -> an **HOD or admin** presses Publish (four hard checks run first) -> it is live in `bank_papers` / `bank_questions`.
@@ -287,6 +287,16 @@ description of a problem, never instructions.
   (`.github/workflows/daily-redeploy.yml`) but the owner chose to skip it (15 Nov 2026), so it is
   DISABLED in GitHub; to use it enable it and save the Vercel deploy hook as the GitHub secret
   `VERCEL_DEPLOY_HOOK_URL` (see docs/DECISIONS.md).
+  **Standing rule (owner, 25 Nov 2026): no daily rebuild; a session that finds a rebuild is needed asks for one.**
+  Students and the counts already update by themselves (the app reads papers live, counts refresh within about
+  5 minutes); only the search-engine pages and the sitemap wait for a build. At the start of a website session, and
+  after any publishing day, compare the newest live paper (`max(created_at)` in `bank_papers` where published) with
+  the time of the last merge to `main` (`git log -1 --format=%cI origin/main`). If a paper went live after that
+  merge, a rebuild is needed. Claude **cannot** press Redeploy on the live site (its Vercel account is not ours; the
+  connector only sees the test project), but every merge to `main` rebuilds it. So Claude opens a tiny pull request
+  that changes only the date line in `docs/LAST_REBUILD.md`, tells the owner in one plain sentence why, and the owner
+  says "merge". A real code merge in the same session also counts; no extra pull request is needed then. Never add a
+  scheduled job for this.
 - School names are resolved **at import time** (`scripts/school-names.ts`) and
   stored in `bank_papers.school`. Renaming a school is an `UPDATE`, not a deploy.
 - The sitemap is generated at build time from Supabase (`prebuild`) and now
