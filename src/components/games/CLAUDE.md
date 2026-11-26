@@ -147,6 +147,11 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   Step 3 has the same card colour as the others, with a Full screen button by its heading; the small preview's
   crossword uses at most 8 answers. Send for approval stays in view (sticky) beside the preview. The phone's "problems
   to fix" button shows only while the results are still below.
+- **Browser tests:** `npm run e2e` (Playwright, `playwright.config.ts`, files in `e2e/games/*.e2e.ts`) starts the dev
+  server with the preview tools on and a placeholder Supabase address, and drives Write questions and Chapters in dummy
+  mode: the autocorrect and its Undo, the dropdowns, sent-back questions, the preview's greyed-out games, Bulk add and
+  Bulk remove. No database or keys needed. `@playwright/test` is pinned to the Playwright version whose browser is
+  installed. Not in `npm test` or CI (vitest runs in node with no browser); run it after changing these pages.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
