@@ -55,6 +55,25 @@ describe('tidyText', () => {
     expect(run(text).text).toBe(text);
   });
 
+  it('leaves the commas of a Wrong line still being typed', () => {
+    const text = HEAD + Q.replace('Wrong: Barometer; Hygrometer; Ammeter', 'Wrong: Red, White, Blue');
+    expect(run(text, text.indexOf('Blue') + 4).text).toBe(text);
+  });
+
+  it('leaves a line whose fix the writer took back', () => {
+    const line = 'Wrong: Red, White, Blue';
+    const text = HEAD + Q.replace('Wrong: Barometer; Hygrometer; Ammeter', line);
+    expect(tidyText(text, { list, caret: null, leave: new Set([line]) }).text).toBe(text);
+  });
+
+  it('fixes only the code block of a pasted reply, never the chatbot\'s sentences around it', () => {
+    const reply = 'Here you go.\nwrong: a note, with, commas\n\n```\n' + HEAD + Q.replace('Level: easy', 'Level: Easy') + '\n```\nLevel: Easy ones first, as you asked.';
+    const t = run(reply).text;
+    expect(t).toContain('wrong: a note, with, commas');
+    expect(t).toContain('Level: Easy ones first, as you asked.');
+    expect(t).toContain('Level: easy\n```');
+  });
+
   it('leaves a Wrong line whose commas may be inside an option', () => {
     const text = HEAD + Q.replace('Wrong: Barometer; Hygrometer; Ammeter', 'Wrong: Copper, zinc and tin, Wood, Glass, Plastic');
     expect(run(text).text).toBe(text);

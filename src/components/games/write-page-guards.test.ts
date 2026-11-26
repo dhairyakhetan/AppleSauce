@@ -6,6 +6,7 @@ const read = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8');
 const write = read('./WriteQuestions.tsx');
 const revise = read('./Revise.tsx');
 const css = read('./games.css');
+const bulk = read('./BulkAdd.tsx');
 
 describe('Write questions: guards', () => {
   it('runs the timed autocorrect only while the Questions box itself has focus', () => {
@@ -31,5 +32,27 @@ describe('Write questions: guards', () => {
     const rules = css.split('\n').filter((l) => /^\.gl-[a-z]+ \{ color:/.test(l));
     expect(rules.length).toBeGreaterThan(5);
     for (const r of rules) expect(r).toMatch(/var\(--/);
+  });
+
+  it('keeps a fix the writer took back with Ctrl+Z taken back', () => {
+    expect(write).toMatch(/ta\.value === lastFix\.current\.before/);
+    expect(write).toContain('leave.current.add(l)');
+    expect(write).toMatch(/if \(ta\.value === declined\.current\) return;/);
+    // and the restored text isn't left selected for the next key to replace
+    expect(write).toMatch(/inputType === 'historyUndo'[\s\S]{0,200}setSelectionRange\(c, c\)/);
+  });
+
+  it('forgets the old chapter lines when the whole text is pasted over or emptied', () => {
+    expect(write).toContain("if (!t.trim()) keep.current = {};");
+    expect(write).toMatch(/if \(all\) \{ setExample\(false\); keep\.current = \{\}; \}/);
+  });
+
+  it('moves the caret with the lines a fix adds when the box is left', () => {
+    expect(write).toMatch(/setCaret\(next\.slice\(0, c1\)\.split\('\\n'\)\.length\)/);
+  });
+
+  it('gives Bulk remove its own text, and disarms it when the list changes', () => {
+    expect(bulk).toContain('text={removeText} setText={setRemoveText}');
+    expect(bulk).toContain('useEffect(() => setArmed(false), [text, list]);');
   });
 });

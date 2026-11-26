@@ -105,13 +105,15 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   const boxTimer = useRef(0);
   /** How many approved questions each chapter has (shown in the Chapter dropdown); null until loaded, or if it can't be. */
   const [inBank, setInBank] = useState<Map<string, number> | null>(null);
+  /** Counted again after each send (an HoD may have approved some since). */
+  const [bankTry, setBankTry] = useState(0);
   useEffect(() => {
     api.loadQuestionBank().then((qs) => {
       const m = new Map<string, number>();
       for (const q of qs) if (q.chapter_id) m.set(q.chapter_id, (m.get(q.chapter_id) ?? 0) + 1);
       setInBank(m);
     }, () => setInBank(null));
-  }, [api]);
+  }, [api, bankTry]);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
   /** The list of questions on the right, which scrolls by itself (side by side only). */
@@ -148,7 +150,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   const keep = useRef<Partial<Record<DetailKey, string>>>({});
   useEffect(() => { for (const k of DETAIL_KEYS) if (details[k].trim()) keep.current[k] = details[k]; });
   const remember = (t: string) => { keep.current = { ...readDetails(t) }; return t; };
-  const autoFix = (text: string, at: number | null) => tidyText(text, { list: catalog.list ?? [], caret: at, keep: keep.current });
+  const autoFix = (text: string, at: number | null, leave?: ReadonlySet<string>) => tidyText(text, { list: catalog.list ?? [], caret: at, keep: keep.current, leave });
   const gaps = missing(rows);
   // a chapter whose topics the list leaves open needs no Topic line
   const topicless = new Set(catalog.list?.filter(isOpen).map((c) => c.chapter_id));
@@ -276,7 +278,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
       const result = await api.sendBatch(these);
       setSent(result);
       setKept(text);
-      if (result.sent) { flash('send'); onSent(); }
+      if (result.sent) { flash('send'); onSent(); setBankTry((n) => n + 1); }
     } catch (e) {
       setSendError((e as Error).message);
     } finally {
@@ -543,7 +545,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-[12px] font-semibold text-warm-secondary">Questions</label>
-            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} autoFix={autoFix} />
+            <Editor value={raw} onChange={(t) => { if (!t.trim()) keep.current = {}; setRaw(t); }} onPaste={(all) => { setBatch((b) => b + 1); if (all) { setExample(false); keep.current = {}; } }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} onTopLine={followBox} autoFix={autoFix} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" ref={exampleBtn} className={btn('card')} onClick={() => (own.length ? setAskExample(true) : loadExample())}>Try an example</button>
@@ -862,7 +864,7 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
   /** The box was scrolled: the line now at its top. */
   onTopLine?: (line: number) => void;
   /** The autocorrect: the text with its sure fixes, and where the caret goes (`at` null when the box isn't being typed in). */
-  autoFix?: (text: string, at: number | null) => { text: string; caret: number | null };
+  autoFix?: (text: string, at: number | null, leave?: ReadonlySet<string>) => { text: string; caret: number | null };
 }) {
   const back = useRef<HTMLDivElement>(null);
   const pasted = useRef(false); // a paste is finished text: check all of it at once
@@ -875,21 +877,42 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
   const fixing = useRef(false);
   const fixTimer = useRef(0);
   const composing = useRef(false);
+  /** The last fix made (the text before and after it, and the lines it changed), and lines whose fix was taken back. */
+  const lastFix = useRef<{ before: string; lines: string[]; caret: number | null } | null>(null);
+  const leave = useRef(new Set<string>());
+  const declined = useRef<string | null>(null);
   const runFix = (focused: boolean) => {
     const ta = boxRef.current;
     if (!ta || !autoFix) return;
+    // the box is back to the text from before the last fix (Ctrl+Z): those lines are left as the writer wants them
+    if (lastFix.current && ta.value === lastFix.current.before) {
+      for (const l of lastFix.current.lines) leave.current.add(l);
+      declined.current = ta.value; // and a fix that changed no line (a blank line put in) isn't made again on this text
+    }
+    lastFix.current = null;
+    if (ta.value === declined.current) return;
     if (focused && ta.selectionStart !== ta.selectionEnd) return; // something is selected: leave it until later
     if (focused && composing.current) return; // a phone or Indic keyboard is still composing a word: never cut in
     const old = ta.value;
     const at = focused ? ta.selectionStart : null;
-    const fixed = autoFix(old, at);
+    const fixed = autoFix(old, at, leave.current);
     if (fixed.text === old) return;
     const next = fixed.text;
-    if (!focused) { onChange(next); return; }
+    const kept = new Set(next.split('\n'));
+    lastFix.current = { before: old, lines: old.split('\n').filter((l) => !kept.has(l)), caret: at };
     let a = 0;
     while (a < old.length && a < next.length && old[a] === next[a]) a++;
     let b = 0;
     while (b < old.length - a && b < next.length - a && old[old.length - 1 - b] === next[next.length - 1 - b]) b++;
+    if (!focused) {
+      // the box was left: lines added above where the caret was move it down, so a Topic button pressed now (which
+      // takes the focus away first) still puts its line where the caret is
+      const c0 = ta.selectionStart;
+      const c1 = c0 <= a ? c0 : c0 >= old.length - b ? c0 + next.length - old.length : a;
+      onChange(next);
+      setCaret(next.slice(0, c1).split('\n').length);
+      return;
+    }
     const top = ta.scrollTop;
     const linesBefore = (t: string, i: number) => t.slice(0, i).split('\n').length;
     const moved = at !== null && fixed.caret !== null ? linesBefore(next, fixed.caret) - linesBefore(old, at) : 0;
@@ -977,6 +1000,14 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
         <textarea id="q" ref={boxRef} spellCheck={false} value={value} aria-invalid={errors > 0} aria-describedby="caret-note"
           onChange={(e) => {
             onChange(e.target.value);
+            // Ctrl+Z on a fix: the browser leaves the restored text selected, and the next key would replace it; the
+            // caret goes back where the writer had it instead
+            const undo = lastFix.current;
+            if ((e.nativeEvent as InputEvent).inputType === 'historyUndo' && undo?.caret != null && e.target.value === undo.before) {
+              const ta = e.target;
+              const c = undo.caret;
+              requestAnimationFrame(() => ta.setSelectionRange(c, c));
+            }
             if (fixing.current) return; // the autocorrect's own edit, not typing
             if (pasted.current) { pasted.current = false; onCaret(e.target); onTyping(null); } else onTyping(lineOf(e.target));
           }}

@@ -48,7 +48,7 @@ function onlyMatch<T>(items: T[], name: (t: T) => string, written: string): T | 
 interface Context { board: string; cls: number | null; subject: string; chapter?: ListChapter }
 
 /** The fixes for one line, or the line as it was. `ctx` is what the lines above set, and is updated. */
-function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
+function fixLine(line: string, ctx: Context, list: ListChapter[], typing = false): string {
   const meta = readMeta(line);
   if (meta && (meta.key === 'board' || meta.key === 'class' || meta.key === 'subject')) {
     const k = meta.key;
@@ -88,7 +88,8 @@ function fixLine(line: string, ctx: Context, list: ListChapter[]): string {
     const l = rest.trim().replace(/[.!]+$/, '').toLowerCase();
     if (LEVELS.has(l)) rest = l;
   }
-  if (label === 'Wrong' && !rest.includes(';') && (rest.match(/,/g) ?? []).length >= 2 && !/\d,\d/.test(rest)) {
+  // not on the line being typed: more options with commas may still come, and would end up with both separators
+  if (!typing && label === 'Wrong' && !rest.includes(';') && (rest.match(/,/g) ?? []).length >= 2 && !/\d,\d/.test(rest)) {
     const parts = rest.split(',').map((o) => o.trim()).filter(Boolean);
     // only when each part is plainly one option: a part with "and"/"or" in it, or a long one, may be an option with a
     // comma inside ("Copper, zinc and tin"), so the line is left for the writer
@@ -106,7 +107,7 @@ export interface TidyResult { text: string; caret: number | null }
  * The text with its sure fixes made. `caret` is where the caret is (null when the box isn't being typed in); the
  * result says where it goes. `keep` is the last chapter lines the text had, put back at the top if they are gone.
  */
-export function tidyText(text: string, opts: { list: ListChapter[]; caret: number | null; keep?: Partial<Record<DetailKey, string>> }): TidyResult {
+export function tidyText(text: string, opts: { list: ListChapter[]; caret: number | null; keep?: Partial<Record<DetailKey, string>>; leave?: ReadonlySet<string> }): TidyResult {
   const lines = text.split('\n');
   let caretLine = -1;
   let caretCol = 0;
@@ -119,14 +120,19 @@ export function tidyText(text: string, opts: { list: ListChapter[]; caret: numbe
   const out: string[] = [];
   const ctx: Context = { board: '', cls: null, subject: '' };
   let fence = false;
+  const fenced = lines.some((l) => FENCE.test(l));
   let newCaretLine = -1;
   lines.forEach((line, i) => {
     if (FENCE.test(line)) { fence = !fence; out.push(line); if (i === caretLine) newCaretLine = out.length - 1; return; }
-    let fixed = fixLine(line, ctx, opts.list);
     const isCaret = i === caretLine;
+    let fixed = fixLine(line, ctx, opts.list, isCaret);
+    // a pasted reply: only its code block is fixed, never the chatbot's own sentences around it
+    if (fenced && !fence) fixed = line;
+    // a fix the writer took back with Ctrl+Z stays taken back
+    if (opts.leave?.has(line)) fixed = line;
     if (isCaret) fixed = sameLength(line, fixed);
     // a blank line before each question (not on the caret's line: it waits until the writer moves on)
-    if (!isCaret && /^\s*Q:/.test(fixed) && out.length && out[out.length - 1].trim() && !FENCE.test(out[out.length - 1])) out.push('');
+    if (!isCaret && !(fenced && !fence) && /^\s*Q:/.test(fixed) && out.length && out[out.length - 1].trim() && !FENCE.test(out[out.length - 1])) out.push('');
     out.push(fixed);
     if (isCaret) newCaretLine = out.length - 1;
   });

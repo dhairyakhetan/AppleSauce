@@ -205,6 +205,11 @@ describe('Bulk remove', () => {
     expect(toSave(G, r.groups[0].loaded, r.groups[0].draft).after.map((c) => c.chapter_no)).toEqual([2, 3]);
   });
 
+  it('says a subject with nothing on the list once, on its Subject line', () => {
+    expect(readBulkRemove('Board: CBSE\nClass: 8\nSubject: Physics\n1', []).problems.map((p) => [p.line, p.text]))
+      .toEqual([[3, 'Nothing is on the list for CBSE class 8 Physics.']]);
+  });
+
   it('lists a kept chapter once, however many times it is named', () => {
     const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: History\n2\nFrom Trade to Territory\n2. From Trade to Territory', LIST);
     expect(r.groups[0].kept).toEqual([{ chapter_no: 2, name: 'From Trade to Territory', questions: 17 }]);

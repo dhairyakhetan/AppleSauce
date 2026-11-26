@@ -58,7 +58,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   database's rule), anything not on the list is a problem on its line, and the red bar asks twice. In both modes a
   Board line starts afresh and a Class line forgets the subject once the block above has had chapters, so nothing goes
   to a subject left over from it (Bulk add takes the three lines in any order before a block's first chapter; Bulk
-  remove wants Subject after Board and Class). A kept chapter named twice is listed once.
+  remove wants Subject after Board and Class). A kept chapter named twice is listed once. Bulk remove has its own
+  text (a list written to add is never read as one to delete), and any change to the text or the list disarms its
+  second press. The Chapter dropdown's approved counts load again after each send.
   Until it is installed on the live database, every call in
   `lib/games/api.ts` (`realGamesApi`) fails and the pages say so. The site calls functions only; no role can read the tables.
   `lib/games/database.test.ts` runs the script on PGlite.
@@ -121,7 +123,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   only gets changes that keep its length; the rest waits until the writer moves on. It goes in as an edit of the box,
   so Ctrl+Z still works. Never a guess: a Topic number and name that disagree, topics under a chapter it couldn't
   match, and a Wrong line whose parts may hold a comma of their own ("Copper, zinc and tin") are left as written. The
-  timed fix runs only while the Questions box itself has focus and no keyboard is composing a word.
+  timed fix runs only while the Questions box itself has focus and no keyboard is composing a word. The line being typed
+  never gets its Wrong commas changed; in a pasted reply only the code block is fixed; a fix taken back with Ctrl+Z is
+  not made again; a whole-text paste or an emptied box forgets the old chapter lines; and when the box is left, the
+  caret line follows any lines the fix added (so a Topic button still lands where the caret was).
 - **Colours in the Questions box:** each kind of line has its own colour (chapter lines grey, Topic purple, Q dark,
   A green, Also teal, Fill blue, Wrong orange-brown, Level light grey; labels a little lighter). The textarea's text is
   see-through and the copy behind it (`games-backdrop` in `WriteQuestions.tsx`, `lineKind` in `helpers.ts`) is what shows, so the copy
