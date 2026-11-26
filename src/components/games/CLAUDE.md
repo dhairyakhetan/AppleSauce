@@ -121,7 +121,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   Nothing is stored, so it needs no database change. Clear mistakes stay errors. On Approve questions a cross clears a
   question's notes until the page is opened again (`cleared`, in memory only); "Approve all" on a batch with flagged
   questions asks first (View them, Approve all anyway); the flagged box shows only those, with Clear all and Send all
-  back (one typed reason), then what was done, with Approve all the rest and Undo. Each batch has Copy batch (its
+  back (one typed reason), then what was done, with Approve all the rest and Undo. The asking and the flagged box are
+  one popup whose steps change in place (`Morph` in `shared.tsx`: the box eases to its new size and the new step rises
+  in), so nothing closes and opens again in between. Each batch has Copy batch (its
   questions as text, any size: a browser can't put a file on the clipboard).
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
@@ -173,6 +175,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   problem list, flagged batches on Approve questions (`flagged.e2e.ts`), sent-back questions, the preview's greyed-out games, Bulk add and
   Bulk remove. No database or keys needed. `@playwright/test` is pinned to the Playwright version whose browser is
   installed. Not in `npm test` or CI (vitest runs in node with no browser); run it after changing these pages.
+- **Popups open and close smoothly:** every games popup stays mounted and is opened with `open`, so Radix plays the
+  site's open and close animations (`overlay-modal`); a popup's words are kept as they were while it closes (`useLatch`
+  in `helpers.ts`), as clearing or replacing changes them at once. Reduced motion turns the movement off.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.

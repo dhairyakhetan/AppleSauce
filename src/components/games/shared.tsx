@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Row } from '@/lib/games/rows';
@@ -163,4 +163,27 @@ export function Coloured({ text }: { text: string }) {
     const kind = lineKind(l);
     return <span key={i} className={kind ? `gl-${kind}` : undefined}>{i > 0 && '\n'}<Labelled body={l} kind={kind} /></span>;
   })}</>;
+}
+
+/**
+ * Content that changes in place (a popup's steps): the box eases to the new content's height, and the new content (a
+ * new `step`) rises in. Rings on its edges stay visible (a little padding inside the clip).
+ */
+export function Morph({ step, children, className }: { step: string; children: ReactNode; className?: string }) {
+  const inner = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = inner.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div className={cn('games-morph -m-1 overflow-hidden p-1', className)} style={height === null ? undefined : { height: height + 8 }}>
+      <div ref={inner}>
+        <div key={step} className="games-morph-in">{children}</div>
+      </div>
+    </div>
+  );
 }

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { toast } from 'sonner';
 import { usableIn, type GameType, type Item } from '@/lib/games/engine';
 import { CROSSWORD } from '@/lib/games/engine/crossword';
@@ -106,4 +107,12 @@ export function lineKind(line: string): LineKind | null {
   const meta = readMeta(line);
   if (!meta) return null;
   return meta.key === 'topic' ? 'topic' : meta.key === 'difficulty' ? 'level' : 'detail';
+}
+
+/** The last value that was set: a popup closing keeps showing what it showed while it animates out, instead of
+ * going blank (or saying something else) for its last fifth of a second. */
+export function useLatch<T>(value: T | null | undefined): T | null | undefined {
+  const last = useRef(value);
+  if (value !== null && value !== undefined) last.current = value;
+  return value ?? last.current;
 }

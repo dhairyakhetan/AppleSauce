@@ -116,3 +116,27 @@ test('questions sent back together show on Write questions as one batch, with it
   await group.getByRole('button', { name: 'Fix them in the Questions box' }).click();
   await expect(page.locator('textarea#q')).toHaveValue(/A: Becomes hotter[\s\S]*A: True/);
 });
+
+test('the box changes shape smoothly between its steps, and fades out when it closes', async ({ page }) => {
+  const batch = await sendAndApprove(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await batch.getByRole('button', { name: /^Approve all 3/ }).click();
+  const box = page.getByRole('dialog');
+  await expect(box).toContainText('There are 2 flagged questions');
+  await page.waitForTimeout(400); // opened
+  const width = () => box.evaluate((n) => n.getBoundingClientRect().width);
+  const small = await width();
+  await box.getByRole('button', { name: 'View them' }).click();
+  await page.waitForTimeout(80);
+  const between = await width();
+  await page.waitForTimeout(500);
+  const big = await width();
+  expect(between).toBeGreaterThan(small); // on its way, not a jump
+  expect(between).toBeLessThan(big);
+  // closing: still on screen for a moment, marked closed, then gone
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(60);
+  await expect(box).toHaveAttribute('data-state', 'closed');
+  await expect(box).toContainText('2 flagged questions'); // its words, not blank, while it goes
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 2000 });
+});

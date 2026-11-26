@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
-import { btn, chip, copyText, day, FIELD, GAME_NAMES, lineKind, LINKISH, offerUndo, plural } from './helpers';
+import { btn, chip, copyText, day, FIELD, GAME_NAMES, lineKind, LINKISH, offerUndo, plural, useLatch } from './helpers';
 import { Picker } from './Picker';
 import { ActionIcon, Labelled, RowsTable } from './shared';
 import './games.css';
@@ -316,6 +316,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   const broken = mine.filter(({ r, i }) => status(r, i));
   const stray = problems.general.filter((x) => x.level === 'error');
   const ready = sendable.length;
+  const stoppedSays = useLatch(stopped ? { broken: broken.length, mine: mine.length, stray: stray.length, ready } : null);
   // the text lives only on this page: closing or reloading it with questions not yet sent asks first
   const unsaved = own.length > 0 && raw !== kept;
   useEffect(() => {
@@ -501,6 +502,11 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
    * whether to clear them; the example's questions, or none, are cleared without asking.
    */
   const [askChange, setAskChange] = useState<{ k: DetailKey; v: string } | null>(null);
+  const shownChange = useLatch(askChange);
+  // the example and the errors popups also keep their words as they close (replacing or removing changes them at once)
+  const exampleSays = useLatch(askExample ? own.length : null);
+  // what it says, as it was when it asked (Clear empties the box while the popup is still closing)
+  const changeSays = useLatch(askChange ? { n: own.length, chapter: details.chapter.trim() } : null);
   const applyPick = (k: DetailKey, v: string, clear: boolean) => {
     setAskChange(null);
     const now = settled();
@@ -731,9 +737,9 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
         </form>
         <Dialog open={!!askChange} onOpenChange={(o) => { if (!o) setAskChange(null); }}>
           <DialogContent className="max-w-md rounded-2xl bg-card">
-            <DialogTitle>Clear your questions for the new {askChange ? LABEL[askChange.k].toLowerCase() : 'chapter'}?</DialogTitle>
+            <DialogTitle>Clear your questions for the new {shownChange ? LABEL[shownChange.k].toLowerCase() : 'chapter'}?</DialogTitle>
             <DialogDescription>
-              The Questions box has {plural(own.length, 'question')} for {details.chapter.trim() ? `Chapter ${details.chapter.trim()}` : 'the details chosen now'}. Clear {own.length === 1 ? 'it' : 'them'} to start on the new one, or keep {own.length === 1 ? 'it' : 'them'} under the new details. Clearing can be undone for a few seconds.
+              The Questions box has {plural(changeSays?.n ?? 0, 'question')} for {changeSays?.chapter ? `Chapter ${changeSays.chapter}` : 'the details chosen now'}. Clear {changeSays?.n === 1 ? 'it' : 'them'} to start on the new one, or keep {changeSays?.n === 1 ? 'it' : 'them'} under the new details. Clearing can be undone for a few seconds.
             </DialogDescription>
             <div className="flex flex-col gap-2 sm:flex-row-reverse">
               <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={() => askChange && applyPick(askChange.k, askChange.v, true)}>Clear and change</button>
@@ -746,7 +752,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
           <DialogContent className="max-w-md rounded-2xl bg-card">
             <DialogTitle>Replace your questions with the example?</DialogTitle>
             <DialogDescription>
-              The {plural(own.length, 'question')} in the Questions box will be replaced by the example. You can undo it for a few seconds afterwards.
+              The {plural(exampleSays ?? 0, 'question')} in the Questions box will be replaced by the example. You can undo it for a few seconds afterwards.
             </DialogDescription>
             <div className="flex flex-col gap-2 sm:flex-row-reverse">
               <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={loadExample}>Replace with the example</button>
@@ -758,12 +764,12 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
           <DialogContent className="max-w-lg rounded-2xl bg-card">
             <DialogTitle>There are errors in the questions</DialogTitle>
             <DialogDescription>
-              {broken.length ? `${broken.length} of ${plural(mine.length, 'question')} can't be sent as ${broken.length === 1 ? 'it is' : 'they are'}` : 'Some lines can\'t be read'}
-              {broken.length > 0 && stray.length > 0 && `, and ${plural(stray.length, 'other line')} can't be read`}. Check says what is wrong with each.
+              {stoppedSays?.broken ? `${stoppedSays.broken} of ${plural(stoppedSays.mine, 'question')} can't be sent as ${stoppedSays.broken === 1 ? 'it is' : 'they are'}` : 'Some lines can\'t be read'}
+              {!!stoppedSays?.broken && !!stoppedSays.stray && `, and ${plural(stoppedSays.stray, 'other line')} can't be read`}. Check says what is wrong with each.
             </DialogDescription>
             <div className="flex flex-col gap-2">
               <button type="button" className={btn('brand', 'w-full')} disabled={!ready || sending} onClick={removeAndSend}>
-                <Trash2 aria-hidden />{ready ? `Remove those and send ${plural(ready, 'question')}` : 'Nothing left to send'}
+                <Trash2 aria-hidden />{stoppedSays?.ready ? `Remove those and send ${plural(stoppedSays.ready, 'question')}` : 'Nothing left to send'}
               </button>
               <button type="button" className={btn('dark', 'w-full')} onClick={() => void copy('fix', fixPrompt(raw, rows, all))}>
                 <ActionIcon done={done === 'fix'}><Copy /></ActionIcon>Copy prompt to fix them

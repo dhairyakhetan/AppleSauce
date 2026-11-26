@@ -148,3 +148,12 @@
 @media (hover: hover) {
   .games-ws-cell:not(.found):not(.on):not(.anchor):hover { background: hsl(var(--muted)); }
 }
+/* A popup whose content changes (the flagged box's steps): the new content rises in a little as the box eases to its
+   new height (Morph in shared.tsx). Nothing moves for anyone who asked for less motion. */
+@keyframes games-morph-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+.games-morph { transition: height 260ms var(--ease-out-strong); }
+.games-morph-in { animation: games-morph-in 220ms var(--ease-out-strong) both; }
+@media (prefers-reduced-motion: reduce) {
+  .games-morph { transition: none; }
+  .games-morph-in { animation: none; }
+}

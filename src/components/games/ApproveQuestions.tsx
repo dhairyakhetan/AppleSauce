@@ -4,8 +4,8 @@ import { nextTabKey } from '@/components/admin/AdminTabs';
 import { APPROVED_PAGE, type GamesApi, type SaveResult } from '@/lib/games/api';
 import { counts, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Batch, type Status } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
-import { btn, chip, copyText, download, FIELD, offerUndo, plural, when } from './helpers';
-import { Empty, Loading, LoadFailed, RowsTable } from './shared';
+import { btn, chip, copyText, download, FIELD, offerUndo, plural, useLatch, when } from './helpers';
+import { Empty, Loading, LoadFailed, Morph, RowsTable } from './shared';
 import { asText, doubts } from '@/lib/games/format';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
@@ -25,7 +25,14 @@ const TABS: { key: Status; label: string }[] = [{ key: 'pending', label: 'Waitin
 const cleared = new Set<string>();
 
 /** The flagged questions' box for one batch: looking at them, writing why they go back, or what was done. */
-interface Review { batch: string; phase: 'list' | 'why' | 'done'; sent: string[]; cleared: string[]; undoSend?: () => void }
+interface Review {
+  batch: string;
+  /** Asking first (Approve all on a flagged batch), the flagged questions, why they go back, or what was done. */
+  phase: 'ask' | 'list' | 'why' | 'done';
+  /** When it asked: how many were flagged, of how many waiting (kept, so the words don't change as it closes). */
+  n: number; total: number;
+  sent: string[]; cleared: string[]; undoSend?: () => void;
+}
 
 /** Adds questions (and their batches) the page doesn't have yet. */
 const merge = (b: Bank, more: Bank): Bank => {
@@ -50,9 +57,10 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const [, setNotesTick] = useState(0);
-  /** "Approve all" on a batch with flagged questions asks first. */
-  const [askFlagged, setAskFlagged] = useState<string | null>(null);
+  /** "Approve all" on a batch with flagged questions asks first, and the same box goes on to show them: one box whose
+   * steps change in place (`Morph`), so nothing closes and opens again in between. */
   const [review, setReview] = useState<Review | null>(null);
+  const shownReview = useLatch(review);
   const [reviewWhy, setReviewWhy] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -159,7 +167,8 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
   const flaggedIn = (batch: string) => { const qs = waitingIn(batch); return qs.filter((q) => notesOf(q, qs).length); };
   /** "Approve all": straight away, unless some of the batch is flagged. */
   const approveAll = (batch: string) => {
-    if (flaggedIn(batch).length) setAskFlagged(batch);
+    const flagged = flaggedIn(batch).length;
+    if (flagged) { setReviewWhy(''); setReview({ batch, phase: 'ask', n: flagged, total: waitingIn(batch).length, sent: [], cleared: [] }); }
     else act(waitingIn(batch).map((q) => q.id), 'approved');
   };
   const copyBatch = async (batch: string, qs: BankQuestion[]) => {
@@ -270,95 +279,94 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
             : <Empty><button type="button" className={btn('dark')} onClick={loadOlder}>Try again</button></Empty>
         ))}
       </div>
-      {askFlagged && (() => {
-        const all = waitingIn(askFlagged);
-        const n = flaggedIn(askFlagged).length;
-        return (
-          <Dialog open onOpenChange={(o) => { if (!o) setAskFlagged(null); }}>
-            <DialogContent className="max-w-md rounded-2xl bg-card">
-              <DialogTitle>{n === 1 ? 'There is 1 flagged question' : `There are ${n} flagged questions`} in this batch</DialogTitle>
-              <DialogDescription>
-                The page wasn't sure about something in {n === 1 ? 'it' : 'them'} ("Please check"). Look at {n === 1 ? 'it' : 'them'} first, or approve all {all.length} as they are.
-              </DialogDescription>
-              <div className="flex flex-col gap-2 sm:flex-row-reverse">
-                <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={() => { setReview({ batch: askFlagged, phase: 'list', sent: [], cleared: [] }); setReviewWhy(''); setAskFlagged(null); }}>View {n === 1 ? 'it' : 'them'}</button>
-                <button type="button" className={btn('card', 'w-full sm:w-auto')} onClick={() => { act(all.map((q) => q.id), 'approved'); setAskFlagged(null); }}>Approve all anyway</button>
-                <button type="button" className={btn('quiet', 'w-full sm:w-auto sm:mr-auto')} onClick={() => setAskFlagged(null)}>Cancel</button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        );
-      })()}
-      {review && (() => {
-        const batch = bank.batches.find((x) => x.id === review.batch);
-        const all = waitingIn(review.batch);
-        const flagged = flaggedIn(review.batch).filter((q) => !review.sent.includes(q.id));
-        const done = review.phase === 'done' || (review.phase === 'list' && !flagged.length);
-        const rest = all.filter((q) => !review.sent.includes(q.id));
-        const close = () => setReview(null);
-        const undo = () => {
-          clearNotes(review.cleared, false);
-          review.undoSend?.();
-          setReview({ batch: review.batch, phase: 'list', sent: [], cleared: [] });
-        };
-        return (
-          <Dialog open onOpenChange={(o) => { if (!o) close(); }}>
-            <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col gap-3 rounded-2xl bg-card">
-              {done ? (
-                <>
-                  <DialogTitle>Flagged questions done</DialogTitle>
-                  <DialogDescription asChild>
-                    <div className="flex flex-col gap-1 text-[15px] text-foreground">
-                      {review.sent.length > 0 && <p><b>{plural(review.sent.length, 'question')}</b> sent back</p>}
-                      {review.cleared.length > 0 && <p><b>{plural(review.cleared.length, 'question')}</b> cleared</p>}
+      <Dialog open={!!review} onOpenChange={(o) => { if (!o) setReview(null); }}>
+        {shownReview && (() => {
+          const rv = shownReview;
+          const batch = bank.batches.find((x) => x.id === rv.batch);
+          const all = waitingIn(rv.batch);
+          const flagged = flaggedIn(rv.batch).filter((q) => !rv.sent.includes(q.id));
+          const phase = rv.phase === 'list' && !flagged.length && (rv.sent.length || rv.cleared.length) ? 'done' : rv.phase;
+          const rest = all.filter((q) => !rv.sent.includes(q.id));
+          const close = () => setReview(null);
+          const go = (more: Partial<Review>) => setReview((r) => r && { ...r, ...more });
+          const undo = () => {
+            clearNotes(rv.cleared, false);
+            rv.undoSend?.();
+            go({ phase: 'list', sent: [], cleared: [], undoSend: undefined });
+          };
+          const them = rv.n === 1 ? 'it' : 'them';
+          return (
+            <DialogContent className={cn('max-h-[90vh] overflow-y-auto rounded-2xl bg-card transition-[max-width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none',
+              phase === 'list' ? 'max-w-3xl' : 'max-w-md')}>
+              <Morph step={phase}>
+                {phase === 'ask' ? (
+                  <div className="flex flex-col gap-3">
+                    <DialogTitle className="pr-8">{rv.n === 1 ? 'There is 1 flagged question' : `There are ${rv.n} flagged questions`} in this batch</DialogTitle>
+                    <DialogDescription>
+                      The page wasn't sure about something in {them} ("Please check"). Look at {them} first, or approve all {rv.total} as they are.
+                    </DialogDescription>
+                    <div className="flex flex-col gap-2 sm:flex-row-reverse">
+                      <button type="button" className={btn('brand', 'w-full sm:w-auto')} onClick={() => go({ phase: 'list' })}>View {them}</button>
+                      <button type="button" className={btn('card', 'w-full sm:w-auto')} onClick={() => { act(all.map((q) => q.id), 'approved'); close(); }}>Approve all anyway</button>
+                      <button type="button" className={btn('quiet', 'w-full sm:w-auto sm:mr-auto')} onClick={close}>Cancel</button>
                     </div>
-                  </DialogDescription>
-                  <div className="flex flex-wrap gap-2">
-                    {rest.length > 0
-                      ? <button type="button" className={btn('mint')} onClick={() => { act(rest.map((q) => q.id), 'approved'); close(); }}><Check aria-hidden /> Approve all {rest.length}</button>
-                      : <button type="button" className={btn('dark')} onClick={close}>Done</button>}
-                    <button type="button" className={btn('card')} onClick={undo}>Undo</button>
                   </div>
-                </>
-              ) : review.phase === 'why' ? (
-                <form className="flex flex-col gap-2" onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!reviewWhy.trim()) return;
-                  const ids = flagged.map((q) => q.id);
-                  const undoSend = act(ids, 'rejected', reviewWhy, false);
-                  setReview({ ...review, phase: 'done', sent: ids, undoSend });
-                  setReviewWhy('');
-                }}>
-                  <DialogTitle>Send {plural(flagged.length, 'question')} back</DialogTitle>
-                  <DialogDescription>They go back to {batch?.by ?? 'the teacher'} together, with one reason.</DialogDescription>
-                  <label htmlFor="review-why" className="text-[13px] font-semibold text-foreground">Why are {flagged.length === 1 ? 'it' : 'they'} going back? The teacher will see this.</label>
-                  <textarea id="review-why" rows={3} maxLength={500} value={reviewWhy} autoFocus onChange={(e) => setReviewWhy(e.target.value)}
-                    className={cn(FIELD, 'resize-y py-2')} placeholder="e.g. The answers don't fit the gap in the Fill sentences." />
-                  <div className="flex flex-wrap gap-2">
-                    <button type="submit" className={btn('danger')} disabled={!reviewWhy.trim()}>Send {flagged.length} back</button>
-                    <button type="button" className={btn('card')} onClick={() => setReview({ ...review, phase: 'list' })}>Back</button>
+                ) : phase === 'done' ? (
+                  <div className="flex flex-col gap-3">
+                    <DialogTitle className="pr-8">Flagged questions done</DialogTitle>
+                    <DialogDescription asChild>
+                      <div className="flex flex-col gap-1 text-[15px] text-foreground">
+                        {rv.sent.length > 0 && <p><b>{plural(rv.sent.length, 'question')}</b> sent back</p>}
+                        {rv.cleared.length > 0 && <p><b>{plural(rv.cleared.length, 'question')}</b> cleared</p>}
+                      </div>
+                    </DialogDescription>
+                    <div className="flex flex-wrap gap-2">
+                      {rest.length > 0
+                        ? <button type="button" className={btn('mint')} onClick={() => { act(rest.map((q) => q.id), 'approved'); close(); }}><Check aria-hidden /> Approve all {rest.length}</button>
+                        : <button type="button" className={btn('dark')} onClick={close}>Done</button>}
+                      <button type="button" className={btn('card')} onClick={undo}>Undo</button>
+                    </div>
                   </div>
-                </form>
-              ) : (
-                <>
-                  <DialogTitle>{plural(flagged.length, 'flagged question')}</DialogTitle>
-                  <DialogDescription>
-                    From {batch?.by ?? 'this'}'s batch of {all.length}. Clear a note when the question is fine (it comes back when the page is opened again), or send them back.
-                  </DialogDescription>
-                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-2xl bg-muted p-3 sm:p-4">
-                    <RowsTable rows={flagged} keyOf={(q) => q.id} doubts={(q) => notesOf(q, all)}
-                      onClearDoubts={(q) => { clearNotes([q.id]); setReview((r) => r && { ...r, cleared: [...r.cleared, q.id] }); }} />
+                ) : phase === 'why' ? (
+                  <form className="flex flex-col gap-2" onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!reviewWhy.trim()) return;
+                    const ids = flagged.map((q) => q.id);
+                    const undoSend = act(ids, 'rejected', reviewWhy, false);
+                    go({ phase: 'done', sent: ids, undoSend });
+                    setReviewWhy('');
+                  }}>
+                    <DialogTitle className="pr-8">Send {plural(flagged.length, 'question')} back</DialogTitle>
+                    <DialogDescription>They go back to {batch?.by ?? 'the teacher'} together, with one reason.</DialogDescription>
+                    <label htmlFor="review-why" className="text-[13px] font-semibold text-foreground">Why are {flagged.length === 1 ? 'it' : 'they'} going back? The teacher will see this.</label>
+                    <textarea id="review-why" rows={3} maxLength={500} value={reviewWhy} autoFocus onChange={(e) => setReviewWhy(e.target.value)}
+                      className={cn(FIELD, 'resize-y py-2')} placeholder="e.g. The answers don't fit the gap in the Fill sentences." />
+                    <div className="flex flex-wrap gap-2">
+                      <button type="submit" className={btn('danger')} disabled={!reviewWhy.trim()}>Send {flagged.length} back</button>
+                      <button type="button" className={btn('card')} onClick={() => go({ phase: 'list' })}>Back</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <DialogTitle className="pr-8">{plural(flagged.length, 'flagged question')}</DialogTitle>
+                    <DialogDescription>
+                      From {batch?.by ?? 'this'}'s batch of {all.length}. Clear a note when the question is fine (it comes back when the page is opened again), or send them back.
+                    </DialogDescription>
+                    <div className="max-h-[min(55vh,520px)] overflow-y-auto overscroll-contain rounded-2xl bg-muted p-3 sm:p-4">
+                      <RowsTable rows={flagged} keyOf={(q) => q.id} doubts={(q) => notesOf(q, all)}
+                        onClearDoubts={(q) => { clearNotes([q.id]); setReview((r) => r && { ...r, cleared: [...r.cleared, q.id] }); }} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={btn('card')} onClick={() => { const ids = flagged.map((q) => q.id); clearNotes(ids); go({ phase: 'done', cleared: [...rv.cleared, ...ids] }); }}>Clear all</button>
+                      <button type="button" className={btn('danger')} onClick={() => { setReviewWhy(''); go({ phase: 'why' }); }}>Send all back</button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className={btn('card')} onClick={() => { const ids = flagged.map((q) => q.id); clearNotes(ids); setReview({ ...review, phase: 'done', cleared: [...review.cleared, ...ids] }); }}>Clear all</button>
-                    <button type="button" className={btn('danger')} onClick={() => { setReviewWhy(''); setReview({ ...review, phase: 'why' }); }}>Send all back</button>
-                  </div>
-                </>
-              )}
+                )}
+              </Morph>
             </DialogContent>
-          </Dialog>
-        );
-      })()}
+          );
+        })()}
+      </Dialog>
     </div>
   );
 }
