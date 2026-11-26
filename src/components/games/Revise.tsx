@@ -2,13 +2,14 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
 import { GAME_TYPES, makeGame, poolFor, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
 
-/** The most answers the small preview's crossword uses. */
-const COMPACT_CROSSWORD = 8;
 import type { BankQuestion } from '@/lib/games/rows';
 import { bySubject } from '@/lib/games/details';
 import { cn } from '@/lib/utils';
 import { GameView } from './GameView';
 import { chip, GAME_NAMES, plural, whyNot } from './helpers';
+
+/** The most answers the small preview's crossword uses. */
+const COMPACT_CROSSWORD = 8;
 
 /* What students get: pick a class, subject and chapter, and the topics studied (all of them to start with), and play a
    short puzzle made from those questions on the device by the games engine (src/lib/games/engine), which checks every
@@ -64,6 +65,8 @@ export function Revise({ questions, compact = false, written = false, heading, e
   const [pick, setPickState] = useState({ chapter: '', out: [] as string[] });
   const [round, setRound] = useState(0);
   const [want, setWant] = useState<GameType | null>(null);
+  /** A greyed-out game that was tapped: what it needs is said under the tabs (a hover note never shows on a phone). */
+  const [asked, setAsked] = useState<GameType | null>(null);
   const setPick = (p: { chapter: string; out: string[] }) => {
     setPickState(p);
     setRound(0);
@@ -187,7 +190,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div role="tablist" aria-label="Game" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-card p-1 sm:rounded-full">
             {GAME_TYPES.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={t === type} aria-disabled={!games[t] || undefined} onClick={() => games[t] && setWant(t)}
+              <button key={t} type="button" role="tab" aria-selected={t === type} aria-disabled={!games[t] || undefined} onClick={() => { if (games[t]) { setWant(t); setAsked(null); } else setAsked(t); }}
                 title={whyNot(t, items, !!games[t]) ?? undefined}
                 className={cn('flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-disabled:cursor-not-allowed aria-disabled:text-warm-label aria-disabled:line-through',
                   compact ? 'h-8 px-2.5 text-[12px]' : 'h-9 px-3 text-[13px]',
@@ -201,6 +204,9 @@ export function Revise({ questions, compact = false, written = false, heading, e
             <button type="button" className={chip('card')} onClick={() => setRound((r) => r + 1)}><Shuffle aria-hidden /> New puzzle</button>
           </div>
         </div>
+        <p role="status" className={cn('text-warm-secondary', compact ? 'text-[12px]' : 'text-[13px]', !(asked && !games[asked]) && 'sr-only')}>
+          {asked && !games[asked] ? `${GAME_NAMES[asked]}: ${whyNot(asked, items, false)}` : ''}
+        </p>
         <div className={cn('rounded-2xl', compact ? '' : 'bg-card p-4 sm:p-6')}>
           {game ? <GameView key={`${type}|${seed}|${made}`} game={game} compact={compact} onNext={() => setRound((r) => r + 1)} />
             : <p className="py-6 text-center text-[14px] text-warm-secondary">These topics don't have enough questions for a puzzle yet. {written ? 'Add a few more.' : 'Pick more topics.'}</p>}

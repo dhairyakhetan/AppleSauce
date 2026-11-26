@@ -181,6 +181,12 @@ describe('the draft of a subject\'s chapters', () => {
     expect(problems.find((p) => p.line === 10)!.text).toBe('No dashes in a name: use a colon or a comma.');
   });
 
+  it('Bulk add takes Board, Class and Subject in any order before the first chapter, and a new Class line needs its own Subject', () => {
+    expect(readBulk('Board: CBSE\nSubject: History\nClass: 8\n9. New', LOADED).problems).toEqual([]);
+    const r = readBulk('Board: CBSE\nClass: 8\nSubject: History\n9. New\n\nClass: 9\n1. Other', LOADED);
+    expect(r.problems.map((p) => [p.line, p.text])).toEqual([[7, 'Put a Subject line above these chapters. A new Board line starts afresh, and a new Class line needs its own Subject line.']]);
+  });
+
   it('Bulk add refuses a chapter number over 99 instead of reading it as part of the name', () => {
     const { problems } = readBulk(['Board: CBSE', 'Class: 8', 'Subject: History', '100. Big'].join('\n'), LOADED);
     expect(problems.map((p) => [p.line, p.text])).toEqual([[4, 'A number must be from 1 to 99.']]);
@@ -199,6 +205,22 @@ describe('Bulk remove', () => {
     expect(toSave(G, r.groups[0].loaded, r.groups[0].draft).after.map((c) => c.chapter_no)).toEqual([2, 3]);
   });
 
+  it('says a subject with nothing on the list once, on its Subject line', () => {
+    expect(readBulkRemove('Board: CBSE\nClass: 8\nSubject: Physics\n1', []).problems.map((p) => [p.line, p.text]))
+      .toEqual([[3, 'Nothing is on the list for CBSE class 8 Physics.']]);
+  });
+
+  it('removes every chapter when one block for a subject has no chapter lines, whatever another block for it names', () => {
+    const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: Geography\n\nBoard: CBSE\nClass: 8\nSubject: Geography\n2', LIST);
+    expect(r.problems).toEqual([]);
+    expect(r.groups[0].removed.map((c) => c.chapter_no)).toEqual([1, 2]);
+  });
+
+  it('lists a kept chapter once, however many times it is named', () => {
+    const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: History\n2\nFrom Trade to Territory\n2. From Trade to Territory', LIST);
+    expect(r.groups[0].kept).toEqual([{ chapter_no: 2, name: 'From Trade to Territory', questions: 17 }]);
+  });
+
   it('removes every chapter of a subject with no chapter lines under it', () => {
     const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: Geography', LIST);
     expect(r.problems).toEqual([]);
@@ -213,7 +235,7 @@ describe('Bulk remove', () => {
     const r = readBulkRemove('Board: CBSE\nClass: 8\nSubject: Geography\n\nBoard: CBSE\nClass: 8\nSubject: History\n1', list);
     expect(r.problems).toEqual([]);
     expect(r.groups.map((g) => `${g.group.class} ${g.group.subject}`)).toEqual(['8 Geography', '8 History']);
-    expect(readBulkRemove('Board: CBSE\nClass: 7\n1', list).problems.map((p) => p.text)).toEqual(['Put Board, Class and Subject lines above the chapters.']);
+    expect(readBulkRemove('Board: CBSE\nClass: 7\n1', list).problems.map((p) => p.text)).toEqual(['Put a Subject line under the Class line, above these chapters. In Bulk remove the Subject line comes after Board and Class.']);
   });
 
   it('names every line it cannot do, so nothing is removed by mistake', () => {

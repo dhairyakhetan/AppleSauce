@@ -56,8 +56,12 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   Its red button switches it to Bulk remove (`readBulkRemove`): the same lines, then the chapters to delete by number,
   name or both, or a subject with no chapters under it to delete all of them; chapters with questions are kept (the
   database's rule), anything not on the list is a problem on its line, and the red bar asks twice. In both modes a
-  Board line starts afresh and a Class line forgets the subject, so nothing goes to a subject left over from the
-  block above.
+  Board line starts afresh and a Class line forgets the subject once the block above has had chapters, so nothing goes
+  to a subject left over from it (Bulk add takes the three lines in any order before a block's first chapter; Bulk
+  remove wants Subject after Board and Class). A kept chapter named twice is listed once. In Bulk remove, a block with
+  no chapter lines removes every chapter of its subject, even if another block names some; a failed delete asks twice again. Bulk remove has its own
+  text (a list written to add is never read as one to delete), and any change to the text or the list disarms its
+  second press. The Chapter dropdown's approved counts load again after each send.
   Until it is installed on the live database, every call in
   `lib/games/api.ts` (`realGamesApi`) fails and the pages say so. The site calls functions only; no role can read the tables.
   `lib/games/database.test.ts` runs the script on PGlite.
@@ -118,23 +122,36 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   label capitals ("q1:" → "Q:"), levels in lower case, commas to ";" in a Wrong line, a blank line before each Q:, and
   the four chapter lines put back at the top if deleted, once the writer has moved below them. The caret's own line
   only gets changes that keep its length; the rest waits until the writer moves on. It goes in as an edit of the box,
-  so Ctrl+Z still works.
+  so Ctrl+Z still works. Never a guess: a Topic number and name that disagree, topics under a chapter it couldn't
+  match, and a Wrong line whose parts may hold a comma of their own ("Copper, zinc and tin") are left as written. The
+  timed fix runs only while the Questions box itself has focus and no keyboard is composing a word. The line being typed
+  never gets its Wrong commas changed; in a pasted reply only the code block is fixed; a fix taken back with Ctrl+Z is
+  not made again; a whole-text paste or an emptied box forgets the old chapter lines; and when the box is left, the
+  caret line follows any lines the fix added (so a Topic button still lands where the caret was). A fix made when the
+  box is left isn't in the browser's undo history, so it shows its own "Tidied the questions" Undo; taking any fix back
+  (Ctrl+Z or that Undo) keeps it from being made again, including a blank line put before a Q: or a chapter line put
+  back. Undo on Try an example, Fix it or Clear brings back the old text's own chapter lines too.
 - **Colours in the Questions box:** each kind of line has its own colour (chapter lines grey, Topic purple, Q dark,
   A green, Also teal, Fill blue, Wrong orange-brown, Level light grey; labels a little lighter). The textarea's text is
-  see-through and the copy behind it (`games-backdrop`, `kindOf` in `WriteQuestions.tsx`) is what shows, so the copy
+  see-through and the copy behind it (`games-backdrop` in `WriteQuestions.tsx`, `lineKind` in `helpers.ts`) is what shows, so the copy
   must keep exactly the textarea's font, padding and width: no bold, no other font size.
 - **Write questions, small behaviours:** Clear (and "Start a new batch") removes the questions but keeps the chapter
   lines; Try an example asks first when the box has questions of your own (Undo works either way); both keep the
   pressed button where it was on screen (`steady`), so the page never jumps. Topic buttons show a tick and how many
-  questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs.
+  questions are under each topic. In the preview, a greyed-out game's tab says on hover what it needs, and tapping it says so under the tabs (for phones).
 - **Write questions, the layout pass (unslop):** a cross on each sent-back question removes it from the list for good
   on that device (kept in `localStorage` under `games.sentBack.dismissed` by `pages/Games.tsx`, which leaves them out
-  of the list and the tab's count; the database has no place for it). The problem list has one entry per line, the
+  of the list and the tab's count; the database has no place for it). A removed one comes back only when the same question is sent again unchanged (the send says so, with "See why"). The problem list has one entry per line, the
   line number coloured red or amber and the text dark; clicking it centres the whole question in the box (measured on
   the copy behind the box, as lines wrap). Under each result only the games it is left out of ("Not in: Word search").
   Step 3 has the same card colour as the others, with a Full screen button by its heading; the small preview's
   crossword uses at most 8 answers. Send for approval stays in view (sticky) beside the preview. The phone's "problems
   to fix" button shows only while the results are still below.
+- **Browser tests:** `npm run e2e` (Playwright, `playwright.config.ts`, files in `e2e/games/*.e2e.ts`) starts the dev
+  server with the preview tools on and a placeholder Supabase address, and drives Write questions and Chapters in dummy
+  mode: the autocorrect and its Undo, the dropdowns, sent-back questions, the preview's greyed-out games, Bulk add and
+  Bulk remove. No database or keys needed. `@playwright/test` is pinned to the Playwright version whose browser is
+  installed. Not in `npm test` or CI (vitest runs in node with no browser); run it after changing these pages.
 - **Questions and answers are never reworded.** Only a bullet or number before
   a label, Markdown bold around it, quotes or bold around a whole part, and
   extra spaces are removed.
