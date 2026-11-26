@@ -174,3 +174,4 @@ Nothing here is dropped yet. Each item is listed so a later tidy-up can remove i
   verdict word `ask_ai_redo` in `verifier_verdict_and_next`. Migration `20261118100000_ai_redo_requests.sql`: the owner
   pastes it before the pull request is merged, or the new student button shows an error. The audit-and-redo tool itself
   lives in the Papers folder and is not built yet.
+- **Papers are given to checkers ONLY when an HOD presses Auto assign all (owner, 26 Nov 2026: "stop auto assigning, only auto assign when orange button is pressed").** The 2-minute job and the fallback when a checker opens their list no longer assign; the 2-minute job still takes back papers idle for 7 days. Migration `20261126100000_assign_only_on_button.sql`, pasted by the owner.

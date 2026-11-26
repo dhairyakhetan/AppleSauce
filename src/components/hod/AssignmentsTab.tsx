@@ -642,7 +642,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
           </button>
         </div>
         <p className="mb-2 text-[13px] text-warm-secondary">
-          Papers go to checkers automatically, a whole paper to one checker and never above their grade. A checker with no grade recorded can get any
+          Papers go to checkers only when you press Auto assign all (or give one yourself), a whole paper to one checker and never above their grade. A checker with no grade recorded can get any
           paper. A paper whose class is not known can go to any checker. A paper with nothing done on it for 7 days comes back
           here by itself.
         </p>

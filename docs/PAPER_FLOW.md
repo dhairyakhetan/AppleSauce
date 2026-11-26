@@ -54,7 +54,7 @@ Picture logic: crop first (`planCheckerPicture`; a crop with `align_score` under
 
 **Server gap (OPEN, needs the owner):** `checker_pass_locked` / `checker_authorize_question` / `checker_settle_current` ignore `set_aside_at`, so a checker could pass a set-aside question. `supabase/migrations/20261108100000_no_pass_while_set_aside.sql` (trigger, error 22023, which `checker-errors.ts` treats as final) is on `main` but NOT applied live. Live data: 0 rows both passed and set aside.
 
-Hand-out (live, KNOWN): pg_cron job every 2 minutes + a 5 minute throttle from `verifier_my_papers` + the HOD "Auto assign all" button; `verifier_paper_cap() = 10`. Not in older docs.
+Hand-out (live, KNOWN): ONLY the HOD "Auto assign all" button gives papers out since 26 Nov 2026 (owner: "only auto assign when orange button is pressed"); the 2-minute pg_cron job and the 5 minute throttle from `verifier_my_papers` no longer assign anything and only run the 7-day return of idle papers (migration `20261126100000_assign_only_on_button.sql`); `verifier_paper_cap() = 10`. Not in older docs.
 
 ## 5. HOD RPCs (KNOWN, `lib/hod-api.ts`, `lib/hod-publish.ts`)
 

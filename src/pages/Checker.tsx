@@ -61,7 +61,7 @@ import { BAR_WELL } from '@/lib/chart-styles';
      /checker?paper=<id>&verify=1&reopen=<question>   the same, opened on a Done question being edited
 
    Reachable only by an account an admin or HOD has set up as a verifier. Papers
-   are handed out automatically (a whole paper to one verifier, never above their
+   are handed out when an HOD presses Auto assign all (a whole paper to one verifier, never above their
    grade); a verifier does not pick subjects or classes, an HOD does.
 
    In a test build (VITE_PREVIEW_TOOLS) with dummy mode on, the same page runs
@@ -454,7 +454,7 @@ function PaperList({
         <div className="rounded-2xl bg-muted px-4 py-8 text-center" data-testid="no-papers">
           <p className="text-[16px] font-bold text-foreground">No papers for you yet</p>
           <p className="mx-auto mt-1 max-w-md text-pretty text-[14px] text-warm-secondary">
-            Papers are given out automatically to match your grade, your board and the subjects your HOD has set for you. Check back soon, or ask your
+            Your HOD gives papers out to match your grade, your board and the subjects your HOD has set for you. Check back soon, or ask your
             HOD.
           </p>
           <AskForPapers api={asksApi} scope={scope} />

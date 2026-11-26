@@ -24,7 +24,7 @@ export function AskForPapersView({ state, busy, onAsk }: { state: AskState; busy
   if (state.kind === 'off') {
     return (
       <p className="mx-auto mt-4 max-w-md text-pretty text-[13px] text-warm-secondary" data-testid="ask-off">
-        Asking for more papers is not switched on yet. Your HOD gives papers out automatically, so please check back soon.
+        Asking for more papers is not switched on yet. Your HOD gives papers out, so please check back soon.
       </p>
     );
   }

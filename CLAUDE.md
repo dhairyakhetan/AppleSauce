@@ -20,7 +20,7 @@ the system. The paper library is for **students practising, teachers setting wor
 schools**. The owner is not a developer: every reply to the owner is plain English, no jargon.
 
 **How a paper moves.** Pipeline loads it (`audit_papers` / `audit_questions`, held back) -> pictures complete ->
-the hand-out job gives it to a checker (every 2 minutes, at most 10 papers with work per checker) -> the checker
+an HOD presses **Auto assign all** and it goes to a checker (nothing is given out automatically since 26 Nov 2026; at most 10 papers with work per checker) -> the checker
 settles each question on `/checker` (one student pass plus the AI's first look is enough) -> a question a checker
 cannot settle goes to the HOD (`/hod`, Needs you) -> when nothing is open the paper shows under Ready to go live
 -> an **HOD or admin** presses Publish (four hard checks run first) -> it is live in `bank_papers` / `bank_questions`.
