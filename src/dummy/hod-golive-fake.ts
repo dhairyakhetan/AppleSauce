@@ -32,6 +32,8 @@ interface FQ {
   display_number: string | null;
   instructions: string | null;
   section_label?: string | null;
+  /** The OR group the live page draws an "OR" between (the real preview does not send it yet). */
+  alternative_group?: string | null;
   body: string;
   options: unknown[] | null;
   marks: number | null;
@@ -286,8 +288,8 @@ function seedPapers(): FP[] {
         figure_path: 'dummy/q-quadratic.png',
         figure_storage_path: 'dummy/q-quadratic.png',
       }),
-      q({ ord: 3, body: 'Balance: $\\mathrm{H_2 + O_2 \\to H_2O}$', marks: 2 }),
-      q({ ord: 4, body: 'State one use of a catalyst.', marks: 2 }),
+      q({ ord: 3, body: 'Balance: $\\mathrm{H_2 + O_2 \\to H_2O}$', marks: 2, alternative_group: 'or-3' }),
+      q({ ord: 4, display_number: '3', body: 'State one use of a catalyst.', marks: 2, alternative_group: 'or-3' }),
     ],
   };
   const econ2: FP = {
@@ -300,7 +302,7 @@ function seedPapers(): FP[] {
     header: header({ school: 'Riverside Academy', cls: 'XII', subject: 'Economics', board: 'ISC', year: null, exam: 'Prelims', marks: 12 }),
     questions: [
       q({ ord: 1, body: 'What is meant by opportunity cost?', marks: 3 }),
-      q({ ord: 2, body: 'Scanned with CamScanner\nDistinguish between a market and a mall.', marks: 3, scanner_junk: true }),
+      q({ ord: 2, body: 'Scanned with CamScanner\nDistinguish between a market and a mall.', marks: 3, scanner_junk: true, pile: 'admin' }),
       q({
         ord: 3,
         body: 'Study the graph and say what happens to price when demand rises.',
@@ -308,6 +310,8 @@ function seedPapers(): FP[] {
         has_picture: true,
         picture_staged: false,
         figure_storage_path: 'dummy/q-quadratic.png',
+        // Came to the HOD, so it can be left out from the preview (the server's rule).
+        pile: 'admin',
       }),
       q({ ord: 4, body: 'Explain the law of diminishing returns.', marks: 3, state: 'set_aside', set_aside_reason: 'The scan is torn here' }),
     ],
@@ -543,6 +547,7 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
     kind: x.kind,
     parent_id: x.parent_id,
     section_label: x.section_label ?? null,
+    alternative_group: x.alternative_group ?? null,
     number_path: x.display_number,
     display_number: x.display_number,
     instructions: x.instructions,
@@ -636,7 +641,8 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
         record(`reopen ${id}`);
         return 'open';
       }
-      if (x.state === 'open' && x.pile === 'students') throw pgError('This question is still with the student checkers.', '55000');
+      // The server's rule (hod_set_question_state): pass and set aside only for a question that came to the HOD.
+      if (x.pile === 'students' && x.state !== 'set_aside') throw pgError('This question is still with the student checkers.', '55000');
       if (state === 'set_aside') {
         if (!note || !note.trim()) throw pgError('Say why the question is set aside');
         x.state = 'set_aside';

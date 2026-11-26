@@ -2,6 +2,21 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   CHECKS,
+  CONFLICT_WORDS,
+  MARK_WORDS,
+  STILL_WITH_STUDENTS_WORDS,
+  UNSAVED_TEXT,
+  UNSAVED_TITLE,
+  aiOnlyText,
+  canLeaveOut,
+  headingRun,
+  liveOptionTexts,
+  markedIds,
+  nextReadyPaper,
+  normalisePreviewQuestion,
+  planLine,
+  savedWords,
+  withLineInFront,
   LIVE_FIELDS,
   NO_LIVE_FILTER,
   PUBLISH_FIELDS,
@@ -216,7 +231,9 @@ describe('the header fields', () => {
     expect(keys.indexOf('time_not_printed')).toBe(keys.indexOf('allowed_time_minutes') + 1);
     expect(keys.indexOf('instructions_not_printed')).toBe(keys.indexOf('general_instructions') + 1);
     for (const k of ['time_not_printed', 'instructions_not_printed']) {
-      expect(def(k)).toMatchObject({ kind: 'yesno', noUnset: true });
+      // A plain tick box that saves at once ("This paper prints no time"), not a Yes/No with its own Save.
+      expect(def(k)).toMatchObject({ kind: 'tick', noUnset: true });
+      expect(def(k).label).toMatch(/^This paper prints no /);
       expect(LIVE_FIELDS.some((f) => f.key === k)).toBe(false);
     }
   });
@@ -305,8 +322,18 @@ describe('error words', () => {
     );
   });
   it('explains a stale version, and falls back when there is no message', () => {
-    expect(errorWords({ code: '40001', message: 'x' })).toMatch(/Someone changed this question/);
+    expect(errorWords({ code: '40001', message: 'x' })).toMatch(/Someone else saved this first/);
+    expect(errorWords({ code: '40001', message: 'x' })).toMatch(/The box now shows their words/);
     expect(errorWords(null)).toMatch(/Nothing was changed/);
+  });
+  it('never shows raw database wording, and says the student-checker refusal plainly', () => {
+    const fallback = 'That did not go through. Nothing was changed. Try again.';
+    expect(errorWords({ code: '22023', message: 'state must be pass, set_aside or reopen' })).toBe(fallback);
+    expect(errorWords({ code: '23514', message: 'new row for relation "audit_questions" violates check constraint "x"' })).toBe(fallback);
+    expect(errorWords({ code: 'PGRST202', message: 'Could not find the function public.hod_x(p_id) in the schema cache' })).toBe(fallback);
+    expect(errorWords({ code: '55000', message: 'This question is still with the student checkers.' })).toMatch(/A student checker still has this question/);
+    expect(errorWords({ code: '22023', message: 'Say why the question is set aside' })).toBe('Say why the question is set aside.');
+    expect(errorWords({ code: 'P0002', message: '' })).toMatch(/could not be found/);
   });
 });
 
@@ -321,5 +348,86 @@ describe('copy', () => {
       overallUnlocks(normaliseTrustOverall({ checks_done: 100, threshold: 100, reached: true })),
     ];
     for (const w of words) expect(w).not.toMatch(DASH);
+  });
+});
+
+describe('go-live screen helpers (owner audit, 26 Nov 2026)', () => {
+  const pq = (over: Record<string, unknown>) => normalisePreviewQuestion({ id: `q${String(over.ord)}`, kind: 'question', state: 'passed', body: 'w', version: 1, ...over })!;
+
+  it('gives the options the same label the live page gets, without touching the words', () => {
+    expect(liveOptionTexts([{ label: 'a', text: 'Delhi' }, { label: 'b', text: 'b) Kolkata' }, 'Mumbai', { label: '', text: '$x^2$' }])).toEqual([
+      '(a) Delhi',
+      'b) Kolkata',
+      'Mumbai',
+      '$x^2$',
+    ]);
+    expect(liveOptionTexts(null)).toEqual([]);
+  });
+
+  it('works out where a heading or instruction line really shows on the live site', () => {
+    const qs = [
+      pq({ ord: 1, kind: 'section_break', state: 'section', body: 'Section A' }),
+      pq({ ord: 2, section_label: 'SECTION A' }),
+      pq({ ord: 3, kind: 'section_instruction', state: 'section', body: 'Answer any two.' }),
+      pq({ ord: 4, instructions: 'Answer any two.' }),
+      pq({ ord: 5, kind: 'section_break', state: 'section', body: 'Section B' }),
+      pq({ ord: 6 }),
+      pq({ ord: 7 }),
+      pq({ ord: 8, kind: 'master_instruction', state: 'section', body: 'All questions carry marks.' }),
+      pq({ ord: 9, kind: 'section_break', state: 'section', body: 'The end' }),
+    ];
+    expect(planLine(qs, 'q1', null)).toEqual({ target: 'heading', questionIds: ['q2', 'q4'], covered: true });
+    expect(planLine(qs, 'q3', null)).toEqual({ target: 'instruction', questionIds: ['q4'], covered: true });
+    expect(planLine(qs, 'q5', null)).toEqual({ target: 'heading', questionIds: ['q6', 'q7'], covered: false });
+    expect(planLine(qs, 'q8', 'Read carefully.')).toMatchObject({ target: 'general', covered: false });
+    expect(planLine(qs, 'q8', 'Read carefully. All questions carry marks.')).toMatchObject({ target: 'general', covered: true });
+    expect(planLine(qs, 'q9', null)).toEqual({ target: 'none', questionIds: [], covered: false });
+    expect(withLineInFront('Answer any two.', null)).toBe('Answer any two.');
+    expect(withLineInFront('Answer any two.', 'Show working')).toBe('Answer any two.\nShow working');
+  });
+
+  it('finds the questions under one heading, and the marked questions for Show me', () => {
+    const qs = [
+      pq({ ord: 1, section_label: 'Part I' }),
+      pq({ ord: 2, section_label: 'Part I', scanner_junk: true }),
+      pq({ ord: 3, section_label: 'Part II', state: 'open' }),
+      pq({ ord: 4, has_picture: true, picture_staged: false }),
+      pq({ ord: 5, scanner_junk: true, state: 'set_aside' }),
+    ];
+    expect(headingRun(qs, 'q1')).toEqual(['q1', 'q2']);
+    expect(markedIds('junk', qs)).toEqual(['q2']);
+    expect(markedIds('open', qs)).toEqual(['q3']);
+    expect(markedIds('pictures', qs)).toEqual(['q4']);
+    expect(savedWords({ display_number: '7', number_path: null })).toBe('Question 7 saved.');
+    expect(savedWords({ display_number: null, number_path: '?' })).toBe('Question saved.');
+  });
+
+  it('offers Leave it out only where the server accepts it', () => {
+    expect(canLeaveOut({ review_bucket: 'admin', state: 'passed' })).toBe(true);
+    expect(canLeaveOut({ review_bucket: 'escalated', state: 'open' })).toBe(true);
+    expect(canLeaveOut({ review_bucket: 'kid', state: 'passed' })).toBe(false);
+    expect(canLeaveOut({ review_bucket: 'admin', state: 'set_aside' })).toBe(false);
+  });
+
+  it('reads the "checked by the AI only" count and says what to do in plain words', () => {
+    const [qc] = normaliseChecks([{ key: 'questions_checked', label: 'Every question is checked', ok: false, detail: 'x', ai_only: 2 }]);
+    expect(qc.ai_only).toBe(2);
+    expect(aiOnlyText(2)).toMatch(/^2 questions were passed by the AI with no person checking\. .*Tell the owner, or use Publish anyway/);
+    expect(aiOnlyText(0)).toBeNull();
+  });
+
+  it('picks the next paper ready to go live, preferring one that passes every check', () => {
+    const ok = CHECKS.map((c) => ({ key: c.key, label: c.label, ok: true, detail: '' }));
+    const bad = CHECKS.map((c, i) => ({ key: c.key, label: c.label, ok: i > 0, detail: '' }));
+    const paper = (id: string, checks: typeof ok) => ({ audit_paper_id: id, checks }) as unknown as Parameters<typeof nextReadyPaper>[0][number];
+    expect(nextReadyPaper([paper('a', ok), paper('b', bad), paper('c', ok)], 'a')?.audit_paper_id).toBe('c');
+    expect(nextReadyPaper([paper('a', ok), paper('b', bad)], 'a')?.audit_paper_id).toBe('b');
+    expect(nextReadyPaper([paper('a', ok)], 'a')).toBeNull();
+  });
+
+  it('uses no dashes in the new words', () => {
+    for (const w of [CONFLICT_WORDS, STILL_WITH_STUDENTS_WORDS, UNSAVED_TITLE, UNSAVED_TEXT, aiOnlyText(1) ?? '', ...Object.values(MARK_WORDS).flatMap((m) => [m.one, m.chip])]) {
+      expect(w).not.toMatch(/[–—]/);
+    }
   });
 });

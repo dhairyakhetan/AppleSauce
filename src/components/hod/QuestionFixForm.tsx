@@ -5,14 +5,14 @@ import { quietButton } from '@/components/hod/HodShared';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import { marksTextInvalid } from '@/lib/hod-desk';
 import { buildQuestionChanges } from '@/lib/hod-publish';
-import { toEditable } from '@/lib/option-editing';
+import { toEditable, type EditableOption } from '@/lib/option-editing';
 import { cn } from '@/lib/utils';
 
 /* The Fix form, shared by Needs you and the preview flow: the words, the
    question number, the marks and the answer options. It sends only what changed,
    through the versioned edit (the old text stays in history), and the words go out
    exactly as typed. The options can be changed, added, removed and moved (owner,
-   25 Nov 2026: "I can't edit the options"). */
+   25 Nov 2026: "I can't edit the options"). A removed option can be put back with Undo until the form is saved. */
 
 export interface FixTarget {
   body: string;
@@ -46,6 +46,7 @@ export function QuestionFixForm({
   const [number, setNumber] = useState(target.display_number ?? '');
   const [marks, setMarks] = useState(target.marks != null ? String(target.marks) : '');
   const [opts, setOpts] = useState(() => toEditable(target.options));
+  const [optsUndo, setOptsUndo] = useState<EditableOption[] | null>(null);
   const marksInvalid = marksTextInvalid(marks);
 
   function build(then: (changes: Record<string, unknown>) => void) {
@@ -61,7 +62,29 @@ export function QuestionFixForm({
   return (
     <div>
       <BodyEditor value={body} onChange={setBody} disabled={busy} />
-      <OptionsEditor value={opts} onChange={setOpts} disabled={busy} />
+      <OptionsEditor
+        value={opts}
+        onChange={(next) => {
+          setOptsUndo(next.length < opts.length ? opts : null);
+          setOpts(next);
+        }}
+        disabled={busy}
+      />
+      {optsUndo ? (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-foreground" role="status" data-testid="option-removed">
+          Option removed.
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center rounded-full px-2 font-bold text-brand-blue underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-10"
+            onClick={() => {
+              setOpts(optsUndo);
+              setOptsUndo(null);
+            }}
+          >
+            Undo
+          </button>
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-[13px] font-medium text-warm-secondary">
           Question number
