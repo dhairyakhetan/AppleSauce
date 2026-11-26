@@ -106,7 +106,7 @@ Every question you fix or write follows these rules (all of them are at ${INSTRU
 - Its lines: Q (the question), A (the answer), Also (only for another right answer, one per line), Fill (the same fact as a sentence, with ___ where the answer goes), Wrong (${MIN_OPTIONS} wrong options separated by ";"), Level (${or(DIFFICULTIES)}). A True/False question has only Q (a statement), A: True or A: False, and Level.
 - Q makes sense on its own (no "of the following", "the above" or figure), and contains neither the answer nor an Also answer.
 - A is exactly what a student types: at most ${MAX_ANSWER_WORDS} words, no brackets or notes, units in the question, and only keyboard characters (else an Also line typed with ordinary keys).
-- Fill has exactly one ___, standing for the whole answer, with at least 3 other words around it, and contains neither the answer nor an Also answer.
+- Fill has exactly one ___, standing for the whole answer, with at least 3 other words around it, and contains neither the answer nor an Also answer. With the answer in the gap it reads correctly, and the words next to the ___ don't come again in the answer ("becomes ___" takes "One-fourth", not "Becomes one-fourth").
 - The wrong options are the same kind as the answer, and none of them is right.
 - The labels, True and False, and the levels stay in English.
 

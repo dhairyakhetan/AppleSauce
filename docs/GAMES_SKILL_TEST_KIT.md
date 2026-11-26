@@ -114,6 +114,7 @@ Topic 2: Transfer of Heat
 
 The page's top line carries the date it was last updated and its version number. What changed in each version:
 
+- 1.15 (26 November 2026): the answer is the thing itself, not a phrase about it ("One-fourth", not "Becomes one-fourth"), and questions ask for a thing, not "What happens to…"; the Fill rule and check say to read the sentence with the answer in the gap, with no word said twice; wrong options match the answer's shape; part C has the bad example and its fix. Found in real questions sent on 16 November (ISC Class 12 Physics). The page now sends such a question to the HoD with a note.
 - 1.14 (25 November 2026): the teacher's material comes first; before writing, the chatbot checks it against the chapter and, if any part belongs to another chapter or disagrees with the textbook, asks the teacher and writes nothing until they answer. Every reply names its source on a "Source:" line after the code block.
 - 1.13 (21 November 2026): step 3 no longer claims the page rejects every break; some rules only the chatbot's own check catches.
 - 1.12 (21 November 2026): step 3 says plainly that the game ignores capitals, spaces, hyphens, punctuation, brackets and "the", so an Also line differing only in those is never needed ("Air-tight containers").

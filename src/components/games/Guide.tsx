@@ -84,7 +84,7 @@ export function Guide() {
             <li><B>One fact, one right answer.</B> The question makes sense on its own: no "this", "the above", "of the following", figure or passage. It never contains its answer.</li>
             <li><B>The answer is exactly what a student types:</B> at most {MAX_ANSWER_WORDS} words, no brackets or notes. Units go in the question ("in degrees Celsius").</li>
             <li><B>Also</B> lists every other answer that is just as right (at most {MAX_ALSO}): a short form (<C>CPU</C>), another name (<C>Calcutta</C>), a number in words (<C>Six</C>). Nothing else counts, but a small spelling slip gets half marks.</li>
-            <li><B>Fill:</B> one <C>___</C> that stands for the whole answer; the rest of the sentence doesn't repeat it.</li>
+            <li><B>Fill:</B> one <C>___</C> that stands for the whole answer; the rest of the sentence doesn't repeat it. Read it with the answer in the gap: "becomes ___" takes "One-fourth", not "Becomes one-fourth".</li>
             <li><B>Wrong options</B> ({MIN_OPTIONS} to {MAX_OPTIONS}): believable, and the same kind as the answer (a year for a year). Never "All of the above".</li>
             <li><B>Any symbol is fine</B> in a question. If an answer needs one a keyboard doesn't have (<C>x²</C>), add an Also line typed with ordinary keys (<C>x^2</C>).</li>
             <li><B>At most {MAX_PER_TOPIC} questions per topic</B> and {MAX_PER_CHAPTER} per chapter, no two the same.</li>

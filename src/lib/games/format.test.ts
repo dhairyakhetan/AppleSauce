@@ -695,4 +695,20 @@ describe('what the page is unsure of goes to the HoD, without stopping the quest
     expect(r.issues).toEqual([]);
     expect(r.doubts).toEqual(['The wrong option "Hydrogen gas" contains the answer "Hydrogen": check that it isn\'t partly right.']);
   });
+
+  it('an answer that repeats a word next to the ___ (it doesn\'t fit the gap)', () => {
+    const doubled = read(block('Force when the distance is doubled', 'Becomes one-fourth', 'Twice; Half; Four times', 'The electrostatic force becomes ___ of its original value.'));
+    expect(doubled.issues).toEqual([]);
+    expect(doubled.doubts).toEqual(['The Fill sentence says "becomes" twice with the answer in the gap ("The electrostatic force becomes Becomes one-fourth of its original value."): check that the answer fits the gap.']);
+    expect(read(block('Equivalent resistance in series', 'Sum of resistances', 'Product; Difference; Reciprocal sum', 'Equivalent resistance in series is the ___ of individual resistances.')).doubts[0])
+      .toMatch(/says "of" twice/);
+    // the fixed ones, and answers that only share a word with the sentence further away, read cleanly
+    expect(read(block('Force when the distance is doubled', 'One-fourth', 'Twice; Half; Four times', 'The electrostatic force becomes ___ of its original value.')).doubts).toEqual([]);
+    expect(read(block('Rate of flow of charge', 'Electric current', 'Electric potential; Resistance; Conductance', 'The rate of flow of electric charge is called ___.')).doubts).toEqual([]);
+  });
+
+  it('formulas are not "two answers", and a formula option holding the answer\'s formula is plainly wrong', () => {
+    expect(read(block('Field and potential gradient', 'E = -dV/dr', 'E = +dV/dr; E = Vr; E = V/r', 'The field is the negative potential gradient, written ___.')).doubts).toEqual([]);
+    expect(read(block('Potential of a point charge', 'kq/r', 'kq/r^2; kqr; kr/q', 'Potential due to a point charge is ___.')).doubts).toEqual([]);
+  });
 });

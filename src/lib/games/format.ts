@@ -616,19 +616,43 @@ Level: medium
  * decides. Worked out from the question itself, so the Write questions page (for the teacher) and the Approve
  * questions page (for the HoD) always show the same notes, with nothing stored.
  */
+/** An answer of words: letters, spaces, hyphens and apostrophes only. */
+const WORDY = /^[\p{L}\p{M}\s'’-]+$/u;
+
+/**
+ * A word right next to the ___ that the answer has too: "becomes ___" with "Becomes one-fourth", or "the ___ of" with
+ * "Sum of resistances". Read with the answer in the gap, the sentence says the word twice. Null when it reads cleanly.
+ */
+export function fillGap(fill: string, answer: string): string | null {
+  const m = fill.match(/(?:^|[^\p{L}\p{M}])([\p{L}\p{M}]+)?[^\p{L}\p{M}_]*_{3,}[^\p{L}\p{M}_]*([\p{L}\p{M}]+)?/u);
+  if (!m) return null;
+  const words: string[] = answer.toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
+  if (words.length < 2) return null;
+  const before = m[1]?.toLowerCase();
+  const after = m[2]?.toLowerCase();
+  const twice = before && words[0] === before ? before : after && words.includes(after) ? after : null;
+  if (!twice) return null;
+  const read = fill.replace(/_{3,}/, answer);
+  return `The Fill sentence says "${twice}" twice with the answer in the gap ("${read}"): check that the answer fits the gap.`;
+}
+
 export function doubts(r: Pick<Row, 'question' | 'answer' | 'also' | 'fill' | 'wrong_options'>): string[] {
   const out: string[] = [];
   const picture = [r.question, r.fill ?? ''].map((t) => t.match(MAYBE_PICTURE)?.[0]).find(Boolean);
   if (picture && !NEEDS_PICTURE.test(r.question) && !NEEDS_PICTURE.test(r.fill ?? '')) {
     out.push(`It says "${picture}": check that it doesn't need a picture, map or table the games can't show.`);
   }
-  const two = r.answer.match(/\S+\s+or\s+\S+/i)?.[0] ?? r.answer.match(/\p{L}{2,}\/\p{L}{2,}/u)?.[0];
+  // (a formula such as "dV/dr" or "kq/r" isn't two answers: words on both sides of the "/" are at least 3 letters)
+  const two = r.answer.match(/\S+\s+or\s+\S+/i)?.[0] ?? r.answer.match(/\p{L}{3,}\/\p{L}{3,}/u)?.[0];
   if (two && !/\s\/\s/.test(r.answer)) out.push(`The answer may be two answers ("${two}"). If so, the second belongs on an Also line.`);
   const all = [r.answer, ...(r.wrong_options ?? [])];
   const stops = all.filter((x) => /\p{L}\.$/u.test(x) && !/\..+\.$/.test(x));
   if (stops.length && stops.length < all.length) out.push('Only some of the answer and wrong options end with a full stop, which can give the answer away in multiple choice.');
+  const gap = fillGap(r.fill ?? '', r.answer);
+  if (gap) out.push(gap);
   for (const o of r.wrong_options ?? []) {
-    const x = [r.answer, ...(r.also ?? [])].find((a) => shows(o, { answer: a }));
+    // only for answers made of words: a formula option ("kq/r^2") holding the answer's formula ("kq/r") is plainly wrong
+    const x = [r.answer, ...(r.also ?? [])].find((a) => WORDY.test(a) && shows(o, { answer: a }));
     if (x) out.push(`The wrong option "${o}" contains the answer "${x}": check that it isn't partly right.`);
   }
   return out;

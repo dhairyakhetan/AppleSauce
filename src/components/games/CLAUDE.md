@@ -107,7 +107,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   send" or "Copy prompt to fix them" (`fixPrompt` in `prompt.ts`).
 - **What the page can't be sure of goes to the HoD** (`doubts` in `format.ts`): an answer that may be two
   answers ("Kolkata or Calcutta"), "in the map" or "from the table", a full stop on only some of the answer and
-  options, a wrong option that contains the answer. These don't stop a question: Write questions shows "Sent with
+  options, a wrong option that contains the answer (only for answers made of words: a formula option such as "kq/r^2"
+  holding "kq/r" is plainly wrong, and "dV/dr" isn't two answers), an answer that repeats a word next to the ___ so it
+  doesn't fit the gap (`fillGap`: "becomes ___" with "Becomes one-fourth"). These don't stop a question: Write questions shows "Sent with
   a note for the HoD", and Approve questions works out the same notes from the question and shows "Please check".
   Nothing is stored, so it needs no database change. Clear mistakes stay errors.
 - **Nothing is guessed from a question.** Each game uses only what was written

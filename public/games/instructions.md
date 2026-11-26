@@ -1,6 +1,6 @@
 # Writing revision questions for Shikshaq's games
 
-Last updated 25 November 2026 (version 1.14). Lives at https://www.shikshaq.in/games/instructions.md
+Last updated 26 November 2026 (version 1.15). Lives at https://www.shikshaq.in/games/instructions.md
 
 This is a complete set of instructions for any AI assistant (ChatGPT, Gemini, Claude or another). A teacher either sent you this link or pasted this text, and their request follows it.
 
@@ -91,9 +91,9 @@ Follow every one of these rules. The page checks most of them and turns away a q
 - **Layout.** The chapter lines first, then a Topic line, then that topic's blocks. A blank line between blocks and after each Topic line. Each part on one line. No numbering, bullets, bold, headings or tables.
 - **English labels.** Board, Class, Subject, Chapter, Topic, Q, A, Also, Fill, Wrong, Level, the words True and False, and easy, medium, hard stay in English. Everything else is in the material's language.
 - **Q.** One fact with exactly one correct answer. At most 300 characters. Makes sense alone: never "the above", "of the following", "which of these", "given below", or a figure, diagram, map, table or passage. Never contains the answer or any Also answer, word for word. No yes/no questions; no "True or false" or "(True/False)" in it.
-- **A.** What a student types: at most 6 words and 100 characters, never a sentence, no brackets or notes, never two answers joined by "/" or "or". Units go in the question. A symbol a keyboard lacks (x², √2, π) needs an Also line typed with ordinary keys (x^2, sqrt 2, pi). Part B shows how to cut an answer down without changing the fact.
+- **A.** What a student types: at most 6 words and 100 characters, never a sentence, no brackets or notes, never two answers joined by "/" or "or". The thing itself, not a phrase about it: "One-fourth", not "Becomes one-fourth"; "Sum", not "Sum of resistances". So ask for a thing ("Force after the distance is doubled, as a fraction of the original"), not "What happens to…". Units go in the question. A symbol a keyboard lacks (x², √2, π) needs an Also line typed with ordinary keys (x^2, sqrt 2, pi). Part B shows how to cut an answer down without changing the fact.
 - **Also** (optional, at most 5 lines, one answer each, at most 6 words). Only a different answer that is just as right (part B lists what counts). The game already ignores capitals, spaces, hyphens, punctuation, brackets and a leading "a", "an" or "the" when it marks an answer, so never add an Also line that differs only in those: not "Air-tight containers" for "Airtight containers", not "s" for "(s)", not "The Alps" for "Alps". In Hindi and other scripts, add another spelling or term only if the textbook itself uses it, and not an English-letter version unless the teacher asks.
-- **Fill** (required). The same fact as one sentence with exactly one `___` standing for the whole answer. At least 3 other words around the ___, and at most 300 characters. It reads correctly with the answer in the gap, and must not contain the whole answer or any whole Also answer.
+- **Fill** (required). The same fact as one sentence with exactly one `___` standing for the whole answer. At least 3 other words around the ___, and at most 300 characters. Read it with the answer in the gap: it must read correctly, and the words next to the ___ must not come again in the answer ("becomes ___" takes "One-fourth", never "Becomes one-fourth"). It must not contain the whole answer or any whole Also answer.
 - **Wrong** (required). 3 to 5 wrong options on one line, separated by `;` (never commas), each at most 6 words, the same kind as the answer: a number answer gets number options, a word answer gets no bare numbers. Never the answer, an Also answer, a repeat, or "All of the above", "None of these", "Both A and B" (options are shuffled). Read each option against the exact wording of the question: if it could be argued to be right, even partly, replace it. Part A shows good ones.
 - **Level** (required). easy, medium or hard: easy is recall, medium is understanding, hard is applying, comparing, predicting or linking ideas. The level measures the thinking needed, not how obscure the fact is: a hard-to-remember date is not a hard question. Judge it for a student of that class: the same question can be easy in class 10 and hard in class 6.
 - **True/False** (at most 1 in 5). A True/False question is different: it has only Q, A and Level. Q is a statement, `A: True` or `A: False` with nothing after the word. Use it to test a real concept or a common misconception ("Heat flows from a colder body to a hotter one" → False), never an obvious statement ("The Sun is a star") or one that is only sometimes true.
@@ -108,10 +108,10 @@ Go through the questions one by one and check each of these in order. Fix anythi
 1. **Chapter and Topic lines**: the chapter lines are exactly as given, the question is under a Topic line, and the Topic lines follow step 1.
 2. **Complete**: Q, A, Fill, Wrong and Level are all there. A True/False question has only Q (a statement), Level, and `A: True` or `A: False` with nothing after the word.
 3. **No giveaway**: neither Q nor Fill contains the answer or any Also answer, word for word.
-4. **Fill**: exactly one ___, standing for the whole answer, with at least 3 other words around it, and the sentence reads correctly with the answer put in (a or an, singular or plural).
+4. **Fill**: exactly one ___, standing for the whole answer, with at least 3 other words around it. Put the answer in the gap and read the sentence aloud: it reads correctly (a or an, singular or plural), and no word is said twice where the gap was.
 5. **Answer**: at most 6 words and 100 characters, not a sentence, no brackets, no "/" or "or", no unit after a number, and a typed Also line for any symbol a keyboard lacks.
 6. **Also lines**: each one a different right answer, not the answer again with only capitals, spaces, hyphens, punctuation, brackets or "the" changed.
-7. **Wrong options**: 3 to 5, separated by `;`, the same kind as the answer, and none of them right, partly right, or arguably right under the question's exact wording.
+7. **Wrong options**: 3 to 5, separated by `;`, the same kind and shape as the answer (options "Twice; Half" mean the answer is "One-fourth", not "Becomes one-fourth", or it stands out), and none of them right, partly right, or arguably right under the question's exact wording.
 8. **Repeats**: no two questions test the same fact, even in different words, and no two questions in a topic have the same answer (capitals, spaces and "the" don't make answers different).
 9. **Worth asking**: the fact is central and certain, comes from the source you will name (step 5), the level fits the thinking it needs, and a True/False tests a real misconception.
 10. **Format**: labels, True/False and levels in English; no numbering, bullets, bold or quotation marks around lines.
@@ -318,6 +318,26 @@ Fill: A thermometer is a ___ that measures temperature.
 Fill: ___ measures temperature.
 ```
 Page: *The Fill: sentence shows the answer…* and *Write the whole sentence around the ___, so it can be answered on its own.* (at least 3 other words). Fixed: `Fill: A ___ measures how hot something is.`
+
+#### The answer doesn't fit the gap
+
+```
+Q: What happens to the electrostatic force when the distance is doubled
+A: Becomes one-fourth
+Fill: When the distance is doubled, the force becomes ___ of its original value.
+Wrong: Twice; Half; Four times
+```
+Read with the answer in the gap: "the force becomes Becomes one-fourth of its original value". The answer also stands out among the options. Page: sent with a note for the HoD, *The Fill sentence says "becomes" twice with the answer in the gap…*, and the HoD sends it back. Fixed:
+
+```
+Q: Force between two charges after the distance between them is doubled, as a fraction of the original
+A: One-fourth
+Fill: When the distance between two charges is doubled, the force between them becomes ___ of its original value.
+Wrong: Twice; Half; Four times
+Level: medium
+```
+
+"Sum of resistances" in "the ___ of individual resistances" is the same mistake: the answer is "Sum".
 
 #### Yes/No, and True/False written wrongly
 
