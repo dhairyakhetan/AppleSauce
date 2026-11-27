@@ -125,6 +125,17 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   one popup whose steps change in place (`Morph` in `shared.tsx`: the box eases to its new size and the new step rises
   in), so nothing closes and opens again in between. Each batch has Copy batch (its
   questions as text, any size: a browser can't put a file on the clipboard).
+- **Try the games** (`TryGames.tsx`, `Revise.tsx` full size): the same Board, Class, Subject and Chapter dropdowns as Write
+  questions (`Picker`), listing only chapters with enough approved questions for at least one game (`playable`), highest
+  class first and opening there. With none, it plays the page's own example (its good questions) and says "(demo mode)"
+  (`demoQuestions`); dummy mode's banner has "No approved questions" to see it. How the games play (`GameView.tsx`): in
+  the crossword and fill in the blank nothing is marked while answers are being typed; once every square or gap is
+  filled they are all checked at once (the crossword says how many letters are wrong and checks again as they are
+  changed; fill in the blank's Check answers, or Enter on the last gap). Enter goes to the next clue or gap not yet
+  answered (Shift+Enter back, in the crossword), and finishing a crossword word goes on to the next one. The clue being
+  answered is a light line just above the grid. In the word search a rounded highlight follows the finger between
+  letters along the nearest of the eight directions, settles on whole letters on letting go, stays round each word found
+  in its colour, and fades out red on a miss. Matching and multiple choice still answer at once (a tap is the answer).
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options
@@ -172,7 +183,7 @@ ones on the device, with no AI. Brought in from the games site (`main` of
 - **Browser tests:** `npm run e2e` (Playwright, `playwright.config.ts`, files in `e2e/games/*.e2e.ts`) starts the dev
   server with the preview tools on and a placeholder Supabase address, and drives Write questions and Chapters in dummy
   mode: the autocorrect and its Undo, the dropdowns (typed in, and asking before a change clears questions), the merged
-  problem list, flagged batches on Approve questions (`flagged.e2e.ts`), sent-back questions, the preview's greyed-out games, Bulk add and
+  problem list, flagged batches on Approve questions (`flagged.e2e.ts`), Try the games (`play.e2e.ts`), sent-back questions, the preview's greyed-out games, Bulk add and
   Bulk remove. No database or keys needed. `@playwright/test` is pinned to the Playwright version whose browser is
   installed. Not in `npm test` or CI (vitest runs in node with no browser); run it after changing these pages.
 - **Motion (Apple's fluid-interface rules: settle with no bounce, start from where things are, turn around mid-way):**

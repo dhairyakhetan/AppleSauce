@@ -47,6 +47,10 @@ export default function GamesDummy() {
         className={cn(PILL, 'bg-fuchsia-800 text-fuchsia-50 hover:bg-fuchsia-700')}>
         Start over
       </button>
+      <button type="button" onClick={() => { api.noneApproved(); setRound((n) => n + 1); }}
+        className={cn(PILL, 'bg-fuchsia-800 text-fuchsia-50 hover:bg-fuchsia-700')}>
+        No approved questions
+      </button>
       <button type="button" onClick={() => { setDummyMode(false); window.location.assign(`${pathname}?dummy=0`); }}
         className={cn(PILL, 'ml-auto bg-fuchsia-800 text-fuchsia-50 hover:bg-fuchsia-700')}>
         Leave dummy mode

@@ -130,15 +130,31 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
   };
   const solved = g.rows.filter((r) => state[r.id] && state[r.id] !== 'wrong').length;
   const score = g.rows.reduce((n, r) => n + (state[r.id] === 'right' ? 1 : state[r.id] === 'almost' ? 0.5 : 0), 0);
+  /** Nothing is marked while the gaps are being filled: once every gap has an answer, they are checked together. */
+  const locked = (r: FillIn['rows'][number]) => !!state[r.id] && state[r.id] !== 'wrong';
+  const typedIn = (r: FillIn['rows'][number]) => !!(typed[r.id] ?? '').trim();
+  /** Still to answer: empty, or marked wrong and not changed since. */
+  const open = (r: FillIn['rows'][number]) => !locked(r) && (!typedIn(r) || state[r.id] === 'wrong');
+  const allIn = g.rows.every((r) => locked(r) || typedIn(r));
+  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const checkAll = () => g.rows.forEach(check);
+  /** Enter: on to the next gap still to answer, going round; with every gap filled, check them all. */
+  const enter = (i: number) => {
+    const n = g.rows.length;
+    for (let k = 1; k < n; k++) { const r = g.rows[(i + k) % n]; if (open(r)) { inputs.current[r.id]?.focus(); return; } }
+    if (allIn) checkAll();
+  };
+  const unchecked = g.rows.filter((r) => typedIn(r) && !state[r.id]).length;
 
   return (
     <>
-      <How compact={compact}>Type the missing word or words, then press Enter (or Check all).</How>
+      <How compact={compact}>Type the missing word or words. Enter goes to the next gap; when every gap is filled, check your answers.</How>
       <Progress done={solved} total={g.rows.length}>
-        <button type="button" className={chip('quiet')} onClick={() => g.rows.forEach(check)}>Check all</button>
+        <button type="button" className={chip(allIn && unchecked ? 'brand' : 'quiet')} disabled={!allIn || !unchecked} onClick={checkAll}
+          title={allIn ? undefined : 'Fill every gap first'}>Check answers</button>
       </Progress>
       <ol className={cn('flex list-decimal flex-col gap-3 pl-6 marker:text-warm-meta', compact ? 'text-[14px] leading-9' : 'text-[17px] leading-[2.3]')}>
-        {g.rows.map((r) => {
+        {g.rows.map((r, i) => {
           const st = state[r.id];
           const locked = !!st && st !== 'wrong';
           const shown = r.answer;
@@ -147,8 +163,8 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
           return (
             <li key={r.id}>
               <span>{r.before}</span>
-              <input
-                type="text" aria-label="Answer" autoComplete="off" autoCapitalize="off" spellCheck={false}
+              <input ref={(el) => { inputs.current[r.id] = el; }}
+                type="text" aria-label="Answer" autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint={allIn ? 'done' : 'next'}
                 className={cn(
                   // wrong to right (or back to typing) fades from one colour to the next
                   'mx-1 inline-block h-10 max-w-full rounded-xl border px-2 text-center align-middle font-bold outline-none transition-[background-color,border-color,color] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-focus',
@@ -161,7 +177,7 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
                 style={{ width: `${Math.min(26, Math.max(7, shown.length + 2))}ch` }}
                 value={st === 'shown' ? shown : typed[r.id] ?? ''} readOnly={locked}
                 onChange={(e) => { setTyped((t) => ({ ...t, [r.id]: e.target.value })); if (st === 'wrong') setState((s) => { const n = { ...s }; delete n[r.id]; return n; }); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') check(r); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); enter(i); } }}
               />
               <span>{r.after}</span>
               {st === 'right' && <Check className="ml-1 inline size-5 animate-pop align-middle text-success" aria-label="Right" />}
@@ -240,45 +256,70 @@ type Cell = [number, number];
 const cellsOf = (w: WordSearch['words'][number]): Cell[] => Array.from({ length: w.word.length }, (_, i) => [w.row + w.dr * i, w.col + w.dc * i]);
 const sameCells = (a: Cell[], b: Cell[]) => a.length === b.length && (a.every((c, i) => c[0] === b[i][0] && c[1] === b[i][1]) || a.every((c, i) => c[0] === b[b.length - 1 - i][0] && c[1] === b[b.length - 1 - i][1]));
 
-/** A straight line of cells from `a` towards `b`, snapped to the nearest of the eight directions. */
-function line(a: Cell, b: Cell, n: number): Cell[] {
-  const dr = b[0] - a[0];
-  const dc = b[1] - a[1];
-  if (!dr && !dc) return [a];
-  const oct = Math.round(Math.atan2(dr, dc) / (Math.PI / 4));
-  const sr = Math.round(Math.sin((oct * Math.PI) / 4));
-  const sc = Math.round(Math.cos((oct * Math.PI) / 4));
-  let len = Math.max(Math.abs(dr), Math.abs(dc));
-  while (len > 0 && (a[0] + sr * len < 0 || a[0] + sr * len >= n || a[1] + sc * len < 0 || a[1] + sc * len >= n)) len--;
-  return Array.from({ length: len + 1 }, (_, i) => [a[0] + sr * i, a[1] + sc * i]);
-}
-
 function WordSearchGame({ g, onNext, compact }: { g: WordSearch } & Required<Props>) {
   const [found, setFound] = useState<string[]>([]);
-  const [path, setPath] = useState<Cell[]>([]);
+  /** The highlight being drawn: from the centre of `from`, along `dir` (one of the eight), `len` px long (it follows
+   * the finger exactly, between letters too), `cells` the letters it covers now. `miss`: let go on no word. */
+  const [sel, setSel] = useState<{ from: Cell; dir: Cell; len: number; cells: Cell[]; miss?: boolean; settle?: boolean } | null>(null);
   const [anchor, setAnchor] = useState<Cell | null>(null); // first tap of tap-tap selection
-  const [miss, setMiss] = useState(false);
   const [showWords, setShowWords] = useState(false);
-  const drag = useRef<Cell | null>(null);
-  const moved = useRef(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ from: Cell; x: number; y: number; moved: boolean } | null>(null);
+  const n = g.size;
 
-  const color = useMemo(() => {
+  /** The grid's size on screen now, a square's side, and the square under a point (or null off the grid). */
+  const box = () => { const r = gridRef.current!.getBoundingClientRect(); return { r, cell: r.width / n }; };
+  const cellAt = (x: number, y: number): Cell | null => {
+    const { r, cell } = box();
+    const row = Math.floor((y - r.top) / cell), col = Math.floor((x - r.left) / cell);
+    return row >= 0 && row < n && col >= 0 && col < n ? [row, col] : null;
+  };
+  /** From a square towards a point: the nearest of the eight directions, and how far along it the point is (px),
+   * no further than the grid goes. */
+  const along = (from: Cell, x: number, y: number) => {
+    const { r, cell } = box();
+    const dx = x - (r.left + (from[1] + 0.5) * cell), dy = y - (r.top + (from[0] + 0.5) * cell);
+    if (Math.hypot(dx, dy) < cell * 0.3) return { dir: [0, 1] as Cell, len: 0, step: cell };
+    const oct = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+    const dir: Cell = [Math.round(Math.sin((oct * Math.PI) / 4)), Math.round(Math.cos((oct * Math.PI) / 4))];
+    const step = cell * Math.hypot(dir[0], dir[1]);
+    let most = n;
+    while (most > 0 && (from[0] + dir[0] * most < 0 || from[0] + dir[0] * most >= n || from[1] + dir[1] * most < 0 || from[1] + dir[1] * most >= n)) most--;
+    const len = Math.max(0, Math.min(most * step, (dx * dir[1] + dy * dir[0]) / Math.hypot(dir[0], dir[1])));
+    return { dir, len, step };
+  };
+  const cellsFrom = (from: Cell, dir: Cell, count: number): Cell[] => Array.from({ length: count + 1 }, (_, i) => [from[0] + dir[0] * i, from[1] + dir[1] * i]);
+  const follow = (from: Cell, x: number, y: number) => {
+    const { dir, len, step } = along(from, x, y);
+    setSel({ from, dir, len, cells: cellsFrom(from, dir, Math.round(len / step)) });
+  };
+  /** Let go: the highlight settles on whole letters; a word found keeps it in its colour, anything else fades out red. */
+  const finish = (from: Cell, dir: Cell, count: number) => {
+    const cells = cellsFrom(from, dir, count);
+    const step = box().cell * Math.hypot(dir[0], dir[1]);
+    const hit = g.words.find((w) => !found.includes(w.id) && sameCells(cellsOf(w), cells));
+    if (hit) { setFound((f) => [...f, hit.id]); setSel(null); return; }
+    if (count < 1) { setSel(null); return; }
+    setSel({ from, dir, len: count * step, cells, miss: true, settle: true });
+    window.setTimeout(() => setSel((s) => (s?.miss ? null : s)), 420);
+  };
+
+  const done = found.length === g.words.length;
+  const colourOf = (id: string) => found.indexOf(id) % 6;
+  const foundCells = useMemo(() => {
     const m = new Map<string, number>();
     found.forEach((id, i) => { for (const c of cellsOf(g.words.find((w) => w.id === id)!)) m.set(`${c[0]},${c[1]}`, i % 6); });
     return m;
   }, [found, g.words]);
-  const onPath = new Set(path.map((c) => `${c[0]},${c[1]}`));
-
-  const cellAt = (x: number, y: number): Cell | null => {
-    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-r]');
-    return el ? [Number(el.dataset.r), Number(el.dataset.c)] : null;
-  };
-  const finish = (cells: Cell[]) => {
-    const hit = g.words.find((w) => !found.includes(w.id) && sameCells(cellsOf(w), cells));
-    if (hit) setFound((f) => [...f, hit.id]);
-    else if (cells.length > 1) { setMiss(true); setTimeout(() => setMiss(false), 400); }
-    setPath([]);
-  };
+  const onSel = new Set((sel?.cells ?? []).map((c) => `${c[0]},${c[1]}`));
+  /** A highlight: from a square's centre along a direction, `len` long (a CSS length), its ends round, as wide as most
+   * of a square. */
+  const capsule = (from: Cell, dir: Cell, len: string) => ({
+    left: `calc(var(--cell) * ${from[1] + 0.5} - var(--cell) * 0.41)`,
+    top: `calc(var(--cell) * ${from[0] + 0.5} - var(--cell) * 0.41)`,
+    width: `calc(${len} + var(--cell) * 0.82)`,
+    transform: `rotate(${Math.atan2(dir[0], dir[1])}rad)`,
+  });
 
   return (
     <>
@@ -290,40 +331,48 @@ function WordSearchGame({ g, onNext, compact }: { g: WordSearch } & Required<Pro
       </Progress>
       <div className="flex flex-wrap items-start gap-4">
         <div className="max-w-full overflow-x-auto">
-          <div
-            className={cn('games-ws-grid', miss && 'ring-2 ring-destructive')} style={{ ['--n' as string]: g.size }} role="grid" aria-label="Word search"
+          <div ref={gridRef}
+            className="games-ws-grid" style={{ ['--n' as string]: n }} role="grid" aria-label="Word search"
             onPointerDown={(e) => {
               const c = cellAt(e.clientX, e.clientY);
               if (!c) return;
               e.currentTarget.setPointerCapture(e.pointerId);
-              moved.current = false;
-              if (anchor) { drag.current = anchor; setPath(line(anchor, c, g.size)); setAnchor(null); moved.current = true; return; }
-              drag.current = c;
-              setPath([c]);
+              if (anchor) { // the second tap of tap-tap: from the first letter to this one
+                const { dir, len, step } = along(anchor, e.clientX, e.clientY);
+                setAnchor(null);
+                finish(anchor, dir, Math.round(len / step));
+                return;
+              }
+              drag.current = { from: c, x: e.clientX, y: e.clientY, moved: false };
+              setSel({ from: c, dir: [0, 1], len: 0, cells: [c] });
             }}
-            onPointerCancel={() => { drag.current = null; moved.current = false; setPath([]); }}
             onPointerMove={(e) => {
-              if (!drag.current) return;
-              const c = cellAt(e.clientX, e.clientY);
-              if (!c) return;
-              const p = line(drag.current, c, g.size);
-              if (p.length > 1) moved.current = true;
-              setPath(p);
+              const d = drag.current;
+              if (!d) return;
+              if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) d.moved = true;
+              if (d.moved) follow(d.from, e.clientX, e.clientY);
             }}
-            onPointerUp={() => {
-              if (!drag.current) return;
-              const start = drag.current;
+            onPointerUp={(e) => {
+              const d = drag.current;
               drag.current = null;
-              if (!moved.current) { setAnchor(start); return; } // a tap: wait for the last letter
-              finish(path);
+              if (!d) return;
+              if (!d.moved) { setAnchor(d.from); setSel({ from: d.from, dir: [0, 1], len: 0, cells: [d.from] }); return; } // a tap: wait for the last letter
+              const { dir, len, step } = along(d.from, e.clientX, e.clientY);
+              finish(d.from, dir, Math.round(len / step));
             }}
+            onPointerCancel={() => { drag.current = null; setSel(null); }}
           >
+            {/* the words found, each circled in its colour, under the letters */}
+            {found.map((id) => { const w = g.words.find((x) => x.id === id)!; return (
+              <span key={id} aria-hidden className={cn('games-ws-cap is-found', `games-c${colourOf(id)}`)} style={capsule([w.row, w.col], [w.dr, w.dc], `var(--cell) * ${(w.word.length - 1) * Math.hypot(w.dr, w.dc)}`)} />
+            ); })}
+            {sel && <span aria-hidden className={cn('games-ws-cap', sel.miss && 'is-miss', sel.settle && 'is-settling')} style={capsule(sel.from, sel.dir, `${sel.len}px`)} />}
             {g.grid.map((row, r) => [...row].map((ch, c) => {
               const k = `${r},${c}`;
-              const col = color.get(k);
+              const col = foundCells.get(k);
               return (
                 <span key={k} data-r={r} data-c={c} role="gridcell"
-                  className={cn('games-ws-cell', col !== undefined && `found games-c${col}`, onPath.has(k) && 'on', anchor && anchor[0] === r && anchor[1] === c && 'anchor')}>{ch}</span>
+                  className={cn('games-ws-cell', col !== undefined && `found games-c${col}`, onSel.has(k) && 'on')}>{ch}</span>
               );
             }))}
           </div>
@@ -332,7 +381,7 @@ function WordSearchGame({ g, onNext, compact }: { g: WordSearch } & Required<Pro
           {g.words.map((w) => {
             const got = found.includes(w.id);
             return (
-              <li key={w.id}>
+              <li key={w.id} className="transition-colors duration-300">
                 {showWords || got ? <b className={cn(got && 'text-success line-through')}>{w.word}</b> : <span>{w.clue} <span className="text-warm-meta">({w.word.length})</span></span>}
                 {got && !showWords && <span className="text-warm-meta"> · {w.clue}</span>}
               </li>
@@ -340,7 +389,7 @@ function WordSearchGame({ g, onNext, compact }: { g: WordSearch } & Required<Pro
           })}
         </ol>
       </div>
-      {found.length === g.words.length && <Solved compact={compact} text="All words found!" onNext={onNext} />}
+      {done && <Solved compact={compact} text="All words found!" onNext={onNext} />}
     </>
   );
 }
@@ -351,21 +400,37 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
   const blank = () => g.grid.map((row) => [...row].map((ch) => (ch === '#' ? '#' : '')));
   const [letters, setLetters] = useState<string[][]>(blank);
   const [cur, setCur] = useState<{ r: number; c: number; dir: 'across' | 'down' }>(() => ({ r: g.clues[0].row, c: g.clues[0].col, dir: g.clues[0].dir }));
-  const [checked, setChecked] = useState(false);
   const [active, setActive] = useState(!compact); // the preview doesn't grab the keyboard until it is tapped
   const input = useRef<HTMLInputElement>(null);
 
+  type Clue = Crossword['clues'][number];
   const numberAt = useMemo(() => new Map(g.clues.map((cl) => [`${cl.row},${cl.col}`, cl.n])), [g.clues]);
-  const cellsOfClue = (cl: Crossword['clues'][number]): Cell[] => Array.from({ length: cl.answer.length }, (_, i) => (cl.dir === 'across' ? [cl.row, cl.col + i] : [cl.row + i, cl.col]));
+  const cellsOfClue = (cl: Clue): Cell[] => Array.from({ length: cl.answer.length }, (_, i) => (cl.dir === 'across' ? [cl.row, cl.col + i] : [cl.row + i, cl.col]));
   const clueAt = (r: number, c: number, dir: 'across' | 'down') => g.clues.find((cl) => cl.dir === dir && cellsOfClue(cl).some(([y, x]) => y === r && x === c));
   const clue = clueAt(cur.r, cur.c, cur.dir) ?? clueAt(cur.r, cur.c, cur.dir === 'across' ? 'down' : 'across')!;
   const inWord = new Set(cellsOfClue(clue).map(([y, x]) => `${y},${x}`));
-  const done = g.grid.every((row, r) => [...row].every((ch, c) => ch === '#' || letters[r][c] === ch));
-  /** After Check: how many filled squares are wrong, said aloud for screen readers (the grid shows them in red). */
-  const wrongLetters = g.grid.reduce((n, row, r) => n + [...row].filter((ch, c) => ch !== '#' && letters[r][c] && letters[r][c] !== ch).length, 0);
+  const isFull = (cl: Clue, L = letters) => cellsOfClue(cl).every(([y, x]) => L[y][x]);
+  /** Nothing is marked while it is being filled in: once every square has a letter, it is all checked at once. */
+  const allIn = g.grid.every((row, r) => [...row].every((ch, c) => ch === '#' || letters[r][c]));
+  const wrongAt = (r: number, c: number) => allIn && letters[r][c] !== g.grid[r][c];
+  const wrongLetters = allIn ? g.grid.reduce((n, row, r) => n + [...row].filter((ch, c) => ch !== '#' && letters[r][c] !== ch).length, 0) : 0;
+  const done = allIn && !wrongLetters;
 
   useEffect(() => { if (active) input.current?.focus({ preventScroll: true }); }, [cur, active]);
 
+  /** The next clue with a square still empty (`by` -1: the one before), after `from`, going round; null when all are full. */
+  const nextOpen = (from: Clue, by: 1 | -1, L = letters) => {
+    const n = g.clues.length;
+    const i = g.clues.indexOf(from);
+    for (let k = 1; k <= n; k++) { const cl = g.clues[(i + by * k + n * n) % n]; if (!isFull(cl, L)) return cl; }
+    return null;
+  };
+  /** A clue's first empty square (or its first square). */
+  const goTo = (cl: Clue, L = letters) => {
+    const [r, c] = cellsOfClue(cl).find(([y, x]) => !L[y][x]) ?? [cl.row, cl.col];
+    setActive(true);
+    setCur({ r, c, dir: cl.dir });
+  };
   const select = (r: number, c: number) => {
     if (g.grid[r][c] === '#') return;
     setActive(true);
@@ -373,19 +438,20 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
     const dir = r === cur.r && c === cur.c && both ? (cur.dir === 'across' ? 'down' : 'across') : clueAt(r, c, cur.dir) ? cur.dir : clueAt(r, c, 'across') ? 'across' : 'down';
     setCur({ r, c, dir });
   };
-  const step = (by: 1 | -1) => {
-    const cells = cellsOfClue(clue);
-    const i = cells.findIndex(([y, x]) => y === cur.r && x === cur.c);
-    const next = cells[i + by];
-    if (next) setCur({ r: next[0], c: next[1], dir: clue.dir });
-  };
   const type = (ch: string) => {
     if (done) return;
-    setLetters((L) => L.map((row, r) => row.map((v, c) => (r === cur.r && c === cur.c ? ch : v))));
-    setChecked(false);
-    if (ch) step(1);
+    const L = letters.map((row, r) => row.map((v, c) => (r === cur.r && c === cur.c ? ch : v)));
+    setLetters(L);
+    if (!ch) return;
+    // on to the next empty square of the word; a word just finished goes on to the next clue not yet answered
+    const cells = cellsOfClue(clue);
+    const i = cells.findIndex(([y, x]) => y === cur.r && x === cur.c);
+    const empty = cells.slice(i + 1).find(([y, x]) => !L[y][x]);
+    if (empty) { setCur({ r: empty[0], c: empty[1], dir: clue.dir }); return; }
+    if (isFull(clue, L)) { const nc = nextOpen(clue, 1, L); if (nc) goTo(nc, L); return; }
+    const next = cells[i + 1];
+    if (next) setCur({ r: next[0], c: next[1], dir: clue.dir });
   };
-  const jump = (cl: Crossword['clues'][number]) => { setActive(true); setCur({ r: cl.row, c: cl.col, dir: cl.dir }); };
   const reveal = (cells: Cell[]) => setLetters((L) => L.map((row, r) => row.map((v, c) => (cells.some(([y, x]) => y === r && x === c) ? g.grid[r][c] : v))));
 
   const keys = (e: KeyboardEvent) => {
@@ -400,10 +466,10 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
       const r = cur.r + dr, c = cur.c + dc;
       if (g.grid[r]?.[c] && g.grid[r][c] !== '#') setCur({ r, c, dir: dr ? 'down' : 'across' });
     } else if (e.key === 'Enter') {
-      // the next clue (Shift: the one before). Tab is left alone, so the keyboard can leave the crossword
+      // the next clue not yet answered (Shift: the one before). Tab is left alone, so the keyboard can leave the crossword
       e.preventDefault();
-      const i = g.clues.indexOf(clue);
-      jump(g.clues[(i + (e.shiftKey ? g.clues.length - 1 : 1)) % g.clues.length]);
+      const nc = nextOpen(clue, e.shiftKey ? -1 : 1);
+      if (nc) goTo(nc);
     }
   };
   /** Backspace from an Android keyboard: it sends no key, only the hidden box's one space being deleted. */
@@ -416,46 +482,51 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
     setLetters((L) => L.map((row, r) => row.map((v, c) => (r === prev[0] && c === prev[1] ? '' : v))));
   };
 
-  const filled = g.clues.filter((cl) => cellsOfClue(cl).every(([y, x]) => letters[y][x] === g.grid[y][x])).length;
+  const filled = g.clues.filter((cl) => isFull(cl)).length;
 
   return (
     <>
-      <How compact={compact}>Tap a square and type. Tap it again to switch between across and down.</How>
+      <How compact={compact}>Tap a square and type; tap it again to switch between across and down. Enter goes to the next clue you haven't answered. Once every square is filled, your answers are checked.</How>
       <Progress done={filled} total={g.clues.length}>
-        <button type="button" className={chip('quiet')} onClick={() => { setChecked(true); input.current?.focus({ preventScroll: true }); }}>Check</button>
-        <span className="sr-only" aria-live="polite">{checked ? (wrongLetters ? `${plural(wrongLetters, 'letter is', 'letters are')} wrong.` : 'No wrong letters.') : ''}</span>
         <button type="button" className={chip('quiet')} onClick={() => { reveal(cellsOfClue(clue)); input.current?.focus({ preventScroll: true }); }}>Reveal word</button>
       </Progress>
-      <p className={cn('rounded-2xl bg-panel px-4 py-3 text-background shadow-pill', compact ? 'text-[13px]' : 'sticky top-20 z-10 text-[15px]')} aria-live="polite">
-        <b className="text-brand">{clue.n} {clue.dir}</b> {clue.clue} <span className="text-background/60">{clue.enumeration}</span>
-      </p>
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="relative max-w-full overflow-x-auto">
-          <div className="games-cw-grid" style={{ ['--cols' as string]: g.cols }} onClick={() => { setActive(true); input.current?.focus({ preventScroll: true }); }}>
-            {g.grid.map((row, r) => [...row].map((ch, c) => {
-              const k = `${r},${c}`;
-              if (ch === '#') return <span key={k} className="games-cw-cell is-block" />;
-              const v = letters[r][c];
-              const bad = checked && v && v !== ch;
-              return (
-                <button key={k} type="button" tabIndex={-1} data-r={r} data-c={c} aria-label={`Row ${r + 1}, column ${c + 1}${v ? `, ${v}` : ''}`}
-                  className={cn('games-cw-cell', inWord.has(k) && 'word', r === cur.r && c === cur.c && 'cur', bad && 'bad', done && 'done')}
-                  onClick={(e) => { e.stopPropagation(); select(r, c); }}>
-                  {numberAt.has(k) && <span className="games-cw-n">{numberAt.get(k)}</span>}
-                  <span className="games-cw-l">{v}</span>
-                </button>
-              );
-            }))}
+      {allIn && !done && (
+        <p className="animate-fade-slide-up rounded-2xl bg-destructive/10 px-4 py-2.5 text-[14px] text-foreground" role="status">
+          <b>{plural(wrongLetters, 'letter is', 'letters are')} wrong</b>, crossed out in red. Change {wrongLetters === 1 ? 'it' : 'them'} and the crossword checks again.
+        </p>
+      )}
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+        <div className="flex max-w-full flex-col gap-2">
+          {/* the clue being answered, just above the grid */}
+          <p className={cn('rounded-2xl bg-brand-blue-subtle px-3.5 py-2 text-brand-blue-deep', compact ? 'text-[13px]' : 'text-[15px]')} aria-live="polite">
+            <b className="mr-1.5 capitalize">{clue.n} {clue.dir}</b>{clue.clue} <span className="opacity-70">{clue.enumeration}</span>
+          </p>
+          <div className="relative max-w-full overflow-x-auto">
+            <div className="games-cw-grid" style={{ ['--cols' as string]: g.cols }} onClick={() => { setActive(true); input.current?.focus({ preventScroll: true }); }}>
+              {g.grid.map((row, r) => [...row].map((ch, c) => {
+                const k = `${r},${c}`;
+                if (ch === '#') return <span key={k} className="games-cw-cell is-block" />;
+                const v = letters[r][c];
+                return (
+                  <button key={k} type="button" tabIndex={-1} data-r={r} data-c={c} aria-label={`Row ${r + 1}, column ${c + 1}${v ? `, ${v}` : ''}`}
+                    className={cn('games-cw-cell', inWord.has(k) && 'word', r === cur.r && c === cur.c && 'cur', wrongAt(r, c) && 'bad', done && 'done')}
+                    onClick={(e) => { e.stopPropagation(); select(r, c); }}>
+                    {numberAt.has(k) && <span className="games-cw-n">{numberAt.get(k)}</span>}
+                    <span className="games-cw-l">{v}</span>
+                  </button>
+                );
+              }))}
+            </div>
+            {/* holds one space, so a phone keyboard's Backspace has something to delete (and tells us) */}
+            <input ref={input} className="games-cw-input" aria-label="Type a letter" autoCapitalize="characters" autoComplete="off" spellCheck={false} value=" "
+              onKeyDown={keys}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) { back(); return; }
+                const ch = v.replace(/\s/g, '').slice(-1);
+                if (/^[a-z]$/i.test(ch)) type(ch.toUpperCase());
+              }} />
           </div>
-          {/* holds one space, so a phone keyboard's Backspace has something to delete (and tells us) */}
-          <input ref={input} className="games-cw-input" aria-label="Type a letter" autoCapitalize="characters" autoComplete="off" spellCheck={false} value=" "
-            onKeyDown={keys}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (!v) { back(); return; }
-              const ch = v.replace(/\s/g, '').slice(-1);
-              if (/^[a-z]$/i.test(ch)) type(ch.toUpperCase());
-            }} />
         </div>
         <div className={cn('flex min-w-[220px] flex-1 flex-col gap-3', compact ? 'text-[13px]' : 'text-[15px]')}>
           {(['across', 'down'] as const).map((dir) => (
@@ -463,12 +534,15 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
               <h4 className="mb-1 text-[12px] font-bold uppercase tracking-[0.06em] text-warm-secondary">{dir === 'across' ? 'Across' : 'Down'}</h4>
               <ol className="flex flex-col gap-0.5">
                 {g.clues.filter((cl) => cl.dir === dir).map((cl) => {
-                  const ok = cellsOfClue(cl).every(([y, x]) => letters[y][x] === g.grid[y][x]);
+                  const full = isFull(cl);
+                  const wrong = allIn && cellsOfClue(cl).some(([y, x]) => letters[y][x] !== g.grid[y][x]);
                   return (
                     <li key={`${cl.n}${dir}`}>
                       <button type="button" data-n={cl.n} data-dir={dir}
-                        className={cn('w-full rounded-xl px-2.5 py-1.5 text-left transition-colors duration-150 hover:bg-muted', cl === clue && 'bg-brand-blue-subtle hover:bg-brand-blue-subtle', ok && 'text-success')}
-                        onClick={() => jump(cl)}>
+                        className={cn('w-full rounded-xl px-2.5 py-1.5 text-left transition-colors duration-200 hover:bg-muted',
+                          cl === clue && 'bg-brand-blue-subtle hover:bg-brand-blue-subtle',
+                          wrong ? 'text-destructive' : done ? 'text-success' : full && 'text-warm-secondary')}
+                        onClick={() => goTo(cl)}>
                         <b className="mr-1.5">{cl.n}</b>{cl.clue} <span className="text-warm-meta">{cl.enumeration}</span>
                       </button>
                     </li>

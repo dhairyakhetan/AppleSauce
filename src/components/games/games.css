@@ -95,6 +95,8 @@
 }
 .games-compact .games-ws-grid { --cell: min(24px, calc((100vw - 96px) / var(--n))); }
 .games-ws-cell {
+  position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
   width: var(--cell);
@@ -102,11 +104,34 @@
   font: 600 calc(var(--cell) * 0.48) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: hsl(var(--foreground));
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: color 160ms ease;
 }
-.games-ws-cell.found { background: color-mix(in srgb, var(--pair) 16%, hsl(var(--card))); color: var(--pair); }
-.games-ws-cell.on,
-.games-ws-cell.anchor { background: hsl(var(--brand-blue)); color: hsl(var(--brand-blue-foreground)); }
+.games-ws-cell.found { color: var(--pair); }
+.games-ws-cell.on { color: hsl(var(--brand-blue-deep)); }
+/* the highlight a word is drawn with (WordSearchGame): a rounded bar under the letters that follows the finger, and
+   stays round each word found, in its colour */
+.games-ws-grid { position: relative; }
+.games-ws-cap {
+  position: absolute;
+  z-index: 0;
+  height: calc(var(--cell) * 0.82);
+  border-radius: 999px;
+  transform-origin: calc(var(--cell) * 0.41) 50%;
+  background: hsl(var(--brand-blue) / 0.18);
+  box-shadow: inset 0 0 0 2px hsl(var(--brand-blue) / 0.55);
+  pointer-events: none;
+  transition: background-color 200ms var(--ease-out-strong), box-shadow 200ms var(--ease-out-strong), opacity 300ms var(--ease-out-strong);
+}
+.games-ws-cap.is-settling { transition: width 160ms var(--ease-out-strong), background-color 200ms, box-shadow 200ms, opacity 300ms; }
+.games-ws-cap.is-found {
+  background: color-mix(in srgb, var(--pair) 18%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--pair) 70%, transparent);
+  animation: games-cap-in 260ms var(--ease-out-strong) both;
+}
+.games-ws-cap.is-miss { background: hsl(var(--destructive) / 0.14); box-shadow: inset 0 0 0 2px hsl(var(--destructive) / 0.6); animation: games-cap-out 420ms var(--ease-out-strong) both; }
+@keyframes games-cap-in { from { opacity: 0.4; } to { opacity: 1; } }
+@keyframes games-cap-out { 0%, 40% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .games-ws-cap { transition: none; animation: none; } }
 
 /* Crossword: squares share their borders. */
 .games-cw-grid {
@@ -146,7 +171,7 @@
 .games-cw-input { position: absolute; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; pointer-events: none; }
 
 @media (hover: hover) {
-  .games-ws-cell:not(.found):not(.on):not(.anchor):hover { background: hsl(var(--muted)); }
+  .games-ws-cell:not(.found):not(.on):hover { color: hsl(var(--brand-blue)); }
 }
 /* A popup whose content changes (the flagged box's steps): the new content rises in a little as the box eases to its
    new height (Morph in shared.tsx). Nothing moves for anyone who asked for less motion. */

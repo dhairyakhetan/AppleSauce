@@ -986,6 +986,8 @@ const byChapterOrder = (a: BankQuestion, b: BankQuestion) =>
 export type FakeGamesApi = GamesApi & {
   /** Puts the made-up questions and team back as they started. */
   reset(): void;
+  /** Every approved question back to waiting: the games have nothing approved to play (Try the games' demo). */
+  noneApproved(): void;
   /** Which role the dummy "you" has; null takes you off the team; 'reauth' is signed in with a password. */
   setRole(role: RoleCheck): void;
   role(): RoleCheck;
@@ -1131,6 +1133,7 @@ export function createFakeGamesApi(slow = true, sample = true): FakeGamesApi {
 
   return {
     reset() { s = seed(sample); password = false; },
+    noneApproved() { for (const q of s.questions) if (q.status === 'approved') { q.status = 'pending'; q.reviewedAt = null; q.reviewedBy = null; } },
     setRole(role) {
       password = role === 'reauth';
       if (role === 'reauth') return;

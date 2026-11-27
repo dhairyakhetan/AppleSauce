@@ -1,12 +1,18 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
 import { GAME_TYPES, makeGame, poolFor, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
+import { CHOICE } from '@/lib/games/engine/choice';
+import { CROSSWORD } from '@/lib/games/engine/crossword';
+import { FILL } from '@/lib/games/engine/fill';
+import { MATCHING } from '@/lib/games/engine/matching';
+import { WORDSEARCH } from '@/lib/games/engine/wordsearch';
 
 import type { BankQuestion } from '@/lib/games/rows';
 import { bySubject } from '@/lib/games/details';
 import { cn } from '@/lib/utils';
 import { GameView } from './GameView';
 import { chip, GAME_NAMES, plural, useEnter, whyNot } from './helpers';
+import { Picker } from './Picker';
 import { SlidingPill } from './shared';
 
 /** The most answers the small preview's crossword uses. */
@@ -25,7 +31,7 @@ const COMPACT_CROSSWORD = 8;
 export type ReviseQuestion = Pick<BankQuestion, 'id' | 'chapter_id' | 'topic_id' | 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'also' | 'fill' | 'wrong_options' | 'difficulty'>;
 
 interface Topic { key: string; no: number | null; name: string; count: number }
-interface Chapter { id: string; cls: number | null; subject: string; no: number | null; name: string; topics: Topic[]; questions: ReviseQuestion[] }
+interface Chapter { id: string; board: string; cls: number | null; subject: string; no: number | null; name: string; topics: Topic[]; questions: ReviseQuestion[] }
 
 const topicKey = (q: ReviseQuestion) => q.topic_id ?? `${q.chapter_id}|${q.topic_no ?? ''}|${q.topic}`;
 
@@ -43,13 +49,21 @@ function chaptersOf(questions: ReviseQuestion[]): Chapter[] {
     }
     const q0 = qs[0];
     return {
-      id, questions: qs, cls: q0.class, subject: q0.subject, no: q0.chapter_no, name: q0.chapter,
+      id, questions: qs, board: q0.board, cls: q0.class, subject: q0.subject, no: q0.chapter_no, name: q0.chapter,
       topics: [...topics.values()].sort((a, b) => (a.no ?? 99) - (b.no ?? 99)),
     };
-  }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || bySubject(a.subject, b.subject) || (a.no ?? 0) - (b.no ?? 0));
+  }).sort((a, b) => (b.cls ?? 0) - (a.cls ?? 0) || bySubject(a.subject, b.subject) || (a.no ?? 0) - (b.no ?? 0)); // highest class first, so it opens there
 }
 
-export function Revise({ questions, compact = false, written = false, heading, extra }: {
+/** A chapter with enough questions for at least one of the games. */
+function playable(c: Chapter): boolean {
+  const items = c.questions.map(itemOf);
+  return GAME_TYPES.some((t) => poolFor(t, items).length >= GAME_MIN[t]);
+}
+const GAME_MIN: Record<GameType, number> = { crossword: CROSSWORD.min, wordsearch: WORDSEARCH.min, matching: MATCHING.min, fill: FILL.min, choice: CHOICE.min };
+const itemOf = (q: ReviseQuestion): Item => ({ id: q.id, question: q.question, answer: q.answer, also: q.also ?? [], fill: q.fill ?? null, wrong: q.wrong_options ?? [], level: q.difficulty });
+
+export function Revise({ questions, compact = false, written = false, heading, extra, demoQuestions }: {
   questions: ReviseQuestion[];
   /** The small version, for the preview on Write questions. */
   compact?: boolean;
@@ -59,8 +73,15 @@ export function Revise({ questions, compact = false, written = false, heading, e
   heading?: ReactNode;
   /** Shown next to "New puzzle" (the preview's "Full size"). */
   extra?: (game: { chapterId: string; topics: string[] }) => ReactNode;
+  /** Try the games: sample questions to play when none of `questions` has a game to play (none approved yet), said so
+   * in the heading ("demo mode"). */
+  demoQuestions?: ReviseQuestion[];
 }) {
-  const chapters = useMemo(() => chaptersOf(questions), [questions]);
+  // Try the games lists only the chapters with a game to play (the preview shows whatever is being written)
+  const real = useMemo(() => chaptersOf(questions).filter((c) => written || playable(c)), [questions, written]);
+  const demo = !written && !real.length && !!demoQuestions?.length;
+  const demoChapters = useMemo(() => (demoQuestions ? chaptersOf(demoQuestions) : []), [demoQuestions]);
+  const chapters = demo ? demoChapters : real;
   const uid = useId(); // the preview and Try the games can be on the page at once
   /** The chapter open, and the topics left out of it: every other topic is in, including one added later. */
   const [pick, setPickState] = useState({ chapter: '', out: [] as string[] });
@@ -76,7 +97,15 @@ export function Revise({ questions, compact = false, written = false, heading, e
   const chapter = chapters.find((c) => c.id === pick.chapter) ?? chapters[0];
   const classes = [...new Set(chapters.map((c) => c.cls))].sort((a, b) => Number(b) - Number(a)); // highest first
   const subjects = [...new Set(chapters.filter((c) => c.cls === chapter?.cls).map((c) => c.subject))];
-  const inSubject = chapters.filter((c) => c.cls === chapter?.cls && c.subject === chapter?.subject);
+  const inSubject = chapters.filter((c) => c.board === chapter?.board && c.cls === chapter?.cls && c.subject === chapter?.subject).sort((a, b) => (a.no ?? 0) - (b.no ?? 0));
+  const boards = [...new Set(chapters.map((c) => c.board))].sort();
+  const classesOn = [...new Set(chapters.filter((c) => c.board === chapter?.board).map((c) => c.cls))].sort((a, b) => Number(b) - Number(a));
+  const subjectsOn = [...new Set(chapters.filter((c) => c.board === chapter?.board && c.cls === chapter?.cls).map((c) => c.subject))].sort(bySubject);
+  /** The chapter closest to what is chosen now, with these details changed: the same class and subject where they exist. */
+  const near = (want: { board: string; cls?: number | null; subject?: string }) => {
+    const on = chapters.filter((c) => c.board === want.board && (want.cls === undefined || c.cls === want.cls) && (want.subject === undefined || c.subject === want.subject));
+    return on.find((c) => c.cls === chapter?.cls && c.subject === chapter?.subject) ?? on.find((c) => c.subject === chapter?.subject) ?? on[0];
+  };
   const open = (c: Chapter | undefined) => { if (c) setPick({ chapter: c.id, out: [] }); };
   const known = chapter?.topics.map((t) => t.key) ?? [];
   // every topic but the ones left out (and every topic, if that would leave none)
@@ -84,7 +113,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
   const chosen = left.length ? left : known;
   const chosenKey = chosen.join('\u0000');
   const items: Item[] = useMemo(
-    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map((q) => ({ id: q.id, question: q.question, answer: q.answer, also: q.also ?? [], fill: q.fill ?? null, wrong: q.wrong_options ?? [], level: q.difficulty })),
+    () => (chapter?.questions ?? []).filter((q) => chosenKey.split('\u0000').includes(topicKey(q))).map(itemOf),
     [chapter, chosenKey],
   );
   const seed = seedOf(`${chapter?.id}|${chosenKey}|${round}`);
@@ -119,6 +148,12 @@ export function Revise({ questions, compact = false, written = false, heading, e
     else setPick({ chapter: chapter!.id, out: out.filter((t) => t !== k) });
   };
 
+  const pickField = (name: string, value: string, options: { value: string; label: string; meta?: string }[], onPick: (v: string) => void) => (
+    <div className={cn('flex min-w-0 flex-col gap-1', name === 'Chapter' && 'col-span-2 sm:col-span-1')} key={name}>
+      <label htmlFor={`${uid}-${name}`} className={label}>{name}</label>
+      <Picker id={`${uid}-${name}`} look="field" label={name} value={value} options={options} onPick={onPick} />
+    </div>
+  );
   const pill = cn('rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', compact ? 'min-h-9 px-3 text-[12px]' : 'min-h-11 md:min-h-10 px-3.5 text-[13px]');
   const label = cn('font-semibold text-warm-secondary', compact ? 'text-[11px]' : 'text-[12px]');
   // the small preview sits on a muted step card of Write questions, so its boxes are white there
@@ -130,8 +165,23 @@ export function Revise({ questions, compact = false, written = false, heading, e
     <div className={cn('flex flex-col', compact ? 'gap-3' : 'gap-4')}>
       {heading}
       <section aria-label="What are you revising?" className={box}>
-        {!written && <h2 className="text-[15px] font-bold text-foreground">What are you revising?</h2>}
-        {(!written || classes.length > 1 || subjects.length > 1) && (
+        {!written && (
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-[15px] font-bold text-foreground">What are you revising?{demo && <span className="ml-1.5 font-semibold text-warm-secondary">(demo mode)</span>}</h2>
+            {demo && <p className="text-[13px] text-warm-secondary">No questions are approved yet, so these are sample questions. Approved ones show here instead.</p>}
+          </div>
+        )}
+        {!written ? (
+          // Try the games: the same dropdowns as Write questions, listing only what has a game to play
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {pickField('Board', chapter.board, boards.map((b) => ({ value: b, label: b })), (b) => open(near({ board: b })))}
+            {pickField('Class', String(chapter.cls ?? ''), classesOn.map((n) => ({ value: String(n), label: `Class ${n}` })), (v) => open(near({ board: chapter.board, cls: Number(v) })))}
+            {pickField('Subject', chapter.subject, subjectsOn.map((x) => ({ value: x, label: x })), (v) => open(near({ board: chapter.board, cls: chapter.cls, subject: v })))}
+            {pickField('Chapter', chapter.id, inSubject.map((c) => ({ value: c.id, label: `${c.no ?? ''}${c.no !== null ? ': ' : ''}${c.name || 'No name yet'}`, meta: plural(c.questions.length, 'question') })), (v) => open(chapters.find((c) => c.id === v)))}
+          </div>
+        ) : (
+          <>
+        {(classes.length > 1 || subjects.length > 1) && (
           <div className="flex flex-wrap gap-x-6 gap-y-3">
             <div className="flex flex-col gap-1.5">
               <span className={label} id={`${uid}-class`}>Class</span>
@@ -153,7 +203,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
             </div>
           </div>
         )}
-        {(!written || inSubject.length > 1) && (
+        {(inSubject.length > 1) && (
           <div className="flex flex-col gap-1.5">
             <span className={label} id={`${uid}-chapter`}>Chapter</span>
             <ul className={cn('grid grid-cols-1 gap-2', compact ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')} aria-labelledby={`${uid}-chapter`}>
@@ -171,6 +221,8 @@ export function Revise({ questions, compact = false, written = false, heading, e
               ))}
             </ul>
           </div>
+        )}
+          </>
         )}
         <fieldset className="flex flex-col gap-1.5">
           <legend className={cn(label, 'mb-1.5')}>
