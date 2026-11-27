@@ -245,7 +245,7 @@ describe('the verify screen is wired as one viewport', () => {
 
   it('the top tile is one calm row: a back arrow, the paper, progress, the unsaved chip and one Menu button', () => {
     const top = screen.slice(screen.indexOf('const topTile'), screen.indexOf('const actionBarShell'));
-    for (const piece of ['role="progressbar"', '<SaveStatusChip compact', 'onClick={onExit}', 'ArrowLeft', 'data-tour="paper"', '{toolbar ?', 'flex-nowrap']) {
+    for (const piece of ['role="progressbar"', '<SaveStatusChip compact', 'onClick={goBack}', 'ArrowLeft', 'data-tour="paper"', '{toolbar ?', 'flex-nowrap']) {
       expect(top, piece).toContain(piece);
     }
     // Every other way out lives in the Menu, not in the tile.

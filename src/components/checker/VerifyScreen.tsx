@@ -9,7 +9,7 @@ import { FIX_RULE_LINE, RulesInfo, ShortcutsPopover } from '@/components/checker
 import { PaperPageFlip } from '@/components/checker/PaperPageFlip';
 import { QuestionDiagrams } from '@/components/checker/QuestionDiagrams';
 import { diagramItems, diagramPaths, diagramsKey, withoutShownFigureFlag } from '@/lib/checker-diagrams';
-import { flipStartPage, PAGE_NOT_FOUND_TITLE } from '@/lib/paper-pages';
+import { flipStartPage, PAGE_NOT_FOUND_TITLE, type PaperPage } from '@/lib/paper-pages';
 import { rotationOfPage, type PageRotation } from '@/lib/page-rotation';
 import { AiSurePill, PanelTabs, PrintedFrame, TypedFrame, VERIFY_TABS, type PanelId } from '@/components/checker/Panels';
 import { tileForNextQuestion } from '@/lib/checker-bento';
@@ -77,6 +77,7 @@ import {
   forgetAnswered,
   KEPT_WORDS_NOTE,
   KEPT_WORDS_TITLE,
+  lastStepCannotBeUndone,
   mayBeMyOtherTabAnswering,
   recordAnswered,
   SKIPPED_SOME_NOTE,
@@ -91,8 +92,8 @@ import { ActionButton } from '@/components/checker/CheckerButtons';
 import { ACTION_ICON_CLASS } from '@/lib/checker-button-styles';
 import { CheckerWalkthrough } from '@/components/checker/CheckerWalkthrough';
 import { CHECKER_PRACTICE_PATH, CHECKER_TOUR_PARAM, hasSeenWalkthrough, markWalkthroughSeen } from '@/lib/checker-onboarding';
-import { paperLabel, paperProgress } from '@/lib/checker-progress';
-import { loadGate, papersAfterVerdict, skippedNote, type MyPaper } from '@/lib/verifier-papers';
+import { paperLabel } from '@/lib/checker-progress';
+import { heldBackNote, loadGate, papersAfterVerdict, paperProgressOf, skippedNote, type MyPaper } from '@/lib/verifier-papers';
 import { IncomingCard, PaperStrip, SaveStatusChip } from '@/components/checker/AdvanceBits';
 import { useCheckerOutbox } from '@/components/checker/useCheckerOutbox';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
@@ -126,6 +127,8 @@ const HELP_REASONS = [
 
 /** The server refuses a "send back to the AI" with fewer characters than this (checker_ask_for_ai_redo). */
 const MIN_AI_REDO_REASON = 5;
+/** ... and with more than this (checker_ask_for_ai_redo refuses over 500 characters, for good). */
+const HELP_REASON_MAX = 500;
 
 /** A phone or tablet (a finger, not a mouse): there the keyboard covers half the screen as soon as a box has focus. */
 function coarsePointer(): boolean {
@@ -169,6 +172,13 @@ export function VerifyScreen({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const labelRef = useRef('this paper');
+  // Both counters on My papers (questions and papers) move after an answer (audit CK-10, 27 Nov 2026: the Papers chip never did).
+  // The papers count is read again at once only when it may really have changed (a paper ran out, Undo): reading it after
+  // every answer would be slow. Otherwise it is only marked out of date and read when My papers comes back (see Checker.tsx).
+  const invalidateStats = (papersNow = false) => {
+    qc.invalidateQueries({ queryKey: ['checker-my-stats', scope] });
+    qc.invalidateQueries({ queryKey: ['checker-my-paper-stats', scope], ...(papersNow ? {} : { refetchType: 'none' as const }) });
+  };
 
   /* Speed (checker speed plan, 12 Oct 2026): the next question appears the
      moment a verdict is pressed, not after the save comes back, and its WORDS
@@ -204,6 +214,11 @@ export function VerifyScreen({
   const nextKey = ['verifier-next', scope, paperId, includeSkipped] as const;
   const keyFor = (inc: boolean) => ['verifier-next', scope, paperId, inc] as const;
   const picApi = useMemo(() => withPictureCache(api), [api]);
+  // The paper's page list is read once and kept (the same cache the page's own picture uses), so the whole-paper flip does
+  // not reload it for every question (audit CK-18).
+  const pagesCacheKey = (pid: string) => ['checker-paper-pages', scope, pid] as const;
+  const loadPagesCached = (pid: string) =>
+    qc.fetchQuery({ queryKey: pagesCacheKey(pid), queryFn: () => api.paperPages(pid), staleTime: 5 * 60 * 1000 });
   const reducedMotion = usePrefersReducedMotion();
   // Tablet and up: every tile on one screen. Below 768: swipeable tiles (Question | Page | Fix).
   const wide = useBentoWide();
@@ -260,7 +275,8 @@ export function VerifyScreen({
         // It is no longer Done: the paper's progress and its list must say so.
         qc.invalidateQueries({ queryKey: ['verifier-papers', scope] });
         qc.invalidateQueries({ queryKey: ['verifier-paper-questions', scope, paperId] });
-        setNotice({ text: 'Question reopened. Change what is wrong, or press Looks right to save it again.', tone: 'ok' });
+        // Not a short notice any more: a banner stays up while the reopened question is on screen (audit CK-12 / CK-23).
+        setReopenedId(row.id);
         return row;
       } catch (err) {
         setNotice({ text: reopenErrorMessage(err), tone: 'warn' });
@@ -309,7 +325,7 @@ export function VerifyScreen({
   });
   const paperRow = papersQuery.data?.find((p) => p.paper_id === paperId) ?? null;
   const paperGate = loadGate(papersQuery);
-  const progress = paperRow ? paperProgress({ done_count: paperRow.done, remaining_count: paperRow.remaining, total_count: paperRow.total }) : null;
+  const progress = paperRow ? paperProgressOf(paperRow) : null;
   // Skipped questions stay on the paper for later. When nothing but skipped
   // ones are left, the screen says so instead of looping them back.
   const skippedCount = paperRow?.skipped ?? 0;
@@ -337,7 +353,10 @@ export function VerifyScreen({
     queryFn: () => api.questionDiagrams(question!.id),
     enabled: Boolean(question),
     staleTime: 10 * 60 * 1000,
-    retry: false,
+    // A read that failed is tried again, and says so when it still fails (audit CK-19, 27 Nov 2026); before, every
+    // failure was an empty list kept for ten minutes, so a missing diagram looked like "no diagram".
+    retry: 2,
+    retryDelay: 1500,
     refetchOnWindowFocus: false,
   });
   const diagramList = question ? diagramsQuery.data ?? [] : [];
@@ -501,6 +520,10 @@ export function VerifyScreen({
     listReadAt: papersQuery.dataUpdatedAt,
   });
   const [error, setError] = useState<string | null>(null);
+  // The question the checker reopened with Edit: it stays "not Done" until it is saved again, so say so while it is open.
+  const [reopenedId, setReopenedId] = useState<string | null>(null);
+  // "Are you sure?" for the moves that would throw typed changes away (Skip, Ask the HOD) or leave a reopened question open.
+  const [guard, setGuard] = useState<{ title: string; body: string; stay: string; leave: string; run: () => void } | null>(null);
   const online = useOnline();
   // A message that survives moving to the next question (an error that made
   // the page move on, or "Saved").
@@ -550,6 +573,7 @@ export function VerifyScreen({
       setHelpOpen(false);
       setHelpReason('');
       setConfirmCancel(false);
+      setGuard(null);
       setError(null);
     }
   }
@@ -635,7 +659,7 @@ export function VerifyScreen({
   // W13 realtime: show as online, keep my counters and the leaderboard
   // current, and move on if someone else changes the question I have open.
   const refreshCounters = useLiveRefresh(() => {
-    qc.invalidateQueries({ queryKey: ['checker-my-stats', scope] });
+    invalidateStats();
     // The list of papers is not read on every bit of activity (my own answers cause activity too): it is marked out
     // of date and read when it is next needed.
     qc.invalidateQueries({ queryKey: ['verifier-papers', scope], refetchType: 'none' });
@@ -680,7 +704,7 @@ export function VerifyScreen({
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['verifier-next', scope, paperId] });
-    qc.invalidateQueries({ queryKey: ['checker-my-stats', scope] });
+    invalidateStats();
     qc.invalidateQueries({ queryKey: ['verifier-papers', scope] });
     qc.invalidateQueries({ queryKey: ['verifier-paper-questions', scope, paperId] });
   };
@@ -740,7 +764,8 @@ export function VerifyScreen({
   function ackedVerdict(entry: OutboxEntry, result: VerdictAndNext | null) {
     const ackAt = Date.now();
     clearDraft(scope, entry.questionId);
-    qc.invalidateQueries({ queryKey: ['checker-my-stats', scope] });
+    setReopenedId((id) => (id === entry.questionId ? null : id));
+    invalidateStats();
     // The progress bar moves by working the row out here, not by reading the whole list of papers after every
     // answer (verifier_my_papers is slow). The real read happens when the paper runs out, on Undo and on My papers.
     qc.setQueryData<MyPaper[]>(['verifier-papers', scope], (rows) => papersAfterVerdict(rows, entry.paperId, entry.kind));
@@ -762,6 +787,8 @@ export function VerifyScreen({
     }
     // Nothing more to show, or the answer did not say: now the list is read for real.
     if (decision.kind === 'fetch' || decision.kind === 'end') qc.invalidateQueries({ queryKey: ['verifier-papers', scope] });
+    // The papers count may have moved (a paper ran out): read it for real now, not only mark it out of date.
+    if (decision.kind === 'fetch' || decision.kind === 'end') invalidateStats(true);
     if (decision.kind === 'fetch') {
       void loadNext(entry.questionId, inc).then((ok) => {
         if (ok && entry.kind === 'skip' && qc.getQueryData(keyFor(inc)) === null) setSkippedLastAt(ackAt);
@@ -810,6 +837,12 @@ export function VerifyScreen({
       const back = qc.getQueryData<CheckerQuestion | null>(keyFor(inc));
       if (words && back?.id !== entry.questionId) setLostWords(words);
     });
+  }
+
+  /** Close the Ask the HOD sheet. A message set inside it ("Say what is wrong with it first") must not stay on the bar. */
+  function closeHelp() {
+    setHelpOpen(false);
+    setError(null);
   }
 
   function retryNext() {
@@ -973,6 +1006,39 @@ export function VerifyScreen({
     submitVerdict('ask_ai_redo', { reason: why }, 'Sent to your HOD. If they agree, the computer will read it again.', includeSkipped, () => setHelpOpen(false));
   }
 
+  /** Skip and Ask the HOD throw typed changes away: ask first, the way Cancel does (audit CK-03, 27 Nov 2026). */
+  function guardEdit(what: 'skip' | 'help', run: () => void) {
+    if (mode === 'fix' && unsavedEdit) {
+      setGuard({
+        title: 'Leave your changes behind?',
+        body:
+          what === 'skip'
+            ? 'You typed changes on this question. If you skip it they are thrown away, and the question stays as it was.'
+            : 'You typed changes on this question. If you ask the HOD they are thrown away: the HOD sees the question as it was stored.',
+        stay: 'Keep editing',
+        leave: what === 'skip' ? 'Yes, skip it' : 'Yes, ask the HOD',
+        run,
+      });
+      return;
+    }
+    run();
+  }
+
+  /** The back arrow: a question reopened with Edit stays open for checking if the checker walks away from it. */
+  function goBack() {
+    if (question && reopenedId === question.id && !isAnswered(question.id)) {
+      setGuard({
+        title: 'Go back without saving?',
+        body: 'You reopened this question to change it. If you go back now it stays open for checking, and the paper is not finished until you save it again.',
+        stay: 'Stay here',
+        leave: 'Yes, go back',
+        run: onExit,
+      });
+      return;
+    }
+    onExit();
+  }
+
   // Skip is always available, also on the last question left. A skipped
   // question stays on this paper for later; the verifier can go to other papers.
   function doSkip() {
@@ -1007,7 +1073,7 @@ export function VerifyScreen({
       setAdvancing(false);
       setNextFailed(false);
       setIncoming(null);
-      qc.invalidateQueries({ queryKey: ['checker-my-stats', scope] });
+      invalidateStats(true);
       qc.invalidateQueries({ queryKey: ['verifier-papers', scope] });
       qc.invalidateQueries({ queryKey: ['verifier-paper-questions', scope, paperId] });
       setNotice({ text: undidFix ? UNDONE_FIX_NOTE : UNDONE_NOTE, tone: 'ok' });
@@ -1128,8 +1194,8 @@ export function VerifyScreen({
       if (e.key === 'Escape') setHelpOpen(false);
       return;
     }
-    // The "Throw away your changes?" dialog handles its own keys (Esc keeps editing).
-    if (confirmCancel) return;
+    // The "Throw away your changes?" dialogs handle their own keys (Esc keeps editing).
+    if (confirmCancel || guard) return;
     if (e.key === 'Escape' && mode !== 'check') {
       e.preventDefault();
       // Typed changes are not thrown away by one stray Esc: the first press asks, a second one soon after cancels.
@@ -1195,13 +1261,14 @@ export function VerifyScreen({
   // Switched off it still takes a tap (aria-disabled, not disabled): the tap says why, in the message area, because a
   // phone has no hover to show the tooltip.
   const undoOff = !canUndo;
+  const stepBlocked = lastStepCannotBeUndone(answered);
   const undoButton = (
     <button
       type="button"
       onClick={() => {
         if (submitting) return;
         if (undoOff) {
-          setNotice({ text: undoTitle(false, undoHeld), tone: 'warn' });
+          setNotice({ text: undoTitle(false, undoHeld, stepBlocked), tone: 'warn' });
           return;
         }
         void doUndo();
@@ -1211,7 +1278,7 @@ export function VerifyScreen({
       data-testid="undo-last"
       data-tour="undo"
       aria-label="Undo last"
-      title={undoTitle(canUndo, undoHeld)}
+      title={undoTitle(canUndo, undoHeld, stepBlocked)}
       className="tap-44 order-3 inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-muted px-3 text-[14px] font-bold text-warm-secondary transition-transform duration-150 active:scale-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-disabled aria-disabled:cursor-not-allowed aria-disabled:opacity-disabled aria-disabled:active:scale-100 md:order-none md:gap-2 md:px-4 md:text-[15px]"
     >
       <Undo2 className={ACTION_ICON_CLASS} aria-hidden="true" />
@@ -1239,7 +1306,7 @@ export function VerifyScreen({
       <div className="flex flex-nowrap items-center gap-3 md:gap-4">
         <button
           type="button"
-          onClick={onExit}
+          onClick={goBack}
           aria-label="Back to this paper's questions"
           title="Back to this paper's questions"
           data-testid="back-to-questions"
@@ -1291,7 +1358,7 @@ export function VerifyScreen({
           <div className="hidden md:block md:flex-1" aria-hidden="true" />
         )}
         {/* On a phone there is no room up here: the full note sits above the buttons instead (the action bar). */}
-        <SaveStatusChip compact className="hidden md:flex" waiting={outboxState.entries.length} failing={outboxState.failing} onRetry={box.retryNow} />
+        <SaveStatusChip compact className="hidden md:flex" waiting={outboxState.entries.length} failing={outboxState.failing} authTrouble={outboxState.authTrouble} onRetry={box.retryNow} />
         {toolbar ? <div className="flex shrink-0 items-center">{toolbar}</div> : null}
       </div>
     </div>
@@ -1314,19 +1381,23 @@ export function VerifyScreen({
   const answerButtonClass = 'order-1 min-w-0 basis-[calc(50%-4px)] grow px-3 md:order-none md:basis-auto md:grow-0 md:px-5 md:py-2';
   const smallButtonClass = 'min-w-0 grow px-2 text-[14px] md:grow-0 md:basis-auto md:px-5 md:py-2 md:text-[15px]';
 
+  // The offline note and the "Not saved yet" chip, beside the buttons. Shown while an answer is being sent too (audit CK-06,
+  // 27 Nov 2026: on a phone the card went grey with no word at all while the connection was down).
+  const saveNotes = !online ? (
+    <div role="status" data-testid="offline-note" className="mb-2 rounded-[12px] bg-brand-subtle px-3 py-2 text-[14px] font-semibold text-foreground">
+      You are offline. Answers stay on this device and are sent when the connection is back.
+    </div>
+  ) : (
+    <SaveStatusChip className="mb-2 md:hidden" waiting={outboxState.entries.length} failing={outboxState.failing} authTrouble={outboxState.authTrouble} onRetry={box.retryNow} />
+  );
+
   const actionBar =
     question && !nextIsError
       ? actionBarShell(
           <>
             {/* A save that failed says so right here, beside the buttons, not
                 at the top of a long page. */}
-            {!online ? (
-              <div role="status" data-testid="offline-note" className="mb-2 rounded-[12px] bg-brand-subtle px-3 py-2 text-[14px] font-semibold text-foreground">
-                You are offline. Answers stay on this device and are sent when the connection is back.
-              </div>
-            ) : (
-              <SaveStatusChip className="mb-2 md:hidden" waiting={outboxState.entries.length} failing={outboxState.failing} onRetry={box.retryNow} />
-            )}
+            {saveNotes}
             {error ? (
               <div role="alert" data-testid="save-error" className="mb-2 rounded-[12px] bg-destructive/10 px-3 py-2 text-[14px] text-destructive">
                 {error}
@@ -1394,7 +1465,7 @@ export function VerifyScreen({
                     tourId="help"
                     tone="outline"
                     className={cn('order-4 md:order-none', smallButtonClass)}
-                    onClick={() => setHelpOpen(true)}
+                    onClick={() => guardEdit('help', () => setHelpOpen(true))}
                     disabled={submitting}
                     title="Ask the HOD (H)"
                   >
@@ -1405,7 +1476,7 @@ export function VerifyScreen({
                     tourId="skip"
                     tone="muted"
                     className={cn('order-5 md:order-none', smallButtonClass)}
-                    onClick={doSkip}
+                    onClick={() => guardEdit('skip', doSkip)}
                     disabled={submitting}
                     ariaLabel="Skip this question"
                     title="Skip this question (K)"
@@ -1426,6 +1497,8 @@ export function VerifyScreen({
   const incomingBar =
     showIncoming && !nextFailed
       ? actionBarShell(
+          <>
+          {saveNotes}
           <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
             {undoButton}
             <ActionButton tone="mint" className={answerButtonClass} onClick={() => undefined} disabled>
@@ -1444,7 +1517,8 @@ export function VerifyScreen({
               <SkipForward className={ACTION_ICON_CLASS} aria-hidden="true" />
               Skip
             </ActionButton>
-          </div>,
+          </div>
+          </>,
           'incoming-footer',
         )
       : null;
@@ -1701,8 +1775,11 @@ export function VerifyScreen({
         /** The question's own stored diagram, shown WITH the question's words (owner, 6 Nov 2026: "show the
          *  diagram with the question itself"; 26 Nov 2026: "alongside the question, not at the top"). It goes inside
          *  the part card: beside the words on a wide card, directly under them (before the options) on a phone. */
-        const hasDiagram = diagramShown.length > 0;
-        const diagramBlock = <QuestionDiagrams items={diagramShown} onEnlarge={(src, alt) => setLightbox({ src, alt })} />;
+        const diagramsFailed = diagramsQuery.isError && diagramShown.length === 0;
+        const hasDiagram = diagramShown.length > 0 || diagramsFailed;
+        const diagramBlock = (
+          <QuestionDiagrams items={diagramShown} failed={diagramsFailed} onEnlarge={(src, alt) => setLightbox({ src, alt })} />
+        );
 
         /** The card: absent only when there are no words and nothing to type over (the alert above says what to do). */
         const partCard =
@@ -1942,7 +2019,8 @@ export function VerifyScreen({
         const flipBody = (
           <PaperPageFlip
             paperId={question.paper_id}
-            loadPages={api.paperPages}
+            loadPages={loadPagesCached}
+            initialPages={qc.getQueryData<PaperPage[]>(pagesCacheKey(question.paper_id))}
             pictureUrl={api.pictureUrl}
             questionPage={flipStartPage(question.source)}
             {...(pageNotFound(question.source) ? { title: PAGE_NOT_FOUND_TITLE } : {})}
@@ -1976,7 +2054,8 @@ export function VerifyScreen({
         const paperBody = (
           <PaperPageFlip
             paperId={question.paper_id}
-            loadPages={api.paperPages}
+            loadPages={loadPagesCached}
+            initialPages={qc.getQueryData<PaperPage[]>(pagesCacheKey(question.paper_id))}
             pictureUrl={api.pictureUrl}
             questionPage={flipStartPage(question.source)}
             title="The whole paper"
@@ -2220,6 +2299,12 @@ export function VerifyScreen({
         </div>
       ) : null}
 
+      {question && reopenedId === question.id ? (
+        <div role="note" data-testid="reopened-note" className="shrink-0 rounded-[14px] bg-brand-subtle px-3 py-2 text-[14px] font-semibold text-foreground">
+          Question reopened. Change what is wrong, or press Looks right to save it again. If you go back without saving, it stays open for checking.
+        </div>
+      ) : null}
+
       {/* The tiles take everything between the top tile and the action bar. */}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-y-auto">
         {questionGate === 'loading' ? (
@@ -2291,6 +2376,19 @@ export function VerifyScreen({
                 }}
               >
                 Go through skipped ones now
+              </ActionButton>
+              {undoButton}
+            </div>
+          </div>
+        ) : !question && (paperRow?.held_back ?? 0) > 0 ? (
+          // Nothing can be served right now, but questions are only WAITING (the paper is on hold, or a picture is missing):
+          // that is not "Paper finished" (audit CK-01, 27 Nov 2026). They come back by themselves.
+          <div className="flex flex-col items-center gap-3 py-16 text-center" data-testid="paper-waiting">
+            <p className="text-balance text-xl font-bold text-foreground">Nothing to check here for now</p>
+            <p className="max-w-md text-pretty text-[14px] text-warm-secondary">{heldBackNote(paperRow?.held_back ?? 0)}</p>
+            <div className="flex flex-wrap justify-center gap-2.5">
+              <ActionButton tone="mint" onClick={onList ?? onExit}>
+                Back to my papers
               </ActionButton>
               {undoButton}
             </div>
@@ -2394,8 +2492,32 @@ export function VerifyScreen({
         </Modal>
       ) : null}
 
+      {guard ? (
+        <Modal onClose={() => setGuard(null)} labelledBy="checker-guard-title">
+          <h2 id="checker-guard-title" className="mb-2 text-[16px] font-bold text-foreground">
+            {guard.title}
+          </h2>
+          <p className="mb-3 text-[14px] text-warm-secondary">{guard.body}</p>
+          <div className="flex flex-wrap gap-2" data-testid="guard-confirm">
+            <ActionButton tone="mint" onClick={() => setGuard(null)}>
+              {guard.stay}
+            </ActionButton>
+            <ActionButton
+              tone="muted"
+              onClick={() => {
+                const go = guard.run;
+                setGuard(null);
+                go();
+              }}
+            >
+              {guard.leave}
+            </ActionButton>
+          </div>
+        </Modal>
+      ) : null}
+
       {helpOpen && question ? (
-        <Modal onClose={() => setHelpOpen(false)} labelledBy="checker-help-title">
+        <Modal onClose={closeHelp} labelledBy="checker-help-title">
           <h2 id="checker-help-title" className="mb-2 text-[16px] font-bold text-foreground">
             What should the HOD look at?
           </h2>
@@ -2423,17 +2545,24 @@ export function VerifyScreen({
             autoFocus={!coarsePointer()}
             value={helpReason}
             onChange={(e) => setHelpReason(e.target.value)}
+            // The server refuses a longer reason for good (audit CK-14, 27 Nov 2026), so the box stops at the limit.
+            maxLength={HELP_REASON_MAX}
             placeholder="Or say it in your own words"
             rows={3}
             aria-label="What can't you fix"
             className="w-full rounded-xl bg-muted p-3 text-[16px] outline-none focus-visible:ring-2 focus-visible:ring-focus"
           />
+          {helpReason.length >= HELP_REASON_MAX - 50 ? (
+            <p className="mt-1 text-right text-[12px] tabular-nums text-warm-meta" data-testid="help-reason-count">
+              {helpReason.length} of {HELP_REASON_MAX} letters
+            </p>
+          ) : null}
           {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2">
             <ActionButton tone="brand" onClick={() => doAskForHelp(helpReason)} disabled={submitting}>
               {submitting ? 'Sending...' : 'Send to the HOD'}
             </ActionButton>
-            <ActionButton tone="muted" onClick={() => setHelpOpen(false)} disabled={submitting}>
+            <ActionButton tone="muted" onClick={closeHelp} disabled={submitting}>
               Cancel
             </ActionButton>
           </div>

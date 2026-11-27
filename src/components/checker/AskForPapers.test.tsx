@@ -54,6 +54,8 @@ describe('AskForPapersView', () => {
     const at = checker.indexOf('<AskForPapers ');
     expect(at).toBeGreaterThan(-1);
     expect(checker.slice(Math.max(0, at - 700), at)).toContain('data-testid="no-papers"');
-    expect(checker.match(/<AskForPapers /g)?.length).toBe(1);
+    // Two places: the empty list, and the list whose papers are all finished or waiting on the HOD (audit CK-04, 27 Nov 2026).
+    expect(checker.match(/<AskForPapers /g)?.length).toBe(2);
+    expect(checker.slice(checker.lastIndexOf('<AskForPapers ') - 400, checker.lastIndexOf('<AskForPapers '))).toContain('data-testid="nothing-left"');
   });
 });

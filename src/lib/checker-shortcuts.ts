@@ -24,6 +24,11 @@ export const CHECKER_SHORTCUTS: CheckerShortcutDef[] = [
   { action: 'skip', keys: 'K', key: 'k' },
 ];
 
+/** Focus is inside an open popover or dialog (Radix gives both role="dialog"). */
+export function inOverlay(el: EventTarget | null): boolean {
+  return typeof HTMLElement !== 'undefined' && el instanceof HTMLElement && el.closest('[role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper]') !== null;
+}
+
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
   const tag = el.tagName;
@@ -77,6 +82,9 @@ export function matchCheckerShortcut(key: string, ctx: boolean | ShortcutContext
  *  cannot pass a run of questions nobody read. */
 export function matchCheckerKeyboardEvent(e: KeyboardEvent): CheckerAction | null {
   if (e.repeat) return null;
+  // Focus inside an open popover or dialog (the Keyboard shortcuts box, the Menu): its keys are its own, and Enter or P
+  // there must never answer the question behind it (audit CK-21, 27 Nov 2026).
+  if (inOverlay(e.target)) return null;
   return matchCheckerShortcut(e.key, {
     isTyping: isTypingTarget(e.target),
     hasModifier: e.ctrlKey || e.metaKey || e.altKey,

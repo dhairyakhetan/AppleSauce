@@ -310,7 +310,7 @@ export function LiveTab({ api, scope }: { api: HodApi; scope: string }) {
             type="search"
             value={filter.q}
             onChange={(ev) => set({ q: ev.target.value })}
-            placeholder="School, exam or year"
+            placeholder="Title, school, exam, year or board"
             className={select}
           />
         </label>

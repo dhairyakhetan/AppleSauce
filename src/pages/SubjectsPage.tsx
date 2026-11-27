@@ -15,15 +15,15 @@ import { useEffect } from 'react';
 import { EyesPanel } from '@/components/home/EyesPanel';
 import { useSentenceBuilder } from '@/hooks/useSentenceBuilder';
 import { useChromeConfig } from '@/components/layout/AppShell';
+import { countTeachersBySubject, subjectsWithTeachers } from '@/lib/subject-counts';
 
 /* Subjects index — the real destination for TopBar's "Subjects" link.
  *
  * Reuses the same subject-tile query shape as Index.tsx's "02 Subjects"
  * section (SubjectCard, same fields), just without that section's 10-subject
  * `desiredSubjects` allowlist — this page is the full list, the home section
- * is a curated preview of it. Counts come from `teachers_list.subject_id`,
- * a direct FK, rather than the home page's text-token matching, since a
- * dedicated index page can afford the exact join.
+ * is a curated preview of it. Counts use the same subject-text matching as the
+ * home page (lib/subject-counts.ts); the single `subject_id` undercounted.
  */
 
 interface Subject {
@@ -54,17 +54,17 @@ export default function SubjectsPage() {
     queryFn: async () => {
       const [subjectsRes, teachersRes] = await Promise.all([
         supabase.from('subjects').select('id, name, slug').order('name'),
-        supabase.from('teachers_list').select('subject_id'),
+        supabase.from('teachers_list').select('subject_id, subjects').limit(1000),
       ]);
 
       if (subjectsRes.error) throw subjectsRes.error;
       if (teachersRes.error) throw teachersRes.error;
 
-      const counts = new Map<string, number>();
-      (teachersRes.data || []).forEach((t) => {
-        if (!t.subject_id) return;
-        counts.set(t.subject_id, (counts.get(t.subject_id) || 0) + 1);
-      });
+      // Counted the way the home page counts: every subject in a teacher's list, plus their main one.
+      const counts = countTeachersBySubject(
+        (teachersRes.data || []) as { subject_id: string | null; subjects: string | null }[],
+        subjectsRes.data || [],
+      );
 
       const subjects: Subject[] = (subjectsRes.data || []).map((s) => ({
         id: s.id,
@@ -77,7 +77,8 @@ export default function SubjectsPage() {
     },
   });
 
-  const subjects = query.data ?? [];
+  // A subject nobody teaches would be a link to an empty list, so it is not offered.
+  const subjects = subjectsWithTeachers(query.data ?? []);
 
   useEffect(() => {
     if (query.isLoading) return;

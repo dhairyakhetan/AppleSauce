@@ -319,6 +319,8 @@ export default function TeacherDashboard() {
       return;
     }
     if (!loading && authProfileQuery.data && authProfileQuery.data.role !== 'teacher') {
+      // Say why the page changed, instead of dropping the person on the home page with no word.
+      toast('That page is for teachers.');
       navigate('/');
     }
   }, [user, loading, authProfileQuery.data, navigate]);

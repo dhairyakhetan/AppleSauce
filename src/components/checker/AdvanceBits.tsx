@@ -63,12 +63,15 @@ export function PaperStrip({ info, compact = true }: { info: PaperStripInfo; com
 export function SaveStatusChip({
   waiting,
   failing,
+  authTrouble = false,
   onRetry,
   compact = false,
   className,
 }: {
   waiting: number;
   failing: boolean;
+  /** The answers keep being refused as "Not authorized": say so, and offer a way to sign in again. */
+  authTrouble?: boolean;
   onRetry: () => void;
   compact?: boolean;
   className?: string;
@@ -89,6 +92,14 @@ export function SaveStatusChip({
         {waiting > 1 ? ` (${waiting} answers)` : ''}
       </span>
       <span className={cn('text-[13px] font-normal text-warm-secondary', compact && 'hidden xl:inline')}>Kept on this device, nothing is lost.</span>
+      {authTrouble ? (
+        <span className="basis-full text-[13px] font-normal text-foreground" data-testid="outbox-auth">
+          Your account cannot check papers right now. Sign in again, or ask an admin.{' '}
+          <a href="/auth?redirect=%2Fchecker" className="font-semibold underline underline-offset-2">
+            Sign in again
+          </a>
+        </span>
+      ) : null}
       <button
         type="button"
         onClick={onRetry}

@@ -19,11 +19,17 @@ import { normaliseAssignment, type MyAssignment } from '@/lib/checker-progress';
 import {
   normaliseMyPapers,
   normalisePaperQuestions,
+  normaliseGivenBy,
+  normalisePapersExtra,
+  withGivenBy,
   normaliseProfile,
+  withPapersExtra,
   type MyPaper,
   type PaperQuestion,
+  type ReturnedPaper,
   type VerifierProfile,
 } from '@/lib/verifier-papers';
+import { isNotSwitchedOn } from '@/lib/paper-asks';
 import { normalisePaperPages, type PaperPage } from '@/lib/paper-pages';
 
 /**
@@ -130,7 +136,8 @@ function timedRpc(fn: string, params?: object) {
 }
 
 export async function isPaperChecker(): Promise<boolean> {
-  const { data, error } = await supabase.rpc('is_paper_checker' as never);
+  // Timed (audit CK-20): a hung answer fails like a lost connection, so the page offers Try again instead of a skeleton for ever.
+  const { data, error } = await timedRpc('is_paper_checker');
   // A failed call is "could not check", never "not a verifier": throw so the
   // page can offer a retry instead of locking a real verifier out.
   if (error) throw error;
@@ -369,9 +376,75 @@ export async function checkerPictureUrls(paths: string[]): Promise<Map<string, s
  *  papers first when the verifier has none, so an empty list means nothing is
  *  available for them yet. */
 export async function verifierMyPapers(): Promise<MyPaper[]> {
-  const { data, error } = await supabase.rpc('verifier_my_papers' as never);
+  // Timed (audit CK-20), and read together with the extras (questions waiting, days before a paper goes back).
+  const [{ data, error }, extra, givenBy] = await Promise.all([timedRpc('verifier_my_papers'), loadPapersExtra(), loadGivenBy()]);
   if (error) throw error;
-  return normaliseMyPapers(data);
+  return withGivenBy(withPapersExtra(normaliseMyPapers(data), extra.held), givenBy);
+}
+
+// verifier_my_papers_given_by (20261127140000) may not be applied yet: once the server says so, it is not asked again.
+let givenByMissing = false;
+
+/** For tests: forget that the given-by function was missing. */
+export function resetGivenBy(): void {
+  givenByMissing = false;
+}
+
+/** Who handed out each paper (first name). A hint only: it never fails the list, and is empty until the database file is applied. */
+async function loadGivenBy(): Promise<Map<number, string | null>> {
+  if (givenByMissing) return new Map();
+  try {
+    const { data, error } = await timedRpc('verifier_my_papers_given_by');
+    if (error) {
+      if (isNotSwitchedOn(error)) givenByMissing = true;
+      return new Map();
+    }
+    return normaliseGivenBy(data);
+  } catch {
+    return new Map();
+  }
+}
+
+type PapersExtra = ReturnType<typeof normalisePapersExtra>;
+const NO_EXTRA: PapersExtra = { held: new Map(), returned: [] };
+// verifier_my_papers_extra (20261127100000) may not be applied yet: once the server says so, it is not asked again.
+let extraMissing = false;
+let extraInflight: { at: number; p: Promise<PapersExtra> } | null = null;
+
+/** For tests: forget that the extras function was missing, and any answer kept for a moment. */
+export function resetPapersExtra(): void {
+  extraMissing = false;
+  extraInflight = null;
+}
+
+async function fetchPapersExtra(): Promise<PapersExtra> {
+  if (extraMissing) return NO_EXTRA;
+  try {
+    const { data, error } = await timedRpc('verifier_my_papers_extra');
+    if (error) {
+      if (isNotSwitchedOn(error)) extraMissing = true;
+      return NO_EXTRA;
+    }
+    return normalisePapersExtra(data);
+  } catch {
+    // A hint only: the list never waits on it or fails because of it.
+    return NO_EXTRA;
+  }
+}
+
+/** One read shared by the list and the "went back" note when they load together. */
+function loadPapersExtra(): Promise<PapersExtra> {
+  const now = Date.now();
+  if (extraInflight && now - extraInflight.at < 5000) return extraInflight.p;
+  const p = fetchPapersExtra();
+  extraInflight = { at: now, p };
+  return p;
+}
+
+/** Papers the 7-day rule took back from the caller in the last 3 days (verifier_my_papers_extra). Never throws: empty
+ *  until the database file is applied. */
+export async function verifierRecentlyReturned(): Promise<ReturnedPaper[]> {
+  return (await loadPapersExtra()).returned;
 }
 
 /** Every question of one paper the caller holds, with a state each (verifier_paper_questions). */
@@ -535,7 +608,7 @@ export async function verifierUndoLast(paperId: string): Promise<UndoResult> {
 
 /** The verifier's own details, read only (verifier_my_profile). */
 export async function verifierMyProfile(): Promise<VerifierProfile | null> {
-  const { data, error } = await supabase.rpc('verifier_my_profile' as never);
+  const { data, error } = await timedRpc('verifier_my_profile');
   if (error) throw error;
   return normaliseProfile(data);
 }
@@ -594,17 +667,22 @@ export interface QuestionDiagram {
 
 /**
  * The stored diagrams of a question and of the stem above it, stem first
- * (verifier_question_diagrams, 20261106200000). Never throws: until that function is
- * applied, or when the read fails, the answer is an empty list and the screen shows
- * nothing extra (owner, 6 Nov 2026: "when it has an accompanying diagram, it should
- * also show to the checker").
+ * (verifier_question_diagrams, 20261106200000). Until that function is applied the answer is an
+ * empty list and the screen shows nothing extra (owner, 6 Nov 2026: "when it has an accompanying
+ * diagram, it should also show to the checker"). Any other failure throws (audit CK-19, 27 Nov
+ * 2026), so the screen tries again and says the diagram did not load, instead of showing nothing.
  */
 export async function verifierQuestionDiagrams(questionId: string): Promise<QuestionDiagram[]> {
   if (!questionId) return [];
   try {
     const { data, error } = await supabase.rpc('verifier_question_diagrams' as never, { p_question_id: questionId } as never);
     const rows: unknown = data;
-    if (error || !Array.isArray(rows)) return [];
+    // The function not being applied yet is "no diagrams"; any other failure throws, so the screen can try again and say so (audit CK-19).
+    if (error) {
+      if (isNotSwitchedOn(error)) return [];
+      throw error;
+    }
+    if (!Array.isArray(rows)) return [];
     const out: QuestionDiagram[] = [];
     for (const r of rows as Array<Record<string, unknown>>) {
       const path = typeof r.storage_path === 'string' ? r.storage_path.trim() : '';
@@ -624,8 +702,9 @@ export async function verifierQuestionDiagrams(questionId: string): Promise<Ques
       });
     }
     return out;
-  } catch {
-    return [];
+  } catch (err) {
+    if (isNotSwitchedOn(err)) return [];
+    throw err;
   }
 }
 
@@ -677,6 +756,8 @@ export interface CheckerApi {
   queueFacets: typeof checkerQueueFacets;
   pictureUrl: typeof checkerPictureUrl;
   myPapers: typeof verifierMyPapers;
+  /** Papers the 7-day rule took back recently. Optional: the fake and older callers leave it out. */
+  recentlyReturned?: typeof verifierRecentlyReturned;
   paperQuestions: typeof verifierPaperQuestions;
   nextInPaper: typeof verifierNextInPaper;
   verdictAndNext: typeof verdictAndNext;
@@ -713,6 +794,7 @@ export const realCheckerApi: CheckerApi = {
   queueFacets: checkerQueueFacets,
   pictureUrl: checkerPictureUrl,
   myPapers: verifierMyPapers,
+  recentlyReturned: verifierRecentlyReturned,
   paperQuestions: verifierPaperQuestions,
   nextInPaper: verifierNextInPaper,
   verdictAndNext,

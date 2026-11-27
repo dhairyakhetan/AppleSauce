@@ -27,6 +27,23 @@ export function Tile({ label, value, hint }: { label: string; value: ReactNode; 
   );
 }
 
+/** The small search box above a long list of papers. */
+export function ListSearch({ value, onChange, label = 'Search papers' }: { value: string; onChange: (v: string) => void; label?: string }) {
+  return (
+    <label className="mb-3 flex max-w-md flex-col gap-0.5 text-[12px] font-semibold text-warm-secondary">
+      {label}
+      <input
+        type="search"
+        value={value}
+        onChange={(ev) => onChange(ev.target.value)}
+        placeholder="Title, school, class or subject"
+        className="min-h-11 rounded-xl bg-muted px-3 text-[16px] font-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus sm:text-[14px] md:min-h-10"
+        data-testid="list-search"
+      />
+    </label>
+  );
+}
+
 export function EmptyNote({ children }: { children: ReactNode }) {
   return <p className="rounded-2xl bg-muted px-4 py-8 text-center text-[14px] text-warm-secondary">{children}</p>;
 }

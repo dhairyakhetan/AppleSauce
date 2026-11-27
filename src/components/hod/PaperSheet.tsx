@@ -261,12 +261,19 @@ function SheetQuestion({
       below={
         <div className="font-sans">
           {q.state === 'open' ? (
-            <p className="mt-2 text-[13px] text-foreground">
-              This one still needs a decision.{' '}
-              <Link to={deskLink('needs-you', paperId)} className="font-bold text-brand-blue underline underline-offset-2">
-                Settle it in Needs you
-              </Link>
-            </p>
+            q.review_bucket === 'escalated' || q.review_bucket === 'admin' ? (
+              <p className="mt-2 text-[13px] text-foreground">
+                This one still needs a decision.{' '}
+                <Link to={deskLink('needs-you', paperId)} className="font-bold text-brand-blue underline underline-offset-2">
+                  Settle it in Needs you
+                </Link>
+              </p>
+            ) : (
+              // Needs you lists only what came to the HOD, so a link there would lead to a list without this question.
+              <p className="mt-2 text-[13px] text-foreground" data-testid="open-with-students">
+                This one still needs a decision, and it is with the student checkers, so it cannot be settled here yet.
+              </p>
+            )
           ) : null}
           {editable ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -556,7 +563,9 @@ function SheetLine({
   async function remove() {
     const old = q.body;
     const version = await api.editQuestion(q.id, q.version, { body: '' }, '');
-    toast.success('Line removed from the preview.', {
+    toast.success('Line removed from the paper.', {
+      // Longer than usual: this saves an empty line, so the toast is the quick way back.
+      duration: 15_000,
       action: {
         label: 'Undo',
         onClick: () => {
@@ -645,7 +654,7 @@ function SheetLine({
         {rowKindWords(q.kind)} the computer read. Not shown on the live site.
       </p>
       {empty ? (
-        <p className="mt-1 text-[13px] italic text-warm-secondary">An empty line (taken out of the preview).</p>
+        <p className="mt-1 text-[13px] italic text-warm-secondary">An empty line (removed from the paper). Press Edit to type words back in.</p>
       ) : (
         <MathText text={q.body} className={cn('mt-1 text-[14px] leading-[1.55] text-warm-secondary', isHeading ? 'font-bold uppercase' : 'italic')} />
       )}

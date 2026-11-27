@@ -521,7 +521,9 @@ export default function TeacherProfile() {
   const areaForTitle = (value: string) => parts(value)[0] || 'Kolkata';
   const pageTitle = teacher
     ? `${teacher.name} - ${subjectsForTitle(metaSubjects)} tuition in ${areaForTitle(metaArea)} | Shikshaq`
-    : 'Shikshaq - by AquaTerra';
+    : profileQuery.isSuccess
+      ? 'Teacher not found | Shikshaq'
+      : 'Shikshaq - by AquaTerra';
 
   let pageDescription = teacher
     ? `${metaSubjects} tuition classes for ${metaClasses} in ${metaArea} via ${metaMode}`

@@ -20,7 +20,7 @@ export default function TeacherTermsAgreement() {
     'Review and accept the terms that let your profile go live on Shikshaq.',
   );
 
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -242,6 +242,16 @@ export default function TeacherTermsAgreement() {
                 {loading ? 'Verifying...' : 'Verify consent & continue'}
               </Button>
               {!termsAgreed ? <p className="mt-2 text-center text-[13px] text-warm-secondary">Tick the box above to continue.</p> : null}
+              {/* A way out. Teachers cannot skip this page (the site sends an unagreed teacher back here), so the honest
+                  exit is to sign out, e.g. for someone who signed in by mistake (site-wide audit A8). */}
+              <button
+                type="button"
+                onClick={() => void signOut().then(() => navigate('/', { replace: true }))}
+                className="mx-auto mt-3 block min-h-11 px-2 text-center text-sm font-semibold text-warm-meta underline underline-offset-2"
+                data-testid="terms-sign-out"
+              >
+                Not now? Sign out
+              </button>
             </form>
           </BentoPanel>
         </BentoStack>

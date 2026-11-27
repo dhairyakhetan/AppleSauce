@@ -208,14 +208,26 @@ function ListEnd({
   count,
   onWiden,
   className,
+  what,
 }: {
   count: number;
   onWiden?: () => void;
   className?: string;
+  /* What the list holds ("saved teachers", "papers"). Without it the sentence talks about "this search" and an area,
+     which means nothing on a list that has neither (site-wide audit B4). With it, the area is mentioned only when
+     there is a widen action. */
+  what?: string;
 }) {
+  if (what && !onWiden) {
+    return (
+      <p className={cn("py-6 text-center text-meta text-warm-meta", className)}>
+        That is all {count} {what}.
+      </p>
+    );
+  }
   return (
     <p className={cn("py-6 text-center text-meta text-warm-meta", className)}>
-      That is all {count} for this search.{" "}
+      That is all {count} {what ?? "for this search"}.{" "}
       {onWiden ? (
         <button
           type="button"

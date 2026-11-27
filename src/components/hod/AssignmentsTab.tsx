@@ -46,11 +46,12 @@ import {
 } from '@/lib/hod-bulk-assign';
 import { cn } from '@/lib/utils';
 import { formatGrade, loadGate } from '@/lib/verifier-papers';
-import { reasonWords } from '@/lib/checker-timeout';
+import { errorWords } from '@/lib/hod-publish';
 import {
   classGrade,
   groupByVerifier,
   heldBackWhy,
+  heldOtherWhy,
   memberName,
   pickBlock,
   type HodApi,
@@ -87,6 +88,7 @@ import {
 export const ASSIGNMENTS_KEY = (scope: string) => ['hod', scope, 'assignments'] as const;
 export const UNASSIGNED_KEY = (scope: string) => ['hod', scope, 'unassigned'] as const;
 export const HELD_BACK_KEY = (scope: string) => ['hod', scope, 'held-back'] as const;
+export const HELD_OTHER_KEY = (scope: string) => ['hod', scope, 'held-back', 'other'] as const;
 
 /** A person picker and its button: "Move to another verifier", "Assign to". */
 function PickVerifier({
@@ -488,6 +490,8 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
   const unassignedQ = useQuery({ queryKey: UNASSIGNED_KEY(scope), queryFn: () => api.unassignedPapers(UNASSIGNED_SHOWN + 1), staleTime: 10_000, refetchOnMount: true });
   // Papers missing pictures or printed pages: listed on their own, never offered for assigning.
   const heldQ = useQuery({ queryKey: HELD_BACK_KEY(scope), queryFn: () => api.heldBackPapers(UNASSIGNED_SHOWN), staleTime: 10_000, refetchOnMount: true });
+  // Papers held for some other reason (wrong PDF, reference pages, unusable text...). null from an old server: show nothing.
+  const heldOtherQ = useQuery({ queryKey: HELD_OTHER_KEY(scope), queryFn: () => api.heldOtherPapers(UNASSIGNED_SHOWN), staleTime: 10_000, refetchOnMount: true, retry: false });
   const teamQ = useQuery({ queryKey: TEAM_KEY(scope), queryFn: () => api.team(), staleTime: 15_000, refetchOnMount: true });
   const profilesQ = useQuery({ queryKey: PROFILES_KEY(scope), queryFn: () => api.profiles(), staleTime: 15_000, refetchOnMount: true });
   // When each holder last did anything on a paper, to tell a stuck paper from a slow one. Optional: if the server
@@ -550,7 +554,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       refresh(fresh);
       return true;
     } catch (err) {
-      const reason = reasonWords(err, 'That did not work. Try again.');
+      const reason = errorWords(err, 'That did not work. Try again.');
       setRefusal(reason);
       // The banner sits at the top of the tab, which may be scrolled out of view
       // from a row far down the list, so say it where the HOD is looking as well.
@@ -574,7 +578,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
     // The button is off while the list loads or is empty (autoAssignOffReason); this is the same rule, in case of a stray press.
     if (waiting === 0) return;
     const ok = await confirm({
-      title: `Hand out ${waiting > UNASSIGNED_SHOWN ? `${UNASSIGNED_SHOWN}+` : waiting} free ${waiting === 1 ? 'paper' : 'papers'} now?`,
+      title: `Hand out up to ${waiting > UNASSIGNED_SHOWN ? `${UNASSIGNED_SHOWN}+` : waiting} free ${waiting === 1 ? 'paper' : 'papers'} now?`,
       description:
         'Each paper goes to one checker, never above their grade, and nobody gets more than 10. You will see how many went to whom, how many are left and why. To take a paper back later, open it under Who has what and press Unassign.',
       confirmLabel: 'Auto assign all',
@@ -623,7 +627,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
       refresh(perPerson ? ['assignments', 'unassigned'] : []);
     } catch (err) {
       // Said right under the button that was pressed, and as a pop-up, not only in a banner.
-      const reason = reasonWords(err, 'That did not work. Try again.');
+      const reason = errorWords(err, 'That did not work. Try again.');
       setAutoFailure(reason);
       toast.error(reason, { duration: 10_000 });
       refresh();
@@ -904,7 +908,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
         ) : unassignedQ.isError ? (
           <LoadError what="The list of free papers" onRetry={() => void unassignedQ.refetch()} />
         ) : free.length === 0 ? (
-          <EmptyNote>Every paper with questions waiting has a checker.</EmptyNote>
+          <EmptyNote>Every paper that can be given out has a checker.</EmptyNote>
         ) : (
           <>
           <FreeFilters filter={freeFilter} onFilter={setFreeFilter} choices={freeChoices} shown={shownFree.length} total={free.length} />
@@ -1019,7 +1023,7 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
         ) : loadGate(heldQ) === 'loading' ? (
           <ListSkeleton label="Loading papers that are not ready" />
         ) : (heldQ.data ?? []).length === 0 ? (
-          <EmptyNote>Every paper with questions waiting has all its pictures and pages.</EmptyNote>
+          <EmptyNote>No paper is held back for missing pictures or pages.</EmptyNote>
         ) : (
           <ul className="space-y-2">
             {(heldQ.data ?? []).map((p) => (
@@ -1048,6 +1052,36 @@ export function AssignmentsTab({ api, scope, asksApi = realPaperAsksApi }: { api
             This list stops at the first {UNASSIGNED_SHOWN}. There may be more papers that are not ready; they show here as others move up.
           </p>
         ) : null}
+      </section>
+      <section aria-labelledby="papers-held-other" data-testid="held-other-section" className="mt-6" hidden={!showSection('not_ready')}>
+        <h2 id="papers-held-other" className="mb-1 text-[16px] font-bold text-foreground">
+          Held for another reason
+        </h2>
+        <p className="mb-2 text-[13px] text-warm-secondary">
+          These papers have questions waiting, are not missing pictures, and still cannot be given to a checker. Each one says why.
+        </p>
+        {heldOtherQ.isError ? (
+          <LoadError what="The list of papers held for another reason" onRetry={() => void heldOtherQ.refetch()} />
+        ) : loadGate(heldOtherQ) === 'loading' ? (
+          <ListSkeleton label="Loading papers held for another reason" />
+        ) : (heldOtherQ.data ?? []).length === 0 ? (
+          <EmptyNote>{heldOtherQ.data === null ? 'This list is not switched on yet. Tell the owner.' : 'No paper is held for another reason.'}</EmptyNote>
+        ) : (
+          <ul className="space-y-2">
+            {(heldOtherQ.data ?? []).map((p) => (
+              <li key={p.paper_id} className="rounded-2xl bg-muted shadow-card p-3" data-testid="held-other-paper">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="block text-[14px] font-semibold text-foreground">{paperLabel(p)}</span>
+                  <PaperStatusPill stage={stageOfHeldBack()} />
+                </span>
+                <span className="block text-[12px] text-warm-meta">
+                  {p.open_count} {p.open_count === 1 ? 'question' : 'questions'} waiting
+                </span>
+                <span className="mt-0.5 block text-[13px] text-foreground">{heldOtherWhy(p.reason)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       {confirmDialog}
     </div>

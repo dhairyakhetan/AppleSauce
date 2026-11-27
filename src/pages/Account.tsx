@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { classLabel } from '@/lib/class-label';
+import { diffSubjects } from '@/lib/subject-diff';
+import { ProfileLoadFailed } from '@/components/ProfileLoadFailed';
+import { GuardianProfileSheet } from '@/components/account/GuardianProfileSheet';
+import { GRADE_OPTIONS } from '@/lib/guardian-profile';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Settings, LogOut, ShieldCheck, X, Heart, UserRound, ChevronRight, Loader2 } from 'lucide-react';
@@ -39,11 +44,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'papers', label: 'Papers' },
 ];
 
-// Same lists StudentDashboard.tsx used for these two fields.
-const GRADE_OPTIONS = [
-  '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12',
-  'UG, First Year', 'UG, Second Year', 'UG, Third Year', 'UG, Fourth Year', 'Other',
-];
+// Same lists StudentDashboard.tsx used for these two fields (the class list now lives in lib/guardian-profile.ts, shared with the guardian's sheet).
 const SCHOOL_BOARDS = ['ICSE', 'CBSE', 'IGCSE', 'IB', 'State'];
 
 interface RowTeacher {
@@ -160,7 +161,7 @@ export default function Account() {
   const { likedTeacherIds, likedCount, loading: likesLoading, toggleLike } = useLikes();
   const queryClient = useQueryClient();
 
-  useRequireRole();
+  const { profileFailed, retryProfile } = useRequireRole();
 
   // Handoff AC-007: this route renders its own eyes panel, replacing
   // AppShell's default pre-footer.
@@ -313,7 +314,7 @@ export default function Account() {
   const roleLabel = profile?.role === 'guardian' ? 'Guardian' : profile?.role === 'teacher' ? 'Teacher' : 'Student';
   const subLineParts = useMemo(() => {
     const grade = profile?.role === 'guardian' ? profile?.student_grade : profile?.grade;
-    return [roleLabel, grade ? `Class ${grade}` : null].filter(Boolean);
+    return [roleLabel, classLabel(grade)].filter(Boolean);
   }, [profile, roleLabel]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -343,7 +344,7 @@ export default function Account() {
       if (error) throw error;
       return data;
     },
-    enabled: profileSheetOpen && !!user,
+    enabled: profileSheetOpen && !!user && profile?.role !== 'guardian',
   });
   // Shares a cache key with StudentDashboard.tsx's identical global lookup.
   const editSubjectsQuery = useQuery({
@@ -353,7 +354,7 @@ export default function Account() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: profileSheetOpen,
+    enabled: profileSheetOpen && profile?.role !== 'guardian',
   });
   const editStudentSubjectIdsQuery = useQuery({
     queryKey: ['studentSubjectIds', user?.id],
@@ -365,9 +366,9 @@ export default function Account() {
       if (error) throw error;
       return (data ?? []).map((s) => s.subject_id);
     },
-    enabled: profileSheetOpen && !!user,
+    enabled: profileSheetOpen && !!user && profile?.role !== 'guardian',
   });
-  const profileLoading = profileSheetOpen
+  const profileLoading = profileSheetOpen && profile?.role !== 'guardian'
     && (editFormQuery.isPending || editSubjectsQuery.isPending || editStudentSubjectIdsQuery.isPending);
   useEffect(() => {
     if (editFormQuery.isError || editSubjectsQuery.isError || editStudentSubjectIdsQuery.isError) {
@@ -440,15 +441,20 @@ export default function Account() {
         .eq('id', user.id);
       if (profileError) throw profileError;
 
-      // Same delete-then-insert as StudentDashboard: stop on a failed delete
-      // rather than inserting on top of whatever rows are already there.
-      const { error: deleteError } = await supabase.from('student_subjects').delete().eq('student_id', user.id);
-      if (deleteError) throw deleteError;
-      if (selectedSubjectIds.length > 0) {
+      // Add what is new FIRST, then remove only what was taken off. The old delete-everything-then-insert left the
+      // student with no subjects at all when the connection dropped between the two calls (site-wide audit B6).
+      const { data: existing, error: readError } = await supabase.from('student_subjects').select('subject_id').eq('student_id', user.id);
+      if (readError) throw readError;
+      const { toAdd, toRemove } = diffSubjects((existing ?? []).map((r) => r.subject_id as string), selectedSubjectIds);
+      if (toAdd.length > 0) {
         const { error: insertError } = await supabase
           .from('student_subjects')
-          .insert(selectedSubjectIds.map((subject_id) => ({ student_id: user.id, subject_id })));
+          .insert(toAdd.map((subject_id) => ({ student_id: user.id, subject_id })));
         if (insertError) throw insertError;
+      }
+      if (toRemove.length > 0) {
+        const { error: deleteError } = await supabase.from('student_subjects').delete().eq('student_id', user.id).in('subject_id', toRemove);
+        if (deleteError) throw deleteError;
       }
     },
     onSuccess: () => {
@@ -502,6 +508,8 @@ export default function Account() {
   };
 
   if (!user) return null;
+  // The account could not be read: say so with a retry, never the role chooser (site-wide audit B1).
+  if (profileFailed) return <ProfileLoadFailed onRetry={retryProfile} />;
 
   const counts: Record<TabKey, number> = {
     saved: likedCount,
@@ -615,7 +623,7 @@ export default function Account() {
                     </li>
                   ))}
                 </ul>
-                <ListEnd count={savedTeachers.length} />
+                <ListEnd count={savedTeachers.length} what="saved teachers" />
               </>
             ) : (
               /* Handoff AC-005: empty states are their own tinted panel —
@@ -727,7 +735,7 @@ export default function Account() {
       </BentoStack>
       </main>
 
-      {/* Settings sheet — sign-out, account links, and (students only) the
+      {/* Settings sheet — sign-out, account links, and (students and guardians) the
           profile-editing entry point below. */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent side="bottom" aria-describedby={undefined} className="rounded-t-[28px] border-0 pb-8 pt-6">
@@ -737,7 +745,7 @@ export default function Account() {
             </SheetTitle>
           </SheetHeader>
           <div className="mt-4 flex flex-col gap-1">
-            {profile?.role === 'student' && (
+            {(profile?.role === 'student' || profile?.role === 'guardian') && (
               <button
                 type="button"
                 onClick={() => {
@@ -770,12 +778,16 @@ export default function Account() {
         </SheetContent>
       </Sheet>
 
-      {/* Edit-profile sheet (students only) — phone/DOB/school/grade/board/
+      {/* Edit-profile sheet (students) — phone/DOB/school/grade/board/
           guardian email/address/subjects, the fields StudentDashboard.tsx
           (unrouted since /dashboard/student -> /account) used to own with
           no live replacement. Ported onto Field/Chip instead of that page's
           shadcn defaults. */}
-      <Sheet open={profileSheetOpen} onOpenChange={setProfileSheetOpen}>
+      {/* A guardian has their own sheet: their class is student_grade and their subjects are guardian_student_subjects (audit B7). */}
+      {profile?.role === 'guardian' ? (
+        <GuardianProfileSheet userId={user.id} open={profileSheetOpen} onOpenChange={setProfileSheetOpen} />
+      ) : null}
+      <Sheet open={profileSheetOpen && profile?.role !== 'guardian'} onOpenChange={setProfileSheetOpen}>
         <SheetContent side="bottom" className="flex max-h-[85vh] flex-col rounded-t-[28px] border-0 pb-6 pt-6">
           <SheetHeader className="items-start text-left">
             <SheetTitle className="font-display text-xl font-bold tracking-tight text-foreground">

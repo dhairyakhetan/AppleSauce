@@ -115,7 +115,7 @@ describe('B1: the number on the Assignments tab', () => {
     const src = read('src/pages/Hod.tsx');
     expect(src).toContain('queryKey: UNASSIGNED_KEY(scope)');
     expect(src).toContain("const badge = t.key === 'assignments' ? freePapers : tabBadge(t.key, countsQ.data, requestsWaiting);");
-    expect(src).toContain('tabBadgeText(t.key, badge)');
+    expect(src).toContain('tabBadgeText(t.key, shown)');
   });
 });
 

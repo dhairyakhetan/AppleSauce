@@ -197,18 +197,31 @@ describe('admin rework: the logs', () => {
       </MemoryRouter>,
     );
     expect(text(html)).toContain('(undone)');
-  });
+  }, 30_000);
 });
 
+/* Why this block is built the way it is: the fixture log makes thousands of events and checks every
+   line (about a second of plain computing on its own). Run beside 250 other test files on one
+   machine it slowed past the default 5 seconds and failed, then passed alone. Nothing here waits
+   on a clock, so fake timers would change nothing; the real fix is small steps, each with its own
+   budget, plus a roomy limit that is set only on these steps (not for the whole suite). */
+const FIXTURE_BUDGET_MS = 30_000;
+
 describe('the fixture log reads like people', () => {
-  it('every day sentence and every action line is friendly, and lines link to their paper', async () => {
-    const api = createFakeCheckerLogApi(0);
-    const list = await api.list();
+  it('the list never shows an id as a name', async () => {
+    const list = await createFakeCheckerLogApi(0).list();
     expect(list.length).toBeGreaterThan(4);
-    const today = kolkataDay(FIXTURE_NOW);
     for (const row of list) {
       expect(row.name).not.toMatch(UUID);
       expect(row.name).not.toMatch(/^(u:|ai:)/);
+    }
+  }, FIXTURE_BUDGET_MS);
+
+  it('every day sentence and every action line is friendly', async () => {
+    const api = createFakeCheckerLogApi(0);
+    const list = await api.list();
+    const today = kolkataDay(FIXTURE_NOW);
+    for (const row of list) {
       const log = await api.dayLog(row.actor_key, addDays(today, -29), today);
       for (const d of log.days) {
         const s = daySentence(log.actor, d, 2026);
@@ -220,6 +233,11 @@ describe('the fixture log reads like people', () => {
         }
       }
     }
+  }, FIXTURE_BUDGET_MS);
+
+  it('lines link to their paper', async () => {
+    const api = createFakeCheckerLogApi(0);
+    const today = kolkataDay(FIXTURE_NOW);
     const rahul = await api.dayLog(FIXTURE_ACTOR_KEY, addDays(today, -29), today);
     const html = renderToStaticMarkup(
       <MemoryRouter>
@@ -232,7 +250,7 @@ describe('the fixture log reads like people', () => {
     );
     expect(html).toContain('href="/admin/paper-approvals/');
     expect(text(html)).toContain('Rahul Das (student checker)');
-  });
+  }, FIXTURE_BUDGET_MS);
 
   it('copy in the checker log files has no em or en dashes', () => {
     for (const f of [

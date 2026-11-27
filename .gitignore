@@ -86,6 +86,11 @@ tmp/
 /history_civics_bank.json
 /question_bank_economics.json
 
+<<<<<<< Updated upstream
 # Playwright (npm run e2e)
 /test-results/
 /playwright-report/
+=======
+# kani-context-builder working files
+.claude/context/
+>>>>>>> Stashed changes

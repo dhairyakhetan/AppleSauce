@@ -92,13 +92,17 @@ export function waitingLine(a: Pick<PaperAsk, 'finished_recently'>, since: strin
 }
 
 /** What a checker reads after tapping, by outcome. Warm and short: they are volunteers. */
-export function askOutcomeMessage(outcome: AskOutcome): string {
+export function askOutcomeMessage(outcome: AskOutcome, opts: { papersListed?: boolean } = {}): string {
   switch (outcome) {
     case 'asked':
       return 'Thank you. Your HOD can see you are free and will give you more papers soon.';
     case 'already_asked':
       return 'You already asked. Your HOD can see it, so there is nothing more to do right now.';
     case 'has_work':
-      return 'You already have a paper waiting in My papers. Finish it first, then ask for more.';
+      // Every paper on the list is finished or waiting on the HOD (the list says so): "finish it first" would be false. An
+      // older database answers has_work here, and the ask was not recorded (audit CK-04, 27 Nov 2026).
+      return opts.papersListed
+        ? 'Nothing on your list is left for you to check, but your ask could not be recorded yet. Please tell your HOD you are free.'
+        : 'You already have a paper waiting in My papers. Finish it first, then ask for more.';
   }
 }

@@ -28,6 +28,7 @@ const base: HodAiRedoItem = {
   reason: 'Two questions are joined',
   note: null,
   asked_by_name: 'Asha',
+  asked_by_hod: false,
   asked_at: '2026-11-19T08:07:57Z',
   decided_by_name: null,
   decided_at: null,
@@ -87,6 +88,6 @@ describe('the Send to AI tab', () => {
   });
 
   it('says plainly when nothing has been asked', () => {
-    expect(draw([])).toContain('No student has asked to send a question back to the AI yet.');
+    expect(draw([])).toContain('Nothing has been sent to the AI yet.');
   });
 });

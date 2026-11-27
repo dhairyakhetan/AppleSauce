@@ -20,6 +20,7 @@ import type {
   HodVerifierProfile,
   UnassignedPaper,
   HeldBackPaper,
+  HeldOtherPaper,
 } from '@/lib/hod-api';
 import type { PaperPage } from '@/lib/paper-pages';
 import type { TrustRow } from '@/lib/ai-trust';
@@ -110,6 +111,7 @@ export function createFakeHodApi(): FakeHodApi {
   let assignments: HodAssignment[] = [];
   let unassigned: UnassignedPaper[] = [];
   let heldBack: HeldBackPaper[] = [];
+  let heldOther: HeldOtherPaper[] = [];
   let trust: TrustRow[] = [];
   let nextId = 100;
   const log: string[] = [];
@@ -177,6 +179,7 @@ export function createFakeHodApi(): FakeHodApi {
     const free = (paper: string, open: number): UnassignedPaper => ({ paper_id: paper, ...paperBits[paper as keyof typeof paperBits], open_count: open });
     unassigned = [free(P.history, 14), free(P.chem, 9), free(P.eco, 31)];
     // A paper missing some pictures and printed pages cannot be given out: it sits in its own list instead.
+    heldOther = [{ ...free(P.history, 2), reason: 'wrong_pdf' }];
     heldBack = [{ ...free(P.nopic, 5), cls: null, missing_snips: 3, pages_total: 7, pages_missing: 2 }];
 
     profiles = {
@@ -288,6 +291,10 @@ export function createFakeHodApi(): FakeHodApi {
     },
     async heldBackPapers() {
       return heldBack.map((x) => ({ ...x }));
+    },
+    // One made-up paper held for a reason that is not a missing picture.
+    async heldOtherPapers() {
+      return heldOther.map((x) => ({ ...x }));
     },
     // Made-up key moments: loaded 20 days ago, pictures a day later, given out when the row says, nothing after that yet.
     async paperTimeline(paperId) {

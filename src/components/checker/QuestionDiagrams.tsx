@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DIAGRAM_CHECK_LINE, diagramHeading, type DiagramItem } from '@/lib/checker-diagrams';
@@ -8,16 +9,33 @@ import { DIAGRAM_CHECK_LINE, diagramHeading, type DiagramItem } from '@/lib/chec
    PartCard.tsx). A tap on one enlarges it in the same viewer the crop uses.
    Renders nothing when the question has no stored diagram. It sits on a white sheet so it reads like the
    printed paper, and it never grows past a fixed height: the question's own picture keeps the room. */
+export const DIAGRAM_LOAD_FAILED = 'The diagram for this question did not load. Use the printed page to check it.';
+
 export function QuestionDiagrams({
   items,
   onEnlarge,
   className,
+  failed = false,
 }: {
   items: DiagramItem[];
   onEnlarge: (src: string, alt: string) => void;
   className?: string;
+  /** The read of the stored diagrams failed (not "there is none"): say so, so a missing diagram is not mistaken for no diagram. */
+  failed?: boolean;
 }) {
-  if (items.length === 0) return null;
+  // A picture that would not load (the file is gone, or the link ran out) is told apart from one that loaded (audit CK-19).
+  const [broken, setBroken] = useState<ReadonlySet<string>>(() => new Set());
+  if (items.length === 0) {
+    return failed ? (
+      <p
+        role="status"
+        data-testid="diagram-load-failed"
+        className={cn('rounded-[8px] bg-brand-subtle px-2.5 py-1.5 text-[13px] font-semibold text-foreground', className)}
+      >
+        {DIAGRAM_LOAD_FAILED}
+      </p>
+    ) : null;
+  }
   return (
     <section
       aria-label={diagramHeading(items.length)}
@@ -29,7 +47,12 @@ export function QuestionDiagrams({
         <p className="text-[12px] leading-snug text-warm-secondary">{DIAGRAM_CHECK_LINE}</p>
       </div>
       <div className="flex max-h-[46vh] min-w-0 flex-wrap items-start gap-2 overflow-y-auto">
-        {items.map((it) => (
+        {items.map((it) =>
+          broken.has(it.id) ? (
+            <p key={it.id} role="status" data-testid="diagram-item-broken" className="rounded-[6px] bg-brand-subtle px-2.5 py-1.5 text-[13px] font-semibold text-foreground">
+              {DIAGRAM_LOAD_FAILED}
+            </p>
+          ) : (
           <button
             key={it.id}
             type="button"
@@ -43,13 +66,15 @@ export function QuestionDiagrams({
             <img
               src={it.url}
               alt={it.alt}
+              onError={() => setBroken((s) => new Set(s).add(it.id))}
               className="block h-auto max-h-[30vh] w-auto max-w-full object-contain [@container(min-width:30rem)]:max-h-[min(30vh,14rem)]"
             />
             <span aria-hidden="true" className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-foreground shadow-sm">
               <Maximize2 className="h-3 w-3" />
             </span>
           </button>
-        ))}
+          ),
+        )}
       </div>
     </section>
   );

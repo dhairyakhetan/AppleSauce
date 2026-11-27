@@ -26,17 +26,21 @@ function labelOf(q: Pick<HodAiRedoItem, 'display_number' | 'number_path'>): stri
 }
 
 const STAGES = ['A student asked', 'An HOD agrees', 'The AI redoes it', 'Back with the HOD'] as const;
+/** A question an HOD sent straight from Needs you has no student request and no yes or no. */
+const HOD_STAGES = ['An HOD sent it', 'The AI redoes it', 'Back with the HOD'] as const;
 
 /** How many stages are finished for a question in this state. The next one is "now". */
-function stagesDone(state: HodAiRedoItem['state']): number {
+function stagesDone(state: HodAiRedoItem['state'], byHod: boolean): number {
+  if (byHod) return state === 'redone' ? 2 : 1;
   return state === 'requested' ? 1 : state === 'approved' ? 2 : 3;
 }
 
-function Stages({ state }: { state: HodAiRedoItem['state'] }) {
-  const done = stagesDone(state);
+function Stages({ state, byHod }: { state: HodAiRedoItem['state']; byHod: boolean }) {
+  const done = stagesDone(state, byHod);
+  const names = byHod ? HOD_STAGES : STAGES;
   return (
     <ol className="mb-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4" aria-label="Where this question is in the flow" data-testid="ai-redo-stages">
-      {STAGES.map((name, i) => {
+      {names.map((name, i) => {
         const status = i < done ? 'done' : i === done ? 'now' : 'next';
         return (
           <li
@@ -99,7 +103,7 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
     item.marks != null ? `${item.marks} ${item.marks === 1 ? 'mark' : 'marks'}` : null,
     item.state === 'requested' ? 'Waiting for an HOD' : item.state === 'approved' ? 'Waiting for the AI' : 'Redone by the AI',
     item.live_copy ? 'Live Maths copy' : null,
-    item.set_aside ? 'Set aside so the paper can go live' : null,
+    item.set_aside ? 'Left out so the paper can go live' : null,
   ].filter((x): x is string => Boolean(x));
 
   async function decide(approve: boolean) {
@@ -136,7 +140,9 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
         ))}
       </ul>
       <p className="mb-2 rounded-xl bg-brand-subtle px-3 py-2 text-[14px] text-foreground" data-testid="ai-redo-reason">
-        {item.reason ? `${item.asked_by_name ?? 'A student'} said: ${item.reason}` : `${item.asked_by_name ?? 'A student'} gave no reason.`}
+        {item.reason
+          ? `${item.asked_by_hod ? 'An HOD' : item.asked_by_name ?? 'A student'} said: ${item.reason}`
+          : `${item.asked_by_hod ? 'An HOD' : item.asked_by_name ?? 'A student'} gave no reason.`}
         {item.note ? ` The HOD added: ${item.note}` : ''}
       </p>
       <div className="mb-2 rounded-2xl bg-card px-4 py-2">
@@ -162,8 +168,8 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
       ) : null}
 
       <p className="mb-2 text-[12px] text-warm-meta">
-        {item.asked_at ? `Asked ${ago(item.asked_at)}` : 'Asked'}
-        {item.decided_at ? ` · Agreed ${ago(item.decided_at)}${item.decided_by_name ? ` by ${item.decided_by_name}` : ''}` : ''}
+        {item.asked_at ? `${item.asked_by_hod ? 'Sent' : 'Asked'} ${ago(item.asked_at)}` : item.asked_by_hod ? 'Sent' : 'Asked'}
+        {item.decided_at && !item.asked_by_hod ? ` · Agreed ${ago(item.decided_at)}${item.decided_by_name ? ` by ${item.decided_by_name}` : ''}` : ''}
       </p>
 
       <button
@@ -178,7 +184,7 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
       </button>
       {open ? (
         <div id={storyId} className="mt-3" data-testid="ai-redo-story">
-          <Stages state={item.state} />
+          <Stages state={item.state} byHod={item.asked_by_hod} />
           {item.trail.length === 0 ? (
             <p className="text-[13px] text-warm-secondary">Nothing has been written down for this question yet.</p>
           ) : (
@@ -225,6 +231,7 @@ export function SendToAiTab({ api, scope }: { api: HodApi; scope: string }) {
   const asked = q.data.filter((x) => x.state === 'requested');
   const waiting = q.data.filter((x) => x.state === 'approved');
   const redone = q.data.filter((x) => x.state === 'redone');
+  const inFlow = asked.length + waiting.length;
 
   const parts = [
     asked.length ? `${asked.length} ${asked.length === 1 ? 'question is' : 'questions are'} waiting for your yes or no.` : null,
@@ -233,12 +240,16 @@ export function SendToAiTab({ api, scope }: { api: HodApi; scope: string }) {
 
   return (
     <div>
+      <p className="mb-1 text-[15px] font-bold text-foreground" data-testid="ai-redo-count">
+        {inFlow === 0 ? 'Nothing is waiting' : inFlow === 1 ? '1 question is waiting' : `${inFlow} questions are waiting`}
+      </p>
       <p className="mb-3 text-[14px] text-warm-secondary">
-        {parts.length === 0 ? 'Nothing is waiting.' : parts.join(' ')} A student asks to send a question back, an HOD says yes or no here, and a yes stays on this
-        list until the AI has redone it. Open any question to see its whole story. Nothing is sent to the AI from this screen.
+        {parts.length === 0 ? 'Nothing is waiting.' : parts.join(' ')} A student can ask to send a question back and you say yes or no here. You can also use Send to
+        AI on a question in Needs you, or Send whole paper to AI. Anything you agreed to stays on this list until the AI has redone it. Open any question to see
+        its whole story. The AI reads this list when the owner asks.
       </p>
       {q.data.length === 0 ? (
-        <EmptyNote>No student has asked to send a question back to the AI yet. When one does, it shows up here for your yes or no.</EmptyNote>
+        <EmptyNote>Nothing has been sent to the AI yet. When a student asks, or you use Send to AI on a question in Needs you, it shows up here.</EmptyNote>
       ) : (
         <>
           <Group title="Waiting for your yes or no" items={asked} api={api} scope={scope} />

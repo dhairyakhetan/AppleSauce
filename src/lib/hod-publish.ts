@@ -367,6 +367,8 @@ export interface HodNeedsQuestion {
   /** A student asked for the AI to redo this question (20261118100000): 'requested' waits for the HOD, 'approved' means "needs AI review", 'redone' means the AI has redone it. null for an ordinary help request. */
   ai_redo_state: AiRedoState | null;
   ai_redo_reason: string | null;
+  /** An HOD sent this question to the AI (hod_send_to_ai, 20261127140000), not a student's request an HOD agreed to. False before that file is pasted. */
+  ai_redo_by_hod: boolean;
   page: number | null;
   page_path: string | null;
   snippet_path: string | null;
@@ -412,6 +414,7 @@ export function normaliseNeedsQuestion(raw: unknown): HodNeedsQuestion | null {
     ai_review_reason: str(r.ai_review_reason),
     ai_redo_state: aiRedoState(r.ai_redo_state),
     ai_redo_reason: str(r.ai_redo_reason),
+    ai_redo_by_hod: r.ai_redo_by_hod === true,
     page: numOrNull(r.page) || null,
     page_path: str(r.page_path),
     snippet_path: str(r.snippet_path),
@@ -450,6 +453,12 @@ export function aiRedoStepWords(action: string): string {
       return 'A student asked for the AI to redo it';
     case 'hod_ai_redo_approve':
       return 'An HOD agreed: it needs AI review';
+    case 'hod_send_to_ai':
+      return 'An HOD sent it to the AI';
+    case 'hod_send_to_ai_with_paper':
+      return 'An HOD sent it to the AI with the whole paper';
+    case 'hod_undo_send_to_ai':
+      return 'The HOD took it back';
     case 'hod_ai_redo_decline':
       return 'An HOD said no: it stays with the HOD';
     case 'ai_redo_read':
@@ -482,11 +491,13 @@ export interface HodAiRedoItem {
   marks: number | null;
   /** 'requested' waits for the HOD's yes or no, 'approved' waits for the AI, 'redone' has been redone. */
   state: 'requested' | 'approved' | 'redone';
-  /** The student's reason. */
+  /** The reason given: a student's, or the HOD's when `asked_by_hod`. */
   reason: string | null;
   /** What the HOD typed when approving, if anything. */
   note: string | null;
   asked_by_name: string | null;
+  /** An HOD sent it straight to the AI (20261127140000); there was no student request. */
+  asked_by_hod: boolean;
   asked_at: string | null;
   decided_by_name: string | null;
   decided_at: string | null;
@@ -539,6 +550,7 @@ export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
       reason: str(r.ai_redo_reason),
       note: str(r.ai_redo_note),
       asked_by_name: str(r.asked_by_name),
+      asked_by_hod: r.asked_by_hod === true,
       asked_at: str(r.asked_at),
       decided_by_name: str(r.decided_by_name),
       decided_at: str(r.decided_at),
@@ -553,8 +565,12 @@ export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
 /** "Sent up by a student" for the escalated pile, "Flagged by the computer" for the other. */
 export function whyItNeedsYou(
   q: Pick<HodNeedsQuestion, 'review_bucket' | 'escalated_by_name' | 'reason' | 'ai_review_reason'> &
-    Partial<Pick<HodNeedsQuestion, 'ai_redo_state' | 'ai_redo_reason'>>,
+    Partial<Pick<HodNeedsQuestion, 'ai_redo_state' | 'ai_redo_reason' | 'ai_redo_by_hod'>>,
 ): string {
+  // An HOD sent it to the AI themselves: the reason is the HOD's, whatever pile the question sits in.
+  if (q.ai_redo_by_hod && q.ai_redo_state === 'approved') {
+    return q.ai_redo_reason ? `An HOD sent this to the AI to be read again: ${q.ai_redo_reason}` : 'An HOD sent this to the AI to be read again.';
+  }
   if (q.review_bucket === 'escalated') {
     const who = q.escalated_by_name ?? 'A student';
     const why = q.ai_redo_reason ?? q.reason;
@@ -916,7 +932,38 @@ export function overrideProblemsText(failed: Pick<HodCheck, 'label'>[]): string 
 /** What to show when Publish anyway did not go through. Not switched on is said plainly; everything else is the server's words. */
 export function overrideErrorWords(err: unknown): string {
   if (isNotSwitchedOn(err)) return OVERRIDE_NOT_ON_WORDS;
-  return `Not published. The paper is still waiting for you. ${errorWords(err)}`;
+  return notPublishedWords(err);
+}
+
+/**
+ * "Not published" plus the server's sentence. The old line also said "The paper is still waiting for you", which
+ * contradicted the server when the answer was "This paper is not waiting to go live" (HOD audit, 27 Nov 2026).
+ */
+export function notPublishedWords(err: unknown): string {
+  return `Not published. Nothing was changed. ${errorWords(err)}`;
+}
+
+/** The line shown when "Put this paper on the Ready list" is not switched on in the database yet. */
+export const QUEUE_NOT_ON_WORDS =
+  'Putting a paper on the Ready list is not switched on yet. Nothing was changed. Tell the owner.';
+
+/** What to show when "Put this paper on the Ready list" did not go through. */
+export function queueErrorWords(err: unknown): string {
+  if (isNotSwitchedOn(err)) return QUEUE_NOT_ON_WORDS;
+  return errorWords(err);
+}
+
+/**
+ * Is the paper on the Ready to go live list? A paper that was never put there (approval_state null) can still be opened and
+ * edited in the preview, but it cannot be published until it is on the list: the server refuses with "not waiting to go live".
+ */
+export function paperIsQueued(approvalState: string | null | undefined): boolean {
+  return approvalState === 'awaiting';
+}
+
+/** A paper that can be opened here but is not on the Ready list yet. */
+export function paperNotOnList(paper: { approval_state: string | null; is_live: boolean; kind: string | null }): boolean {
+  return paper.approval_state === null && !paper.is_live && paper.kind !== 'retro';
 }
 
 /** One paper that was published anyway: the small marker in Live papers and the line under it. */
@@ -968,11 +1015,33 @@ export function leftOutConfirmText(count: number): string {
 
 /** The banner above Ready to go live: papers whose questions are all checked but that no queue run has
  *  put on the desk yet. Says nothing when the count is 0 or could not be read. */
+export function unqueuedBannerListText(count: number): string | null {
+  if (!Number.isFinite(count) || count <= 0) return null;
+  return count === 1
+    ? '1 paper is fully checked but is not on this list yet. Open it below and put it on the list.'
+    : `${count} papers are fully checked but are not on this list yet. Open each one below and put it on the list.`;
+}
+
+/** The banner when the server cannot name the papers (the database file is not pasted yet): only the count, and who to tell. */
 export function unqueuedBannerText(count: number): string | null {
   if (!Number.isFinite(count) || count <= 0) return null;
   return count === 1
     ? '1 more paper is fully checked but is not on this list yet. The owner adds it here. Tell the owner if it is still missing tomorrow.'
     : `${count} more papers are fully checked but are not on this list yet. The owner adds them here. Tell the owner if they are still missing tomorrow.`;
+}
+
+/**
+ * Does a paper match what the HOD typed in the search box? Every word typed must appear in at least one of the fields
+ * (title, school, class, subject, exam, year...), ignoring case. An empty search matches everything.
+ */
+export function matchesSearch(query: string, fields: (string | number | null | undefined)[]): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const hay = fields
+    .filter((f): f is string | number => f !== null && f !== undefined)
+    .map((f) => String(f).toLowerCase())
+    .join(' | ');
+  return words.every((w) => hay.includes(w));
 }
 
 /** "3 questions left out", "1 question left out", or null when none are. */

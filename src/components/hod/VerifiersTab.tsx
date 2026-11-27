@@ -372,7 +372,7 @@ export function VerifiersTab({ api, scope }: { api: HodApi; scope: string }) {
         </h2>
         <p className="mb-2 text-[13px] text-warm-secondary">
           {setupLine ? `${setupLine} ` : ''}Checkers can fill in their own
-          details and you can change them. Only you set preferred subjects; a checker can ask and you approve here.
+          details and you can change them. Only you set preferred subjects; a checker can ask and you approve here. Only an admin can switch a checker off (Admin, People, Checkers).
         </p>
         {profilesQ.isError ? (
           <LoadError what="The checker details" onRetry={() => void profilesQ.refetch()} />

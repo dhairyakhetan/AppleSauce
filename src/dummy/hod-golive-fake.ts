@@ -13,6 +13,8 @@
 
 import type { AiTrustOverall, AssignmentExplanation, HodAiRedoItem, HodCheck, HodDeskCounts, HodLivePaper, HodNeedsQuestion, HodNeedsYouPaper, HodPreview, HodReadyPaper, HodStudentUpload, HodTrailRow, OverrideMark, PreviewHeader, PreviewQuestion, TrailStage, UploadStatus } from '@/lib/hod-publish';
 import { CHECKS, OVERRIDE_MAX_REASON, OVERRIDE_MIN_REASON, allChecksPass, fieldProblem, PUBLISH_FIELDS, LIVE_FIELDS, normaliseChecks } from '@/lib/hod-publish';
+import type { PaperSendResult, UnqueuedPaper } from '@/lib/hod-api';
+import type { PaperAiCounts } from '@/lib/hod-send-to-ai';
 import { dummyPageDataUrl, dummyPictureDataUrl } from '@/dummy/checker-fixtures';
 import type { StagePictureItem } from '@/lib/stage-pictures';
 
@@ -56,6 +58,10 @@ interface FQ {
   ai_review_reason: string | null;
   ai_redo_state: 'requested' | 'approved' | 'redone' | null;
   ai_redo_reason: string | null;
+  /** An HOD sent it to the AI themselves (hod_send_to_ai). */
+  ai_redo_by_hod?: boolean;
+  /** What it was before an HOD sent it, so Undo can put it back. */
+  ai_redo_undo?: { pile: Pile; state: FQ['ai_redo_state']; reason: string | null; by_hod: boolean; request: string | null };
 }
 
 interface FP {
@@ -100,6 +106,7 @@ const header = (over: Partial<PreviewHeader>): PreviewHeader => ({
 });
 
 let seq = 0;
+let requestSeq = 0;
 const q = (over: Partial<FQ> & Pick<FQ, 'ord' | 'body'>): FQ => ({
   id: `f1000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`,
   kind: 'question',
@@ -393,8 +400,17 @@ export interface GoLiveFake {
     sendBack(id: string, note: string): Promise<void>;
     aiRedoDecide(id: string, approve: boolean, note: string): Promise<void>;
     aiRedoList(): Promise<HodAiRedoItem[]>;
+    sendToAi(id: string, reason: string): Promise<void>;
+    undoSendToAi(id: string): Promise<void>;
+    paperAiCounts(paperId: string): Promise<PaperAiCounts | null>;
+    sendPaperToAi(paperId: string, reason: string, includeOther: boolean): Promise<PaperSendResult>;
+    undoSendPaperToAi(requestId: string): Promise<void>;
+    aiRedoCount(): Promise<number | null>;
+    sendPaperBackToChecking(paperId: string, reason: string): Promise<number>;
     readyPapers(): Promise<HodReadyPaper[]>;
     unqueuedCount(): Promise<number>;
+    queuePaper(id: string): Promise<void>;
+    unqueuedPapers(): Promise<UnqueuedPaper[] | null>;
     paperPreview(id: string): Promise<HodPreview>;
     updatePublishMeta(id: string, field: string, value: string): Promise<void>;
     approvePaper(id: string, note?: string, confirmLeftOut?: boolean): Promise<{ live_bank_paper_id: string | null; question_count: number }>;
@@ -532,6 +548,7 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
     ai_review_reason: x.ai_review_reason,
     ai_redo_state: x.ai_redo_state,
     ai_redo_reason: x.ai_redo_reason,
+    ai_redo_by_hod: x.ai_redo_by_hod === true,
     page: x.page,
     page_path: x.page_path,
     snippet_path: x.snippet_path,
@@ -712,21 +729,116 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
             state: x.ai_redo_state,
             reason: x.ai_redo_reason,
             note: null,
-            asked_by_name: x.escalated_by_name,
+            asked_by_name: x.ai_redo_by_hod ? 'An HOD' : x.escalated_by_name,
+            asked_by_hod: x.ai_redo_by_hod === true,
             asked_at: x.escalated_at,
             decided_by_name: null,
             decided_at: null,
             set_aside: x.state === 'set_aside',
             live_copy: false,
             trail: [
-              step('checker_ask_ai_redo', x.escalated_by_name, x.ai_redo_reason),
-              ...(x.ai_redo_state !== 'requested' ? [step('hod_ai_redo_approve', 'An HOD', x.ai_redo_reason)] : []),
+              x.ai_redo_by_hod
+                ? step('hod_send_to_ai', 'An HOD', x.ai_redo_reason)
+                : step('checker_ask_ai_redo', x.escalated_by_name, x.ai_redo_reason),
+              ...(x.ai_redo_state !== 'requested' && !x.ai_redo_by_hod ? [step('hod_ai_redo_approve', 'An HOD', x.ai_redo_reason)] : []),
               ...(x.ai_redo_state === 'redone' ? [step('ai_redo_done', 'The AI', null)] : []),
             ],
           });
         }
       }
       return out;
+    },
+    // Same rules as hod_send_to_ai and its undo (20261127140000).
+    async sendToAi(id, reason) {
+      const { q: x } = findQ(id);
+      const r = reason.trim();
+      if (r.length < 5) throw pgError('Say what is wrong with this question (at least 5 characters).', '22023');
+      if (r.length > 500) throw pgError('That reason is too long (500 characters at most).', '22023');
+      if (x.pile === 'students' || x.state !== 'open') throw pgError('Only a question that is waiting for the HOD can be sent to the AI from here.', '55000');
+      if (x.ai_redo_state === 'requested') throw pgError('A student already asked for this one. Say yes or no to their request.', '22023');
+      if (x.ai_redo_state === 'approved') throw pgError('This question is already waiting for the AI.', '22023');
+      x.ai_redo_undo = { pile: x.pile, state: x.ai_redo_state, reason: x.ai_redo_reason, by_hod: x.ai_redo_by_hod === true, request: null };
+      x.ai_redo_state = 'approved';
+      x.ai_redo_reason = r;
+      x.ai_redo_by_hod = true;
+      record('send to ai ' + id + ' ' + r);
+    },
+    async undoSendToAi(id) {
+      const { q: x } = findQ(id);
+      if (!x.ai_redo_undo || x.ai_redo_state !== 'approved' || x.ai_redo_undo.request) throw pgError('There is nothing of yours to undo on this question.', '55000');
+      x.pile = x.ai_redo_undo.pile;
+      x.ai_redo_state = x.ai_redo_undo.state;
+      x.ai_redo_reason = x.ai_redo_undo.reason;
+      x.ai_redo_by_hod = x.ai_redo_undo.by_hod;
+      x.ai_redo_undo = undefined;
+      record('undo send to ai ' + id);
+    },
+    async paperAiCounts(paperId) {
+      const rs = real(find(paperId)).filter(isOpen);
+      const free = (x: FQ) => x.ai_redo_state !== 'requested' && x.ai_redo_state !== 'approved';
+      return {
+        needs_you: rs.filter((x) => x.pile !== 'students' && free(x)).length,
+        other: rs.filter((x) => x.pile === 'students' && free(x)).length,
+        skipped: rs.filter((x) => x.pile !== 'students' && !free(x)).length,
+      };
+    },
+    async sendPaperToAi(paperId, reason, includeOther) {
+      const p = find(paperId);
+      const r = reason.trim();
+      if (r.length < 5) throw pgError('Say what is wrong with this paper (at least 5 characters).', '22023');
+      if (r.length > 500) throw pgError('That reason is too long (500 characters at most).', '22023');
+      const free = (x: FQ) => x.ai_redo_state !== 'requested' && x.ai_redo_state !== 'approved';
+      const picked = real(p).filter((x) => isOpen(x) && free(x) && (x.pile !== 'students' || includeOther));
+      if (picked.length === 0) throw pgError('There is no question on this paper that can be sent to the AI right now.', '55000');
+      requestSeq += 1;
+      const request = 'r' + requestSeq;
+      let moved = 0;
+      for (const x of picked) {
+        x.ai_redo_undo = { pile: x.pile, state: x.ai_redo_state, reason: x.ai_redo_reason, by_hod: x.ai_redo_by_hod === true, request };
+        if (x.pile === 'students') {
+          x.pile = 'escalated';
+          moved += 1;
+        }
+        x.ai_redo_state = 'approved';
+        x.ai_redo_reason = 'The HOD says this problem runs through the whole paper: ' + r;
+        x.ai_redo_by_hod = true;
+      }
+      record('send paper to ai ' + paperId + ' ' + r + (includeOther ? ' with students' : ''));
+      return { request_id: request, sent: picked.length, moved_from_students: moved };
+    },
+    async undoSendPaperToAi(requestId) {
+      const mine = papers.flatMap((p) => p.questions).filter((x) => x.ai_redo_undo?.request === requestId);
+      if (mine.length === 0) throw pgError('That request could not be found.', 'P0002');
+      for (const x of mine) {
+        const u = x.ai_redo_undo!;
+        x.pile = u.pile;
+        x.ai_redo_state = u.state;
+        x.ai_redo_reason = u.reason;
+        x.ai_redo_by_hod = u.by_hod;
+        x.ai_redo_undo = undefined;
+      }
+      record('undo send paper to ai ' + requestId);
+    },
+    async aiRedoCount() {
+      return papers.flatMap((p) => real(p)).filter((x) => x.ai_redo_state === 'requested' || x.ai_redo_state === 'approved').length;
+    },
+    // Same rules as hod_send_paper_back_to_checking (20261127140000).
+    async sendPaperBackToChecking(id, reason) {
+      const p = find(id);
+      const r = reason.trim();
+      if (r.length < 5) throw pgError('Say why the paper is going back to checking (at least 5 characters).', '22023');
+      if (p.approval === 'approved' || p.live_id) throw pgError('This paper is already live, so it cannot be sent back to checking.', '55000');
+      if (p.approval !== 'awaiting') throw pgError('This paper is not on the Ready list.', '55000');
+      const passed = real(p).filter((x) => x.state === 'passed');
+      if (passed.length === 0) throw pgError('This paper has no passed question to send back.', '55000');
+      for (const x of passed) {
+        x.state = 'open';
+        x.pile = 'students';
+      }
+      p.approval = 'none';
+      p.queued_at = null;
+      record('send back to checking ' + id + ' ' + r);
+      return passed.length;
     },
     async readyPapers() {
       return papers
@@ -758,6 +870,31 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
       // Same rule as the server: not queued, nothing open, at least one passed question.
       return papers.filter((p) => p.approval === 'none' && real(p).some((x) => x.state === 'passed') && !real(p).some(isOpen)).length;
     },
+    async unqueuedPapers() {
+      return papers
+        .filter((p) => p.approval === 'none' && real(p).some((x) => x.state === 'passed') && !real(p).some(isOpen))
+        .map((p) => ({
+          audit_paper_id: p.id,
+          title: p.title,
+          school: p.header.school ?? null,
+          cls: p.header.cls ?? null,
+          subject: p.header.subject ?? null,
+          passed_count: real(p).filter((x) => x.state === 'passed').length,
+          left_out: real(p).filter((x) => x.state === 'set_aside').length,
+        }));
+    },
+    // Same rules as hod_queue_paper (20261127110000).
+    async queuePaper(id) {
+      const p = find(id);
+      if (p.approval === 'awaiting') return;
+      if (p.approval !== 'none') throw pgError('This paper is already live.', '55000');
+      const open = real(p).filter(isOpen).length;
+      if (open > 0) throw pgError(`${open} ${open === 1 ? 'question is' : 'questions are'} still open. Settle every question first.`, '55000');
+      if (!real(p).some((x) => x.state === 'passed')) throw pgError('No question is passed yet. At least one must be passed.', '55000');
+      p.approval = 'awaiting';
+      p.queued_at = new Date().toISOString();
+      record(`queue ${id}`);
+    },
     async paperPreview(id) {
       const p = find(id);
       const rs = real(p);
@@ -765,7 +902,7 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
         paper: {
           audit_paper_id: p.id,
           title: p.title,
-          approval_state: p.approval === 'none' ? 'queued' : p.approval,
+          approval_state: p.approval === 'none' ? null : p.approval,
           kind: p.kind,
           queued_at: p.queued_at,
           live_bank_paper_id: p.live_id,

@@ -9,6 +9,7 @@
 
 import { format, parseISO } from 'date-fns';
 import type { RawOption } from '@/lib/checker-options';
+import { paperLabel, paperProgress, type PaperProgress } from '@/lib/checker-progress';
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 const count = (v: unknown): number => {
@@ -36,6 +37,12 @@ export interface MyPaper {
   exam: string | null;
   year: string | null;
   given_by_hod: boolean;
+  /**
+   * The first name of the HOD who handed the paper out (verifier_my_papers_given_by, 20261127140000). undefined = the
+   * server did not say (the database file is not pasted yet), so the old wording is used; null = it said, but there is no
+   * name on file ("Given by an HOD").
+   */
+  given_by_name?: string | null;
   assigned_at: string | null;
   /** Questions on the paper that are the verifier's to settle. */
   total: number;
@@ -49,6 +56,114 @@ export interface MyPaper {
   paper_total: number;
   /** Of `paper_total`, how many are passed, by anyone (the computer, other verifiers, this one). */
   paper_passed: number;
+  /** Open questions of this paper that are only WAITING (the paper is on hold, or a picture is missing). 0 until the
+   *  extras function (20261127100000) is applied. */
+  held_back?: number;
+  /** Days before the 7-day "nothing done" return takes this paper back; null = not counting down (or not known). */
+  idle_days_left?: number | null;
+}
+
+/** A paper the 7-day return took back from this checker in the last few days (verifier_my_papers_extra). */
+export interface ReturnedPaper {
+  paper_id: string;
+  subject: string | null;
+  school: string | null;
+  cls: string | null;
+  year: string | null;
+  returned_at: string | null;
+}
+
+/** The two kinds of row verifier_my_papers_extra gives: facts about the papers held, and papers taken back. */
+export function normalisePapersExtra(raw: unknown): {
+  held: Map<string, { held_back: number; idle_days_left: number | null }>;
+  returned: ReturnedPaper[];
+} {
+  const held = new Map<string, { held_back: number; idle_days_left: number | null }>();
+  const returned: ReturnedPaper[] = [];
+  for (const x of Array.isArray(raw) ? raw : []) {
+    const r = obj(x);
+    const paper = str(r.paper_id);
+    if (!paper) continue;
+    if (r.kind === 'returned') {
+      returned.push({
+        paper_id: paper,
+        subject: str(r.subject),
+        school: str(r.school),
+        cls: str(r.cls),
+        year: str(r.year),
+        returned_at: str(r.returned_at),
+      });
+    } else {
+      const idle = r.idle_days_left === null || r.idle_days_left === undefined ? null : Number(r.idle_days_left);
+      held.set(paper, { held_back: count(r.held_back), idle_days_left: idle !== null && Number.isFinite(idle) ? Math.max(0, Math.floor(idle)) : null });
+    }
+  }
+  return { held, returned };
+}
+
+/** assignment id -> the first name of the HOD who handed it out (null when that HOD has no name on file). */
+export function normaliseGivenBy(raw: unknown): Map<number, string | null> {
+  const out = new Map<number, string | null>();
+  for (const x of Array.isArray(raw) ? raw : []) {
+    const r = obj(x);
+    const id = Number(r.assignment_id);
+    if (!Number.isFinite(id)) continue;
+    const name = str(r.first_name);
+    out.set(id, name ? name.trim().split(/\s+/)[0] : null);
+  }
+  return out;
+}
+
+/** Add the HOD's first name to the papers it knows about. A paper it did not mention keeps no name field (old wording). */
+export function withGivenBy(rows: MyPaper[], names: Map<number, string | null>): MyPaper[] {
+  if (names.size === 0) return rows;
+  return rows.map((p) => (names.has(p.assignment_id) ? { ...p, given_by_name: names.get(p.assignment_id) ?? null } : p));
+}
+
+/** Add what verifier_my_papers_extra said to the rows of verifier_my_papers. Rows it did not mention stay as they are. */
+export function withPapersExtra(rows: MyPaper[], held: Map<string, { held_back: number; idle_days_left: number | null }>): MyPaper[] {
+  if (held.size === 0) return rows;
+  return rows.map((p) => {
+    const e = held.get(p.paper_id);
+    return e ? { ...p, held_back: e.held_back, idle_days_left: e.idle_days_left } : p;
+  });
+}
+
+/** Said on a paper whose open questions are only waiting (not "Your part is done": they come back by themselves). */
+export function heldBackNote(n: number): string {
+  return n === 1
+    ? '1 question is waiting: the paper is on hold, or its picture is still being added. It comes back to you by itself.'
+    : `${n} questions are waiting: the paper is on hold, or their pictures are still being added. They come back to you by themselves.`;
+}
+
+/** Only worth saying when it is close: "Goes back to the pool in 2 days if nothing is done." Null otherwise. */
+export const IDLE_WARNING_DAYS = 3;
+export function idleNote(daysLeft: number | null | undefined): string | null {
+  if (daysLeft === null || daysLeft === undefined || daysLeft > IDLE_WARNING_DAYS) return null;
+  if (daysLeft <= 0) return 'This paper goes back to the pool today if nothing is done on it.';
+  return `This paper goes back to the pool in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} if nothing is done on it.`;
+}
+
+/** The line that tells a checker a paper went back, so it does not just vanish. */
+export function returnedNote(r: Pick<ReturnedPaper, 'subject' | 'cls' | 'school' | 'year'>): string {
+  return `${paperLabel(r)} went back to the pool because nothing was done on it for 7 days. Your HOD can give it to you again.`;
+}
+
+/**
+ * "29 of 30 done" for the checking screen's top bar: the same whole-paper count the card in My papers shows (audit CK-09,
+ * 27 Nov 2026: the card said "29 of 30 done" while the bar said "0 of 1 done" for the same paper). Falls back to the
+ * checker's own share when the server does not send the whole-paper counts.
+ */
+export function paperProgressOf(p: Pick<MyPaper, 'total' | 'done' | 'remaining'> & Partial<Pick<MyPaper, 'paper_total' | 'paper_passed'>>): PaperProgress {
+  if ((p.paper_total ?? 0) > 0) {
+    return paperProgress({ done_count: p.paper_passed ?? 0, remaining_count: p.remaining, total_count: p.paper_total });
+  }
+  return paperProgress({ done_count: p.done, remaining_count: p.remaining, total_count: p.total });
+}
+
+/** True when none of the checker's papers has a question left for them: only then can they say "I am free". */
+export function hasNothingToCheck(papers: readonly Pick<MyPaper, 'remaining'>[]): boolean {
+  return papers.every((p) => p.remaining === 0);
 }
 
 export function normaliseMyPapers(raw: unknown): MyPaper[] {
@@ -74,6 +189,8 @@ export function normaliseMyPapers(raw: unknown): MyPaper[] {
       skipped: count(r.skipped),
       paper_total: count(r.paper_total),
       paper_passed: count(r.paper_passed),
+      held_back: count(r.held_back),
+      idle_days_left: null,
     });
   }
   return out;
@@ -138,7 +255,11 @@ export function paperCardProgress(
  * passed (its other questions are for the HOD or an admin, never for a checker). The shared line would say "it waits
  * for approval", which is not true yet. Null: use the shared line (checkerCardLine).
  */
-export function partDoneNote(p: Pick<MyPaper, 'remaining' | 'with_hod'> & Partial<Pick<MyPaper, 'paper_total' | 'paper_passed'>>): string | null {
+export function partDoneNote(
+  p: Pick<MyPaper, 'remaining' | 'with_hod'> & Partial<Pick<MyPaper, 'paper_total' | 'paper_passed' | 'held_back'>>,
+): string | null {
+  // Questions that are only waiting are not "done": say what is going on instead (audit CK-01, 27 Nov 2026).
+  if (p.remaining === 0 && (p.held_back ?? 0) > 0) return heldBackNote(p.held_back ?? 0);
   const total = p.paper_total ?? 0;
   if (p.remaining > 0 || p.with_hod > 0 || total === 0) return null;
   return (p.paper_passed ?? 0) < total ? 'Your part is done. Your HOD settles the rest of this paper.' : null;

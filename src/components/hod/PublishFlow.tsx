@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { HeaderEditor } from '@/components/hod/HeaderEditor';
 import { ListSkeleton, LoadError, Notice, deskLink, quietButton } from '@/components/hod/HodShared';
+import { SendBackToChecking } from '@/components/hod/SendBackToChecking';
 import { PaperPageFlip } from '@/components/checker/PaperPageFlip';
 import { PaperSheet, type PictureWork } from '@/components/hod/PaperSheet';
 import { STAGE_FAILED_WORDS, stagePictures, unstagedCount } from '@/lib/stage-pictures';
@@ -48,6 +49,10 @@ import {
   type MarkKind,
   type PublishField,
   type UnsavedRegistry,
+  notPublishedWords,
+  paperIsQueued,
+  paperNotOnList,
+  queueErrorWords,
 } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
 
@@ -293,6 +298,8 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
   const [overrideTicked, setOverrideTicked] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [queueBusy, setQueueBusy] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
   const [jump, setJump] = useState<{ kind: MarkKind; index: number } | null>(null);
   const [photoOpen, setPhotoOpen] = useState(false);
   const stepRefs = useId();
@@ -528,7 +535,10 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
 
   const { paper } = data;
   const header = paper.header;
-  const waiting = paper.approval_state === 'awaiting' || paper.approval_state === null;
+  // Only a paper that is ON the Ready list can be published: the server refuses any other. A paper that was never put
+  // there (approval_state null) can still be opened and edited here, and gets its own button to join the list.
+  const waiting = paperIsQueued(paper.approval_state);
+  const notOnList = paperNotOnList(paper);
   const pass = allChecksPass(data.checks);
   const leftOutCount = data.counts.set_aside;
   const canPublish = canPublishNow(data.checks, leftOutCount, confirmedLeftOut, waiting) && !busy;
@@ -577,10 +587,26 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
       refresh();
     } catch (err) {
       // The server's sentence, as written: it names every check that failed.
-      setPublishError(`Not published. The paper is still waiting for you. ${errorWords(err)}`);
+      setPublishError(notPublishedWords(err));
       refresh();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function putOnList() {
+    if (queueBusy) return;
+    setQueueBusy(true);
+    setQueueError(null);
+    try {
+      await api.queuePaper(paperId);
+      toast.success('The paper is on the Ready to go live list.');
+      refresh();
+      void q.refetch();
+    } catch (err) {
+      setQueueError(queueErrorWords(err));
+    } finally {
+      setQueueBusy(false);
     }
   }
 
@@ -612,7 +638,7 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
     }
   }
 
-  const editable = !paper.is_live && waiting;
+  const editable = !paper.is_live && (waiting || paper.approval_state === null);
 
   return (
     <UnsavedContext.Provider value={registry}>
@@ -659,6 +685,18 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
             <p className="mt-3 text-[14px] font-semibold text-foreground" data-testid="left-out-banner">
               {leftOut}
             </p>
+          ) : null}
+          {waiting && !alreadyLive ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="preview-send-back">
+              <SendBackToChecking
+                api={api}
+                scope={scope}
+                paperId={paper.audit_paper_id}
+                title={paper.title}
+                passedCount={data.counts.passed}
+                onDone={() => navigate(deskLink('ready'))}
+              />
+            </div>
           ) : null}
         </div>
 
@@ -822,7 +860,22 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
                 </ul>
               </div>
 
-              {!waiting ? (
+              {notOnList ? (
+                <div className="mt-3 rounded-[18px] bg-brand-subtle p-4" data-testid="not-on-list">
+                  <p className="text-[14px] font-bold text-foreground">This paper has not been put on the Ready to go live list yet.</p>
+                  <p className="mt-1 text-[14px] text-foreground">
+                    It can only be published from that list. Put it there when every question is settled and its pictures are in place.
+                  </p>
+                  <button type="button" className={cn(actionToneClass('dark'), 'mt-3 min-w-[160px]')} disabled={queueBusy} onClick={() => void putOnList()} data-testid="put-on-list">
+                    {queueBusy ? 'Putting it on the list...' : 'Put this paper on the Ready list'}
+                  </button>
+                  {queueError ? (
+                    <p role="alert" className="mt-2 text-[13px] font-semibold text-destructive" data-testid="queue-error">
+                      {queueError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : !waiting ? (
                 <div className="mt-3">
                   <Notice tone="warn">This paper is not waiting to go live, so it cannot be published from here.</Notice>
                 </div>
@@ -911,7 +964,9 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
                 </button>
                 {!canPublish ? (
                   <p id="publish-why" className="text-[13px] text-warm-secondary">
-                    {!waiting
+                    {notOnList
+                      ? 'Put the paper on the Ready to go live list first (the box above).'
+                      : !waiting
                       ? 'This paper is not waiting to go live. See the note at the top of this page.'
                       : !pass
                         ? 'Publish switches on when all four checks are green.'

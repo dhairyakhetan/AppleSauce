@@ -172,13 +172,12 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
     path: '/hod?tab=uploads',
     short: 'Papers students sent in through the site, waiting for you to read and decide.',
     purpose:
-      'Papers that students uploaded themselves through the Submit a paper page. Open each one to read it and decide. Uploads you approved are listed too, and can be hidden or brought back.',
-    flow: 'Open an upload marked Pending, read it, then approve or reject it.',
+      'Papers that students uploaded themselves through the Submit a paper page. Open each one to read it and decide. Uploads you approved or rejected are listed too. A decision cannot be undone here; to take a live upload off the site, use Hide in Live papers.',
+    flow: 'Open every file of an upload marked Pending, read it, then approve or reject it.',
     buttons: [
-      { label: 'Review or View', does: 'Opens the upload so you can read it and decide. View is for uploads already decided.' },
-      { label: 'Open', does: 'Shows a live paper on the site in a new tab.' },
-      { label: 'Hide', does: 'Takes a live upload off the site. You give a reason.' },
-      { label: 'Restore', does: 'Puts a hidden upload back on the site.' },
+      { label: 'Open', does: 'Opens one of the files the student sent, so you can read it. Approve stays off until every file has been opened.' },
+      { label: 'Approve', does: 'Records your yes. The paper joins the checking route next time the owner loads papers. Nothing goes on the site from here.' },
+      { label: 'Reject', does: 'Turns the upload down. You give a reason. A decision cannot be undone here.' },
     ],
   },
   'admin-queue': {
@@ -187,12 +186,12 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageCopy> = {
     path: '/hod?tab=needs-you',
     short: 'Questions the checking could not settle, waiting for a person to decide.',
     purpose:
-      'Questions that neither the AI nor a checker could settle land here. Each shows the picture of the page it came from and, in words, why it was flagged. Decide each one: it is right, it needs a fix, or it should be set aside.',
+      'Questions that neither the AI nor a checker could settle land here. Each shows the picture of the page it came from and, in words, why it was flagged. Decide each one: it is right, it needs a fix, or it should be left out.',
     flow: 'Work down a paper at a time. Every decision is logged and can be undone from the paper history.',
     buttons: [
       { label: 'Pass', does: 'Says the question is correct as it stands. It then counts as checked.' },
       { label: 'Edit', does: 'Lets you correct the question number, marks, words or answer choices. Each save is kept as a new version.' },
-      { label: 'Set aside', does: 'Keeps the question off the site. You give a reason. The paper still goes live with an empty card in its place.' },
+      { label: 'Leave out', does: 'Keeps the question off the site. You give a reason. The paper still goes live with an empty card in its place.' },
     ],
   },
   positions: {
@@ -380,12 +379,12 @@ export const TIPS = {
   'queue.papers': 'How many different papers the questions waiting for an admin belong to.',
   'queue.shown': 'How many are on this page of the list.',
   // Ready to go live
-  'ready.waiting': 'Papers waiting for you. Some may still have a question to pass or set aside.',
+  'ready.waiting': 'Papers waiting for you. Some may still have a question to pass or leave out.',
   'ready.ready': 'Papers with no open questions. These can be approved now.',
-  'ready.open': 'Papers that still have questions to pass or set aside. They cannot be approved yet.',
+  'ready.open': 'Papers that still have questions to pass or leave out. They cannot be approved yet.',
   'ready.live': 'Papers already on the site that have not had your yes yet.',
   'col.ready.paper': 'The paper\'s board, class, subject and year.',
-  'col.ready.questions': 'Questions passed, still open, and set aside on this paper.',
+  'col.ready.questions': 'Questions passed, still open, and left out of this paper.',
   'col.ready.ai': 'What the AI did with the questions before any person looked.',
   'col.ready.waiting': 'How long the paper has been waiting for you.',
   'col.ready.state': 'Ready can be approved now. A number means that many questions are still open.',

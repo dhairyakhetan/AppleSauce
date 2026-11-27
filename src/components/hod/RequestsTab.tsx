@@ -1,3 +1,4 @@
+import { loadGate } from '@/lib/verifier-papers';
 import { refreshHod } from '@/lib/hod-refresh';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -91,7 +92,7 @@ export function RequestsSection({ api, scope, isAdmin = false }: { api: FixReque
         ))}
       </div>
 
-      {listQ.isLoading ? (
+      {loadGate(listQ) === 'loading' ? (
         <ListSkeleton label="Loading requests" />
       ) : listQ.isError ? (
         <LoadError what="The requests" onRetry={() => void listQ.refetch()} />

@@ -98,7 +98,9 @@ export function stageOfLive(p: { is_published: boolean }): PaperStage | null {
 }
 
 /** A checker's own card: still questions to do is "Being checked"; nothing left to do waits for the HOD. */
-export function stageOfCheckerCard(p: { remaining: number }): PaperStage {
+export function stageOfCheckerCard(p: { remaining: number; held_back?: number }): PaperStage {
+  // Questions that are only waiting (paper on hold, pictures missing) are not "checked, waiting to go live".
+  if (p.remaining === 0 && (p.held_back ?? 0) > 0) return 'not_ready';
   return p.remaining > 0 ? 'checking' : 'waiting';
 }
 

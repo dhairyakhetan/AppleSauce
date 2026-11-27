@@ -386,7 +386,7 @@ export function TeacherComments({ teacherId, subject, teacherSlug, teacherName, 
         <p className="mb-6 text-sm text-muted-foreground">
           <Button
             variant="link"
-            className="h-auto p-0 text-foreground underline"
+            className="h-auto min-h-11 px-1 py-0 text-foreground underline"
             onClick={handleWriteReviewClick}
           >
             Sign in

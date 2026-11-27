@@ -1,3 +1,4 @@
+import { loadGate } from '@/lib/verifier-papers';
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -40,7 +41,8 @@ export const AI_TRUST_OVERALL_KEY = (scope: string) => ['hod', scope, 'ai-trust-
    against the number that unlocks the AI approving clean questions by itself. */
 function OverallCard({ api, scope }: { api: HodApi; scope: string }) {
   const q = useQuery({ queryKey: AI_TRUST_OVERALL_KEY(scope), queryFn: () => api.aiTrustOverall(), staleTime: 15_000, refetchOnMount: true });
-  if (q.isLoading) return <ListSkeleton rows={1} label="Loading the overall AI trust count" />;
+  // loadGate, not isLoading: offline pauses a read (isLoading stays false) and there is no data to show yet.
+  if (loadGate(q) === 'loading') return <ListSkeleton rows={1} label="Loading the overall AI trust count" />;
   if (q.isError || !q.data) return <LoadError what="The overall AI trust count" onRetry={() => void q.refetch()} />;
   const o = q.data;
   const pct = Math.min(100, Math.round((o.checks_done / Math.max(1, o.threshold)) * 100));
@@ -238,7 +240,7 @@ export function AiTrustTab({ api, scope, canSwitchTrust: canSwitch }: { api: Hod
       <p className="mb-4 rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] leading-snug text-foreground" data-testid="trust-explainer">
         {trustExplainer(bar?.min_checked, bar?.min_rate, bar?.spot_check_every)}
       </p>
-      {q.isLoading ? (
+      {loadGate(q) === 'loading' ? (
         <ListSkeleton rows={3} label="Loading the AI trust meter" />
       ) : q.isError ? (
         <LoadError what="The AI trust meter" onRetry={() => void q.refetch()} />

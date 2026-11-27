@@ -229,7 +229,7 @@ export default function LikedTeachers() {
                   </li>
                 ))}
               </ul>
-              <ListEnd count={likedTeachers.length} />
+              <ListEnd count={likedTeachers.length} what="saved teachers" />
             </BentoPanel>
           )}
 

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { examLabel } from '@/lib/paper-cover-mapping';
 import { HelpCircle, Award } from 'lucide-react';
 import { getSubjectPalette } from '@/lib/subject-palette';
 
@@ -128,7 +129,7 @@ export function PaperCard({ paper, variant = 'result', sticker }: PaperCardProps
 
       {isCompact && (
         <span className="mt-3 block text-meta tabular-nums" style={{ color: colors.meta }}>
-          {paper.board} · Class {paper.class} · {paper.exam_type}{year !== null ? ` ${year}` : ''}
+          {[paper.board, `Class ${paper.class}`, examLabel(paper.exam_type)].filter(Boolean).join(' · ')}{year !== null ? ` ${year}` : ''}
         </span>
       )}
     </Link>

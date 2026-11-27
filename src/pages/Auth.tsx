@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { ProfileLoadFailed } from '@/components/ProfileLoadFailed';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
@@ -96,6 +97,10 @@ export default function Auth() {
   // entry point below it — the form only mounts once this is toggled on.
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [processingOAuth, setProcessingOAuth] = useState(false);
+  // After sign-in the profile could not be read (a bad connection). That is not "no role yet": say so, with a retry,
+  // and never send the person to the role chooser, where a teacher could answer it and lose the teacher role.
+  const [profileCheckFailed, setProfileCheckFailed] = useState(false);
+  const [profileCheckTry, setProfileCheckTry] = useState(0);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
@@ -217,6 +222,8 @@ export default function Auth() {
             if (import.meta.env.DEV) {
               console.error('Error checking profile:', error);
             }
+            setProfileCheckFailed(true);
+            return;
           }
 
           if (!profile || !profile.role) {
@@ -244,11 +251,11 @@ export default function Auth() {
           if (import.meta.env.DEV) {
             console.error('Error checking profile:', error);
           }
-          const to = redirectTo ? `/select-role?redirect=${encodeURIComponent(redirectTo)}` : '/select-role';
-          navigate(to, { replace: true });
+          setProfileCheckFailed(true);
         }
       };
 
+      setProfileCheckFailed(false);
       setTimeout(checkProfile, hasAccessToken ? 500 : 200);
     }
 
@@ -262,7 +269,7 @@ export default function Auth() {
       }, 3000);
       return () => clearTimeout(waitTimer);
     }
-  }, [user, authLoading, navigate, showResetPassword]);
+  }, [user, authLoading, navigate, showResetPassword, profileCheckTry]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -498,6 +505,10 @@ export default function Auth() {
     setMagicLinkMode(false);
     setMagicSent(false);
   };
+
+  if (user && profileCheckFailed) {
+    return <ProfileLoadFailed onRetry={() => setProfileCheckTry((n) => n + 1)} />;
+  }
 
   // Show loading state while processing OAuth callback
   if (processingOAuth || (authLoading && window.location.hash.includes('access_token'))) {

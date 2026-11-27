@@ -41,15 +41,30 @@ export const forgetAnswered = (list: readonly AnsweredEntry[], questionId: strin
  */
 export function canUndoNow(answered: readonly AnsweredEntry[], doneOnPaper: number | null | undefined, held: boolean): boolean {
   if (held) return false;
+  // The server undoes the person's most recent step, and cannot undo a split, the OR separator or a send-back (audit
+  // CK-08, 27 Nov 2026): while one of those is the last thing done, Undo is off instead of offering a button that refuses.
+  if (lastStepCannotBeUndone(answered)) return false;
   return answered.length > 0 || (doneOnPaper ?? 0) > 0;
+}
+
+/** Steps verifier_undo_last cannot take back ("Splitting a question cannot be undone here" and the like). */
+const NOT_UNDOABLE_KINDS: ReadonlySet<string> = new Set(['split', 'or_separator', 'ask_ai_redo']);
+
+/** True when the newest answer of this visit is one the server cannot undo. */
+export function lastStepCannotBeUndone(answered: readonly AnsweredEntry[]): boolean {
+  const last = answered[answered.length - 1];
+  return last !== undefined && NOT_UNDOABLE_KINDS.has(last.kind);
 }
 
 export const UNDO_TITLE_NONE = 'Nothing to undo yet';
 export const UNDO_TITLE_HELD = 'Nothing of yours to undo right now. Your last answer was not saved.';
 export const UNDO_TITLE_READY = 'Take back your last answer';
 
-export function undoTitle(can: boolean, held: boolean): string {
+export const UNDO_TITLE_STEP = 'Your last step (a split, an OR, or sending a question back) cannot be taken back here. Ask your HOD if it was a mistake.';
+
+export function undoTitle(can: boolean, held: boolean, stepBlocked = false): string {
   if (can) return UNDO_TITLE_READY;
+  if (stepBlocked) return UNDO_TITLE_STEP;
   return held ? UNDO_TITLE_HELD : UNDO_TITLE_NONE;
 }
 

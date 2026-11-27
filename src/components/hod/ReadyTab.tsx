@@ -1,14 +1,16 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AttentionGroup, PaperStatusPill, PaperTimelineDisclosure } from '@/components/PaperStatus';
-import { EmptyNote, ListSkeleton, LoadError, ago, deskLink } from '@/components/hod/HodShared';
+import { EmptyNote, ListSearch, ListSkeleton, LoadError, ago, deskLink } from '@/components/hod/HodShared';
 import { EMPTY_MOMENTS, stageOfReady, waitingReason, type AttentionItem } from '@/lib/paper-status';
 import { PublishFlow } from '@/components/hod/PublishFlow';
+import { SendBackToChecking } from '@/components/hod/SendBackToChecking';
 import { CheckChips, RouteTrail } from '@/components/hod/RouteTrail';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import type { HodApi } from '@/lib/hod-api';
-import { blockedReasons, checksSummary, leftOutText, readySummaryText, unqueuedBannerText, type HodReadyPaper, type TrailStage } from '@/lib/hod-publish';
+import { loadGate } from '@/lib/verifier-papers';
+import { blockedReasons, checksSummary, leftOutText, matchesSearch, readySummaryText, unqueuedBannerListText, unqueuedBannerText, type HodReadyPaper, type TrailStage } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
 
 /* "Ready to go live": papers whose questions are all settled and that wait for
@@ -62,6 +64,11 @@ function ReadyRow({ p, api, scope, stage }: { p: HodReadyPaper; api: HodApi; sco
         ) : null}
         {p.kind === 'retro' ? <span className="rounded-full bg-card px-2.5 py-1 text-[12px] text-warm-secondary">Already live: approving records it</span> : null}
       </div>
+      {p.kind === 'retro' ? null : (
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="ready-row-actions">
+          <SendBackToChecking api={api} scope={scope} paperId={p.audit_paper_id} title={p.title} passedCount={p.passed_count} />
+        </div>
+      )}
       <RouteTrail stage={stage} className="mt-3" />
       <PaperTimelineDisclosure
         className="mt-3"
@@ -77,16 +84,20 @@ function ReadyRow({ p, api, scope, stage }: { p: HodReadyPaper; api: HodApi; sco
 export function ReadyList({ api, scope }: { api: HodApi; scope: string }) {
   const q = useQuery({ queryKey: READY_KEY(scope), queryFn: () => api.readyPapers(), staleTime: 0, refetchOnMount: true });
   const trailQ = useQuery({ queryKey: ['hod', scope, 'trail'], queryFn: () => api.paperTrail(), staleTime: 30_000 });
+  const [search, setSearch] = useState('');
   const stageOf = useMemo(() => new Map((trailQ.data ?? []).map((t) => [t.audit_paper_id, t.stage])), [trailQ.data]);
-  if (q.isLoading) return <ListSkeleton label="Loading the papers that are ready" />;
-  if (q.isError) return <LoadError what="The papers that are ready" onRetry={() => void q.refetch()} />;
+  // Offline, the read is only paused: isLoading is false and there is no data, which would flash "nothing is ready".
+  const gate = loadGate(q);
+  if (gate === 'loading') return <ListSkeleton label="Loading the papers that are ready" />;
+  if (gate === 'error') return <LoadError what="The papers that are ready" onRetry={() => void q.refetch()} />;
   const list = q.data ?? [];
   if (list.length === 0) {
     return <EmptyNote>No paper is ready yet. When every question on a paper is settled, it waits here for your yes.</EmptyNote>;
   }
   // The papers that pass all four checks come first; the rest are blocked and each says why.
-  const goLive = list.filter((p) => p.all_ok);
-  const blocked = list.filter((p) => !p.all_ok);
+  const shown = list.filter((p) => matchesSearch(search, [p.title, p.school, p.cls, p.subject, p.board, p.exam, p.year]));
+  const goLive = shown.filter((p) => p.all_ok);
+  const blocked = shown.filter((p) => !p.all_ok);
   const now = new Date();
   // Papers that can go live but have waited a week for a yes. A blocked paper says its reason on its own row.
   const attention: AttentionItem[] = goLive.flatMap((p) => {
@@ -96,9 +107,11 @@ export function ReadyList({ api, scope }: { api: HodApi; scope: string }) {
   return (
     <div>
       <AttentionGroup id="ready-attention" items={attention} />
+      {list.length > 4 ? <ListSearch value={search} onChange={setSearch} /> : null}
       <p className="mb-3 mt-3 text-[13px] text-warm-secondary" data-testid="ready-summary">
         {readySummaryText(list.length, goLive.length)} Open a paper to read it, run the checks and publish.
       </p>
+      {shown.length === 0 ? <EmptyNote>No paper matches. Clear the search.</EmptyNote> : null}
       {goLive.length > 0 ? (
         <section aria-labelledby="ready-can-go-live" data-testid="ready-can-go-live">
           <h2 id="ready-can-go-live" className="mb-2 text-[16px] font-bold text-foreground">
@@ -130,12 +143,36 @@ export function ReadyList({ api, scope }: { api: HodApi; scope: string }) {
 /** The line above the list: papers whose questions are all checked but that no queue run has put on this desk yet. */
 function UnqueuedBanner({ api, scope }: { api: HodApi; scope: string }) {
   const q = useQuery({ queryKey: ['hod', scope, 'unqueued'], queryFn: () => api.unqueuedCount(), staleTime: 30_000, retry: false });
-  const text = unqueuedBannerText(q.data ?? 0);
+  // Which papers, when the server can say (20261127110000). Until then only the count and the old words.
+  const listQ = useQuery({ queryKey: ['hod', scope, 'unqueued', 'list'], queryFn: () => api.unqueuedPapers(), staleTime: 30_000, retry: false });
+  const papers = listQ.data ?? null;
+  const count = papers ? papers.length : (q.data ?? 0);
+  const text = papers ? unqueuedBannerListText(count) : unqueuedBannerText(count);
   if (!text) return null;
   return (
-    <p className="mb-3 rounded-xl bg-brand-subtle px-3 py-2 text-[13px] font-semibold text-foreground" role="status" data-testid="unqueued-banner">
-      {text}
-    </p>
+    <div className="mb-3 rounded-xl bg-brand-subtle px-3 py-2" data-testid="unqueued-banner">
+      <p className="text-[13px] font-semibold text-foreground" role="status">
+        {text}
+      </p>
+      {papers && papers.length > 0 ? (
+        <ul className="mt-2 space-y-1" data-testid="unqueued-list">
+          {papers.map((p) => (
+            <li key={p.audit_paper_id} className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-foreground">
+              <span className="min-w-0">
+                {p.title}
+                <span className="text-warm-secondary">
+                  {' '}
+                  · {p.passed_count} passed{p.left_out > 0 ? `, ${p.left_out} left out` : ''}
+                </span>
+              </span>
+              <Link to={deskLink('ready', p.audit_paper_id)} className="tap-44 inline-flex items-center font-semibold text-brand-blue hover:text-brand-blue-deep" aria-label={`Open ${p.title}`}>
+                Open
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 

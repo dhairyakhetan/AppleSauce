@@ -219,7 +219,7 @@ export default function MyTeachers() {
                   </li>
                 ))}
               </ul>
-              <ListEnd count={myTeachers.length} />
+              <ListEnd count={myTeachers.length} what="teachers" />
             </BentoPanel>
           )}
 

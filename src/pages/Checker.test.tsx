@@ -3,7 +3,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 
 const rpc = vi.fn();
-vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc: (...a: unknown[]) => rpc(...a) } }));
+// timedRpc calls .abortSignal() on the request, so the stand-in answers that too.
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    rpc: (...a: unknown[]) => {
+      const out = rpc(...a) as Promise<unknown>;
+      return Object.assign(out, { abortSignal: () => out });
+    },
+  },
+}));
 
 import { ProfileLoadError } from '@/pages/Checker';
 import { isPaperChecker } from '@/lib/checker-api';

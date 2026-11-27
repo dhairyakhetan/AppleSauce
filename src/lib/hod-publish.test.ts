@@ -104,8 +104,8 @@ describe('Publish is enabled only when all four checks pass', () => {
     const src = readFileSync('src/components/hod/PublishFlow.tsx', 'utf8');
     expect(src).toContain('canPublishNow(data.checks, leftOutCount, confirmedLeftOut, waiting)');
     expect(src).toMatch(/disabled=\{!canPublish\}/);
-    expect(src).toContain('errorWords(err)');
-    expect(src).toContain('Not published');
+    expect(src).toContain('notPublishedWords(err)');
+    expect(readFileSync('src/lib/hod-publish.ts', 'utf8')).toContain('Not published. Nothing was changed.');
   });
 });
 
