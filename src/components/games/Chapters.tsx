@@ -49,11 +49,11 @@ export function Chapters({ api, onChanged }: { api: GamesApi; onChanged: () => v
   const group: ListGroup = pick ?? (chapters[0] ? { board: chapters[0].board, class: chapters[0].class, subject: chapters[0].subject } : FALLBACK);
   const count = (f: (c: AdminChapter) => boolean) => chapters.filter(f).length;
   const meta = (n: number) => (n ? plural(n, 'chapter') : undefined);
-  const classesOn = (b: string) => [...new Set(chapters.filter((c) => c.board === b).map((c) => c.class))].sort((x, y) => x - y);
+  const classesOn = (b: string) => [...new Set(chapters.filter((c) => c.board === b).map((c) => c.class))].sort((x, y) => y - x);
   const subjectsOn = (b: string, k: number) => [...new Set(chapters.filter((c) => c.board === b && c.class === k).map((c) => c.subject))].sort(bySubject);
 
   const boardOptions: PickerOption[] = ALL_BOARDS.map((b) => { const n = count((c) => c.board === b.name); return { value: b.name, label: b.name, meta: meta(n), on: n > 0 }; });
-  const classOptions: PickerOption[] = Array.from({ length: 12 }, (_, i) => i + 1)
+  const classOptions: PickerOption[] = Array.from({ length: 12 }, (_, i) => 12 - i) // highest first
     .map((k) => { const n = count((c) => c.board === group.board && c.class === k); return { value: String(k), label: `Class ${k}`, meta: meta(n), on: n > 0 }; });
   const subjectOptions: PickerOption[] = SUBJECTS.map((s) => s.name).sort(bySubject)
     .map((s) => { const n = count((c) => c.board === group.board && c.class === group.class && c.subject === s); return { value: s, label: s, meta: meta(n), on: n > 0 }; });

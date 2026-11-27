@@ -63,13 +63,21 @@ test('the sent-back list grows open, and turns around mid-way without a jump', a
   const open = await list.evaluate((n) => n.getBoundingClientRect().height);
   expect(opening).toBeGreaterThan(0);
   expect(opening).toBeLessThan(open); // growing, not all at once
-  // close, and open again half-way: it carries on from where it was
-  await panel.getByRole('button', { name: 'Hide' }).click();
-  await page.waitForTimeout(90);
-  const closing = await list.evaluate((n) => n.getBoundingClientRect().height);
-  await panel.getByRole('button', { name: 'See why' }).click();
-  const turned = await list.evaluate((n) => n.getBoundingClientRect().height);
-  expect(closing).toBeLessThan(open);
+  // close, and open again half-way: it carries on from where it was. Timed in the page itself (a frame at a time), so a
+  // slow machine can't make the test miss the half-way point.
+  const { closing, turned } = await panel.evaluate(async (section, full) => {
+    const box = section.querySelector('#back-list')!.parentElement!;
+    const button = (name: string) => [...section.querySelectorAll('button')].find((b) => b.textContent?.trim() === name)!;
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    button('Hide').click();
+    let h = full;
+    for (let i = 0; i < 60 && !(h < full * 0.8 && h > full * 0.2); i++) { await frame(); h = box.getBoundingClientRect().height; }
+    button('See why').click();
+    await frame();
+    return { closing: h, turned: box.getBoundingClientRect().height };
+  }, open);
+  expect(closing).toBeLessThan(open * 0.8);
+  expect(closing).toBeGreaterThan(open * 0.2);
   expect(Math.abs(turned - closing)).toBeLessThan(open * 0.25); // no jump back to the top or bottom
   await expect.poll(() => list.evaluate((n) => Math.round(n.getBoundingClientRect().height)), { timeout: 2000 }).toBe(Math.round(open));
 });

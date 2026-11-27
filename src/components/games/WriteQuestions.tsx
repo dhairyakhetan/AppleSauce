@@ -476,7 +476,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
   const subjectName = checkSubject(details.subject).name;
   const boardsOn = [...new Set(list.map((c) => c.board))].sort();
   const boardOk = boardsOn.includes(boardName);
-  const classesOn = boardOk ? [...new Set(list.filter((c) => c.board === boardName).map((c) => c.class))].sort((a, b) => a - b) : [];
+  const classesOn = boardOk ? [...new Set(list.filter((c) => c.board === boardName).map((c) => c.class))].sort((a, b) => b - a) : []; // highest first
   const classOk = classNo !== null && classesOn.includes(classNo);
   const subjectsOn = classOk ? [...new Set(list.filter((c) => c.board === boardName && c.class === classNo).map((c) => c.subject))].sort(bySubject) : [];
   const subjectOk = subjectsOn.includes(subjectName);
@@ -937,7 +937,7 @@ function ChapterPicker({ open, setOpen, catalog, start, onCopy }: {
 
   const boards = uniq(list.map((c) => c.board)).sort();
   const board = fit(pick.board, boards);
-  const classes = uniq(list.filter((c) => c.board === board).map((c) => c.class)).sort((a, b) => a - b);
+  const classes = uniq(list.filter((c) => c.board === board).map((c) => c.class)).sort((a, b) => b - a); // highest first
   const cls = fit(Number(pick.cls), classes);
   const subjects = uniq(list.filter((c) => c.board === board && c.class === cls).map((c) => c.subject)).sort(bySubject);
   const subject = fit(pick.subject, subjects);

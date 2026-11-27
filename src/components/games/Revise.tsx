@@ -74,7 +74,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
   };
 
   const chapter = chapters.find((c) => c.id === pick.chapter) ?? chapters[0];
-  const classes = [...new Set(chapters.map((c) => c.cls))];
+  const classes = [...new Set(chapters.map((c) => c.cls))].sort((a, b) => Number(b) - Number(a)); // highest first
   const subjects = [...new Set(chapters.filter((c) => c.cls === chapter?.cls).map((c) => c.subject))];
   const inSubject = chapters.filter((c) => c.cls === chapter?.cls && c.subject === chapter?.subject);
   const open = (c: Chapter | undefined) => { if (c) setPick({ chapter: c.id, out: [] }); };
