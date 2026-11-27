@@ -140,7 +140,10 @@ export function draftOwnerKey(q: DraftQuestion | null | undefined, fetchedAt: nu
 export function planAnswer(input: PlanInput, ownerNow: string): AnswerPlan {
   const { question, drafts, draftsFor, mode } = input;
   if (draftsFor !== ownerNow) return { kind: 'refuse', why: 'wrong-question' };
-  if (mode !== 'fix' && !isEdited(question, drafts)) return { kind: 'pass' };
+  // Nothing changed is a plain pass, even when Fix it was open (audit CK-05, 27 Nov 2026): a checker who only opened Fix
+  // it to look closer must not be counted as having corrected the computer. A ticked typo box still goes the fix way, so
+  // the "change the words" rule can speak.
+  if (!isEdited(question, drafts) && !(mode === 'fix' && drafts.printedTypo)) return { kind: 'pass' };
 
   const savedNumber = drafts.number.trim() || null;
   const stored = question.body ?? '';

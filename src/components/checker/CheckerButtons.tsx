@@ -16,6 +16,7 @@ export function ActionButton({
   title,
   ariaLabel,
   ariaDisabled,
+  testId,
   type = 'button',
 }: {
   tone: ActionTone;
@@ -32,6 +33,8 @@ export function ActionButton({
   ariaLabel?: string;
   /** Looks switched off but still takes a tap, so the screen can say why it is off (a disabled button takes no tap at all). */
   ariaDisabled?: boolean;
+  /** data-testid, for tests and the browser checks. */
+  testId?: string;
   /** 'submit' inside a form, so Enter in a box presses it. */
   type?: 'button' | 'submit';
 }) {
@@ -42,6 +45,7 @@ export function ActionButton({
       disabled={disabled}
       aria-disabled={ariaDisabled || undefined}
       data-tour={tourId}
+      data-testid={testId}
       title={title}
       aria-label={ariaLabel}
       className={cn(actionToneClass(tone), ariaDisabled && 'cursor-not-allowed opacity-disabled active:scale-100', className)}

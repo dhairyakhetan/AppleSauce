@@ -3,7 +3,7 @@
 -- until it is pasted, the checker screen asks for the diagrams, gets nothing back and shows nothing extra.
 --
 -- Owner, 6 November 2026: "when i am checking questions and it has an accompanying diagram, it should als show to the
--- checker". Many questions checkers flag ("figure missing") already have their diagram cut out and stored (audit_figures,
+-- checker". Many questions checkersshow  flag ("figure missing") already have their diagram cut out and stored (audit_figures,
 -- files in the private audit-figures bucket; live check: 59 stored diagrams for the 92 flagged questions that sit with a
 -- checker or the HOD, every file present). The verify screen never asked for them: it only gets the crop of the question's
 -- words (source.snippet_object) and the whole page.

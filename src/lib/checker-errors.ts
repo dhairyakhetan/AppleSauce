@@ -91,8 +91,48 @@ export function checkerErrorAdvice(err: unknown): CheckerErrorAdvice {
       moveOn: false,
     };
   }
+  // The server's own plain sentence for a refusal it raised on purpose (for example "Say what is wrong in 500 characters or
+  // fewer"): shown as it is, instead of "try again", which could never work (audit CK-14, 27 Nov 2026).
+  if (code === '22023' && text.trim() !== '' && text.trim().length <= 300) {
+    return { message: text.trim(), moveOn: false };
+  }
   // A slow or hung request and any other unknown failure: never blame the internet, never show raw text.
   return { message: isSlowError(err) ? SLOW_ACTION_WORDS : 'That did not save this time. Try again in a minute.', moveOn: false };
+}
+
+export interface LoadFailure {
+  title: string;
+  /** One plain sentence. */
+  note: string;
+  /** Try again could work. False: the paper (or the account) is not available, so only a way out is offered. */
+  canRetry: boolean;
+}
+
+/**
+ * What a failed read of My papers, or of one paper's questions, says (audit CK-15, 27 Nov 2026). Every failure used to
+ * read "This is taking longer than it should" with a Try again button, which never works for a paper that went back to
+ * the pool: the server refuses it with 42501.
+ */
+export function listLoadFailure(err: unknown, what: 'list' | 'paper'): LoadFailure {
+  const { code, text } = parts(err);
+  if (code === '42501' || /not authorized|not assigned to you/i.test(text)) {
+    return what === 'paper'
+      ? {
+          title: 'This paper is not on your list any more',
+          note: 'You may have finished it, or it went back to the pool. Your earlier answers are kept. Pick another paper from your list.',
+          canRetry: false,
+        }
+      : {
+          title: 'Your account cannot check papers right now',
+          note: 'Sign in again, or ask an admin or your HOD.',
+          canRetry: false,
+        };
+  }
+  return {
+    title: what === 'paper' ? 'Could not load this paper' : 'Could not load your papers',
+    note: SLOW_WORDS,
+    canRetry: true,
+  };
 }
 
 /** The message when the next question could not be fetched at all. Before,

@@ -66,7 +66,7 @@ describe('4: what the My papers note promises', () => {
 describe('5: Undo and Looks right on a phone', () => {
   it('shows the word Undo on a phone and explains a switched-off button on a tap', () => {
     expect(verify).toContain('<span className="md:hidden">Undo</span>');
-    expect(verify).toContain("setNotice({ text: undoTitle(false, undoHeld), tone: 'warn' });");
+    expect(verify).toContain("setNotice({ text: undoTitle(false, undoHeld, stepBlocked), tone: 'warn' });");
     expect(verify).toContain('ariaDisabled={!canPass || marksInvalid}');
   });
 

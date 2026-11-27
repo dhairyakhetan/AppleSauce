@@ -46,15 +46,15 @@ describe('verifierQuestionDiagrams (the read)', () => {
     ]);
   });
 
-  it('never throws: a missing function, a refusal, a bad shape or a network failure all give an empty list', async () => {
+  it('a missing function or a bad shape is an empty list; a real failure throws, so the screen can try again and say so (audit CK-19)', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: '42883', message: 'function does not exist' } });
-    expect(await verifierQuestionDiagrams('q1')).toEqual([]);
-    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'Not authorized' } });
     expect(await verifierQuestionDiagrams('q1')).toEqual([]);
     rpc.mockResolvedValue({ data: { not: 'a list' }, error: null });
     expect(await verifierQuestionDiagrams('q1')).toEqual([]);
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'Not authorized' } });
+    await expect(verifierQuestionDiagrams('q1')).rejects.toBeTruthy();
     rpc.mockRejectedValue(new Error('Failed to fetch'));
-    expect(await verifierQuestionDiagrams('q1')).toEqual([]);
+    await expect(verifierQuestionDiagrams('q1')).rejects.toBeTruthy();
   });
 
   it('asks nothing for an empty question id', async () => {
@@ -193,7 +193,7 @@ describe('the verify screen draws it in both layouts', () => {
   });
 
   it('opens a tapped diagram in the same viewer as the crop', () => {
-    expect(screen).toContain('<QuestionDiagrams items={diagramShown} onEnlarge={(src, alt) => setLightbox({ src, alt })}');
+    expect(screen).toContain('<QuestionDiagrams items={diagramShown} failed={diagramsFailed} onEnlarge={(src, alt) => setLightbox({ src, alt })}');
   });
 });
 

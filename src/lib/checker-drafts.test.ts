@@ -76,10 +76,9 @@ describe('a marks-only or number-only fix never touches the words', () => {
     expect(p.patch.body).toBeNull();
   });
 
-  it('opening Fix it and saving without changing anything sends no words', () => {
+  it('opening Fix it and saving without changing anything is a plain pass, not a fix (audit CK-05)', () => {
     const p = plan(bag, draftsFromQuestion(bag), 'fix');
-    if (p.kind !== 'fix') throw new Error('expected a fix');
-    expect(p.patch.body).toBeNull();
+    expect(p.kind).toBe('pass');
   });
 
   it('words the checker really edited still lose only the repeated leading number', () => {
@@ -91,12 +90,10 @@ describe('a marks-only or number-only fix never touches the words', () => {
     expect(p.bodyChanged).toBe(true);
   });
 
-  it('an edit that is undone by hand sends no words', () => {
+  it('an edit that is undone by hand sends nothing at all: it is a plain pass (audit CK-05)', () => {
     const d = { ...draftsFromQuestion(bag), body: bag.body + 'x' };
     const back = { ...d, body: bag.body! };
-    const p = plan(bag, back);
-    if (p.kind !== 'fix') throw new Error('expected a fix');
-    expect(p.patch.body).toBeNull();
+    expect(plan(bag, back).kind).toBe('pass');
   });
 
   it('a lost-text question sends the confirmed reading', () => {

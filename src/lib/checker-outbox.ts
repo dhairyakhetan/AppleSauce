@@ -73,8 +73,14 @@ export interface OutboxState {
   sending: boolean;
   /** True when the first waiting verdict has failed at least once. */
   failing: boolean;
+  /** True when a waiting verdict has been refused with a bare "Not authorized" AUTH_TROUBLE_AFTER times or more: the
+   *  sign-in has probably lapsed or the person was switched off, and retrying alone will not help (audit CK-07). */
+  authTrouble: boolean;
   lastError: string | null;
 }
+
+/** Retries of a bare "Not authorized" before the screen says it is a sign-in problem. */
+export const AUTH_TROUBLE_AFTER = 3;
 
 export interface OutboxStorage {
   getItem(key: string): string | null;
@@ -201,7 +207,7 @@ export function createOutbox(opts: OutboxOptions): Outbox {
   let timer: unknown = null;
   let disposed = false;
   const listeners = new Set<() => void>();
-  let snapshot: OutboxState = { entries, sending, failing: false, lastError: null };
+  let snapshot: OutboxState = { entries, sending, failing: false, authTrouble: false, lastError: null };
 
   const persist = () => {
     try {
@@ -217,6 +223,7 @@ export function createOutbox(opts: OutboxOptions): Outbox {
       entries: [...entries],
       sending,
       failing: entries.some((e) => e.attempts > 0),
+      authTrouble: entries.some((e) => e.attempts >= AUTH_TROUBLE_AFTER && /^not authorized$/i.test((e.lastError ?? '').trim())),
       lastError: head?.lastError ?? entries.find((e) => e.lastError)?.lastError ?? null,
     };
     listeners.forEach((l) => l());
@@ -522,12 +529,29 @@ export interface OutboxHooks {
 }
 
 const hooksByKey = new Map<string, OutboxHooks>();
+/** The page's own hooks (the My papers screens, audit CK-02): used while no verify screen is open. */
+const baseHooksByKey = new Map<string, OutboxHooks>();
+
+/** A verify screen is closing: acks go back to the page's own hooks, if it has any, instead of a screen that is gone. */
+export function releaseOutboxHooks(scope: string, userId: string | undefined, hooks: OutboxHooks): void {
+  const key = outboxStorageKey(scope, userId);
+  const base = baseHooksByKey.get(key);
+  if (hooksByKey.get(key) === hooks && base) hooksByKey.set(key, base);
+}
 
 /** The outbox for this scope and user, created on first use. `hooks` always
- *  points at the newest screen, so an ack reaches the screen that is open now. */
-export function getOutbox(scope: string, userId: string | undefined, hooks: OutboxHooks): Outbox {
+ *  points at the newest screen, so an ack reaches the screen that is open now.
+ *  `base`: these are the page's own hooks (the list screens); they are used only while no verify screen has claimed the box. */
+export function getOutbox(scope: string, userId: string | undefined, hooks: OutboxHooks, opts: { base?: boolean } = {}): Outbox {
   const key = outboxStorageKey(scope, userId);
-  hooksByKey.set(key, hooks);
+  if (opts.base) {
+    const before = baseHooksByKey.get(key);
+    baseHooksByKey.set(key, hooks);
+    // Only when no verify screen has claimed the box (nobody has, or the page's own earlier hooks are active).
+    if (!hooksByKey.has(key) || hooksByKey.get(key) === before) hooksByKey.set(key, hooks);
+  } else {
+    hooksByKey.set(key, hooks);
+  }
   let box = registry.get(key);
   if (!box) {
     box = createOutbox({
@@ -550,4 +574,5 @@ export function resetOutboxRegistry(): void {
   registry.forEach((b) => b.dispose());
   registry.clear();
   hooksByKey.clear();
+  baseHooksByKey.clear();
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { UprightImage } from '@/components/checker/UprightImage';
 import {
@@ -32,9 +32,13 @@ export function PaperPageFlip({
   questionPage,
   className,
   title = WHOLE_PAPER_TITLE,
+  initialPages,
 }: {
   paperId: string;
   loadPages: (paperId: string) => Promise<PaperPage[]>;
+  /** The paper's pages when the caller already has them (its cache): shown at once, with no "Loading the paper" flicker
+   *  each time the card changes (audit CK-18, 27 Nov 2026). The load still runs, and replaces them when it answers. */
+  initialPages?: PaperPage[];
   pictureUrl: (path: string) => Promise<string | null>;
   /** The question's own page number when it is known, to open there. */
   questionPage?: number | null;
@@ -42,14 +46,17 @@ export function PaperPageFlip({
   /** Heading above the pages; the default says no page matched. */
   title?: string;
 }) {
-  const [pages, setPages] = useState<PaperPage[] | null>(null);
+  const [pages, setPages] = useState<PaperPage[] | null>(initialPages ?? null);
   const [failed, setFailed] = useState(false);
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(() => (initialPages ? startPageIndex(initialPages, questionPage) : 0));
   const [attempt, setAttempt] = useState(0);
+  const seeded = useRef(Boolean(initialPages));
 
   useEffect(() => {
     let cancelled = false;
-    setPages(null);
+    // The first run keeps the pages it was given; a retry, or another paper, starts from "loading".
+    if (!seeded.current) setPages(null);
+    seeded.current = false;
     setFailed(false);
     loadPages(paperId)
       .then((p) => {

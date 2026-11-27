@@ -20,7 +20,18 @@ export type AskState =
   /** The database part is not pasted yet. */
   | { kind: 'off' };
 
-export function AskForPapersView({ state, busy, onAsk }: { state: AskState; busy?: boolean; onAsk: () => void }) {
+export function AskForPapersView({
+  state,
+  busy,
+  onAsk,
+  caughtUp = true,
+}: {
+  state: AskState;
+  busy?: boolean;
+  onAsk: () => void;
+  /** False for a checker who has not checked anything yet: "You are all caught up. Thank you" would not fit (audit CK-11). */
+  caughtUp?: boolean;
+}) {
   if (state.kind === 'off') {
     return (
       <p className="mx-auto mt-4 max-w-md text-pretty text-[13px] text-warm-secondary" data-testid="ask-off">
@@ -41,7 +52,9 @@ export function AskForPapersView({ state, busy, onAsk }: { state: AskState; busy
   }
   return (
     <div className="mt-4 flex flex-col items-center gap-2" data-testid="ask-ready">
-      <p className="max-w-md text-pretty text-[14px] text-foreground">You are all caught up. Thank you for the good work.</p>
+      <p className="max-w-md text-pretty text-[14px] text-foreground">
+        {caughtUp ? 'You are all caught up. Thank you for the good work.' : 'If you are free to check papers, tell your HOD.'}
+      </p>
       <ActionButton tone="brand" onClick={onAsk} disabled={busy}>
         {busy ? 'Asking...' : 'Ask my HOD for more papers'}
       </ActionButton>
@@ -61,7 +74,18 @@ export function askedMessage(askedAt: string): string {
   return `You asked${when}. Your HOD can see you are free.`;
 }
 
-export function AskForPapers({ api, scope }: { api: PaperAsksApi; scope: string }) {
+export function AskForPapers({
+  api,
+  scope,
+  caughtUp = true,
+  papersListed = false,
+}: {
+  api: PaperAsksApi;
+  scope: string;
+  caughtUp?: boolean;
+  /** My papers still lists papers (all finished or waiting on the HOD): shapes the answer an older database gives. */
+  papersListed?: boolean;
+}) {
   const qc = useQueryClient();
   const key = ['paper-ask-mine', scope] as const;
   const mine = useQuery({ queryKey: key, queryFn: api.mine, retry: false, staleTime: 30_000 });
@@ -69,7 +93,7 @@ export function AskForPapers({ api, scope }: { api: PaperAsksApi; scope: string 
   const ask = useMutation({
     mutationFn: api.ask,
     onSuccess: (outcome) => {
-      setMessage(askOutcomeMessage(outcome));
+      setMessage(askOutcomeMessage(outcome, { papersListed }));
       void qc.invalidateQueries({ queryKey: key });
     },
   });
@@ -84,5 +108,5 @@ export function AskForPapers({ api, scope }: { api: PaperAsksApi; scope: string 
   else if (mine.data) state = { kind: 'asked', message: askedMessage(mine.data) };
   else state = { kind: 'ready', problem: ask.isError ? askFailureMessage(ask.error) : null };
 
-  return <AskForPapersView state={state} busy={ask.isPending} onAsk={() => ask.mutate()} />;
+  return <AskForPapersView state={state} busy={ask.isPending} onAsk={() => ask.mutate()} caughtUp={caughtUp} />;
 }
