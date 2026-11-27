@@ -18,6 +18,13 @@ import { isComingSoon } from '@/lib/readable-papers';
  *  PastPapers.tsx's merged `Paper` (papers-table rows AND bank rows folded
  *  into the same interface) and a bank row mapped straight for the home
  *  rail satisfy it. */
+/** The exam kind as a person should read it: nothing for a blank or "Unknown" value (site-wide audit B3 — cards said
+ *  "Maths: Unknown" and "Unknown · 54 questions"). */
+export function examLabel(examType: string | null | undefined): string {
+  const t = String(examType ?? '').trim();
+  return /^(unknown|year-unknown|n\/a|none)$/i.test(t) ? '' : t;
+}
+
 export interface CoverSourcePaper {
   id: string;
   title: string;
@@ -66,7 +73,7 @@ export function coverPaper<T extends CoverSourcePaper>(p: T): T {
     ...p,
     subject: schoolIsBoard && hasYear(year) ? year : (source ?? p.subject),
     board: schoolIsBoard ? p.board : [p.board, hasYear(year) ? year : null].filter(Boolean).join(' · '),
-    title: p.exam_type.replace(/ Examination$/, '').replace(/^Pre-board.*/, 'Pre-board'),
+    title: examLabel(p.exam_type).replace(/ Examination$/, '').replace(/^Pre-board.*/, 'Pre-board') || 'Question paper',
     year: `${p._questions} questions` as unknown as number,
   };
 }

@@ -151,6 +151,16 @@ export default function Contact() {
               size="compact"
             />
 
+            {/* Said before anyone types: this form opens the visitor's own email app. With none set up (common on shared
+                phones and desktops) nothing would happen, so the direct address is first, not only after the press. */}
+            <p className="mt-3 text-[14px] text-warm-secondary" data-testid="contact-how">
+              This form opens your email app with the message ready to send. No email app on this device? Write to{' '}
+              <a href="mailto:ngo.aquaterra@gmail.com" className="font-semibold text-brand-blue underline underline-offset-2">
+                ngo.aquaterra@gmail.com
+              </a>{' '}
+              or WhatsApp us below.
+            </p>
+
             <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-[14px]">
               <div className="grid gap-[14px] sm:grid-cols-2">
                 <Field label="Your name" error={nameField.error} required>

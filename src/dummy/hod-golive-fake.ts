@@ -13,6 +13,7 @@
 
 import type { AiTrustOverall, AssignmentExplanation, HodAiRedoItem, HodCheck, HodDeskCounts, HodLivePaper, HodNeedsQuestion, HodNeedsYouPaper, HodPreview, HodReadyPaper, HodStudentUpload, HodTrailRow, OverrideMark, PreviewHeader, PreviewQuestion, TrailStage, UploadStatus } from '@/lib/hod-publish';
 import { CHECKS, OVERRIDE_MAX_REASON, OVERRIDE_MIN_REASON, allChecksPass, fieldProblem, PUBLISH_FIELDS, LIVE_FIELDS, normaliseChecks } from '@/lib/hod-publish';
+import type { UnqueuedPaper } from '@/lib/hod-api';
 import { dummyPageDataUrl, dummyPictureDataUrl } from '@/dummy/checker-fixtures';
 import type { StagePictureItem } from '@/lib/stage-pictures';
 
@@ -395,6 +396,8 @@ export interface GoLiveFake {
     aiRedoList(): Promise<HodAiRedoItem[]>;
     readyPapers(): Promise<HodReadyPaper[]>;
     unqueuedCount(): Promise<number>;
+    queuePaper(id: string): Promise<void>;
+    unqueuedPapers(): Promise<UnqueuedPaper[] | null>;
     paperPreview(id: string): Promise<HodPreview>;
     updatePublishMeta(id: string, field: string, value: string): Promise<void>;
     approvePaper(id: string, note?: string, confirmLeftOut?: boolean): Promise<{ live_bank_paper_id: string | null; question_count: number }>;
@@ -758,6 +761,31 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
       // Same rule as the server: not queued, nothing open, at least one passed question.
       return papers.filter((p) => p.approval === 'none' && real(p).some((x) => x.state === 'passed') && !real(p).some(isOpen)).length;
     },
+    async unqueuedPapers() {
+      return papers
+        .filter((p) => p.approval === 'none' && real(p).some((x) => x.state === 'passed') && !real(p).some(isOpen))
+        .map((p) => ({
+          audit_paper_id: p.id,
+          title: p.title,
+          school: p.header.school ?? null,
+          cls: p.header.cls ?? null,
+          subject: p.header.subject ?? null,
+          passed_count: real(p).filter((x) => x.state === 'passed').length,
+          left_out: real(p).filter((x) => x.state === 'set_aside').length,
+        }));
+    },
+    // Same rules as hod_queue_paper (20261127110000).
+    async queuePaper(id) {
+      const p = find(id);
+      if (p.approval === 'awaiting') return;
+      if (p.approval !== 'none') throw pgError('This paper is already live.', '55000');
+      const open = real(p).filter(isOpen).length;
+      if (open > 0) throw pgError(`${open} ${open === 1 ? 'question is' : 'questions are'} still open. Settle every question first.`, '55000');
+      if (!real(p).some((x) => x.state === 'passed')) throw pgError('No question is passed yet. At least one must be passed.', '55000');
+      p.approval = 'awaiting';
+      p.queued_at = new Date().toISOString();
+      record(`queue ${id}`);
+    },
     async paperPreview(id) {
       const p = find(id);
       const rs = real(p);
@@ -765,7 +793,7 @@ export function createGoLiveFake(record: (what: string) => void, ckNames: (id: s
         paper: {
           audit_paper_id: p.id,
           title: p.title,
-          approval_state: p.approval === 'none' ? 'queued' : p.approval,
+          approval_state: p.approval === 'none' ? null : p.approval,
           kind: p.kind,
           queued_at: p.queued_at,
           live_bank_paper_id: p.live_id,

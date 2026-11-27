@@ -309,7 +309,8 @@ export function AdminCheckersPage({
   async function handleRemove(row: CheckerAdminRow) {
     const ok = await confirm({
       title: `Remove ${row.email} as a checker?`,
-      description: 'They will no longer be able to open the verifying screen. This does not undo any question they already verified.',
+      description:
+        'They will no longer be able to open the verifying screen. Any papers they hold go back to Papers nobody has, a few minutes later, ready to be given to someone else. This does not undo any question they already verified.',
       confirmLabel: 'Remove checker',
     });
     if (!ok) return;

@@ -29,7 +29,7 @@ type Ink = {
   /** The highlighted span: a block of the opposite value. */
   markBg: string;
   markText: string;
-  /** Eyebrow + "Skip" ink — the same hue at 60%. */
+  /** Eyebrow + "Skip" ink — the same hue at 82% (it was 60 to 65%, about 3.1:1 on orange, below the 4.5:1 minimum). */
   quiet: string;
   /** The logo needs inverting on the two dark fills. */
   onDark: boolean;
@@ -46,12 +46,12 @@ type Ink = {
 const BRAND_INK: Ink = {
   fill: 'bg-brand', text: 'text-[#1F1F1F]',
   markBg: 'bg-panel', markText: 'text-[#FCFAF7]',
-  quiet: 'text-[rgba(31,31,31,.6)]', onDark: false,
+  quiet: 'text-[rgba(31,31,31,.82)]', onDark: false,
 };
 const WHATSAPP_INK: Ink = {
   fill: 'bg-whatsapp', text: 'text-whatsapp-text',
   markBg: 'bg-[#0B3D1F]', markText: 'text-[#FCFAF7]',
-  quiet: 'text-[rgba(11,61,31,.65)]', onDark: false,
+  quiet: 'text-[rgba(11,61,31,.82)]', onDark: false,
 };
 const INDIGO_INK: Ink = {
   fill: 'bg-brand-blue', text: 'text-white',
@@ -61,7 +61,7 @@ const INDIGO_INK: Ink = {
 const MINT_INK: Ink = {
   fill: 'bg-mint-solid', text: 'text-[#0B3D1F]',
   markBg: 'bg-[#0B3D1F]', markText: 'text-[#FCFAF7]',
-  quiet: 'text-[rgba(11,61,31,.65)]', onDark: false,
+  quiet: 'text-[rgba(11,61,31,.82)]', onDark: false,
 };
 const BONE_INK: Ink = {
   fill: 'bg-card', text: 'text-foreground',

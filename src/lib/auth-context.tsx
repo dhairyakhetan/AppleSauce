@@ -21,6 +21,10 @@ interface AuthContextType {
   loading: boolean;
   profile: UserProfile | null;
   profileLoading: boolean;
+  /** True when every try at reading the profile failed (a connection problem), as opposed to "this person has no role yet". */
+  profileFailed: boolean;
+  /** Read the profile again after a failure. */
+  retryProfile: () => void;
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -41,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileFailed, setProfileFailed] = useState(false);
+  const [profileRetry, setProfileRetry] = useState(0);
   const profileFetchedForRef = useRef<string | null>(null);
   // AuthProvider sits inside QueryClientProvider (App.tsx). Used on sign-out only.
   const queryClient = useQueryClient();
@@ -51,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setProfile(null);
       setProfileLoading(false);
+      setProfileFailed(false);
       profileFetchedForRef.current = null;
       return;
     }
@@ -62,10 +69,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cached) {
       setProfile(cached);
       setProfileLoading(false);
+      setProfileFailed(false);
       return;
     }
 
     setProfileLoading(true);
+    setProfileFailed(false);
     const userId = user.id;
     // A failed read is tried again (see profile-fetch.ts). Without that, one
     // wobble left the person with no role until they reloaded the page.
@@ -81,13 +90,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // The person signed out or changed while we waited: this answer is stale.
       if (profileFetchedForRef.current !== userId) return;
       setProfile(p);
+      setProfileFailed(failed);
       if (p) setCache(cacheKey, p, CACHE_TTL.USER_PROFILE);
       // Every try failed: forget that we "already fetched", so the next change
       // to the signed-in user (for example a refreshed sign-in) tries once more.
       if (failed) profileFetchedForRef.current = null;
       setProfileLoading(false);
     });
-  }, [user, loading]);
+  }, [user, loading, profileRetry]);
 
   useEffect(() => {
     // Handle OAuth callback - check for hash fragment first
@@ -478,6 +488,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       profile,
       profileLoading,
+      profileFailed,
+      retryProfile: () => {
+        profileFetchedForRef.current = null;
+        setProfileRetry((n) => n + 1);
+      },
       signInWithGoogle, 
       signUpWithEmail, 
       signInWithEmail,

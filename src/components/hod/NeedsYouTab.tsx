@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { MathText } from '@/components/papers/math-text';
 import { OptionList } from '@/components/checker/OptionList';
-import { BackLink, EmptyNote, ListSkeleton, LoadError, Notice, QuestionPicture, ago, deskLink, quietButton } from '@/components/hod/HodShared';
+import { BackLink, EmptyNote, ListSearch, ListSkeleton, LoadError, Notice, QuestionPicture, ago, deskLink, quietButton } from '@/components/hod/HodShared';
 import { HodQuestionDiagrams, useHodDiagrams } from '@/components/hod/HodQuestionDiagrams';
 import { QuestionFixForm } from '@/components/hod/QuestionFixForm';
 import { RouteTrail } from '@/components/hod/RouteTrail';
@@ -22,6 +22,7 @@ import {
   whyItNeedsYou,
   type HodNeedsQuestion,
   type HodNeedsYouPaper,
+  matchesSearch,
 } from '@/lib/hod-publish';
 import { cn } from '@/lib/utils';
 import { loadGate } from '@/lib/verifier-papers';
@@ -31,12 +32,12 @@ import { NEEDS_SORTS, nextNeedsPaper, sortNeedsPapers, type NeedsSort } from '@/
    shows each paper with how many are waiting and where it is on the route. Open a
    paper to see its questions one by one, each with the printed picture (or the
    whole paper when no page matched) and four ways to settle it: Pass, Fix, Send
-   back to students, Set aside. After each one the card folds into a line with
+   back to students, Leave out. After each one the card folds into a line with
    Undo, which puts the question back in the list. Undo is honest about what it
    can do: it is not offered after a send back (the question is with the students
    then) or after a pass on a paper that is already live (the server refuses it),
    and after a Fix it says the word changes stay. On a live paper a pass puts the
-   question on the site at once, so it asks first, and Set aside is not offered
+   question on the site at once, so it asks first, and Leave out is not offered
    (the server only lets a live paper's question be passed). The question text is
    shown as stored and sent only when changed, exactly as typed. */
 
@@ -66,6 +67,15 @@ export function undoNote(kind: UndoKind): string | null {
       return 'It is on the site now. A question on a live paper cannot be put back from here.';
     default:
       return null;
+  }
+}
+
+/** The fix was saved but the pass that followed it was not (fix then pass is two calls). */
+export class WordsSavedNotPassed extends Error {
+  original: unknown;
+  constructor(original: unknown) {
+    super('words saved, pass failed');
+    this.original = original;
   }
 }
 
@@ -109,7 +119,14 @@ function QuestionCard({
       await action();
       if (done) onSettled(done, undo);
     } catch (err) {
-      setError(errorWords(err));
+      if (err instanceof WordsSavedNotPassed) {
+        // Fix then pass: the words went in, the pass did not. The card still holds the old version number, so pressing
+        // Save again would fail with "someone else saved this first". Say what happened and let the card reload.
+        setPanel(null);
+        setError(`Your words are saved. The question is not passed yet: ${errorWords(err.original)} Press Pass when it reads right.`);
+      } else {
+        setError(errorWords(err));
+      }
       // A refusal often means the card is out of date.
       onChanged();
     } finally {
@@ -186,8 +203,13 @@ function QuestionCard({
               onCancel={cancel}
               onSave={(changes) =>
                 void run(async () => {
-                  if (Object.keys(changes).length > 0) await api.editQuestion(q.id, q.version, changes, '');
-                  await api.setQuestionState(q.id, 'pass');
+                  const edited = Object.keys(changes).length > 0;
+                  if (edited) await api.editQuestion(q.id, q.version, changes, '');
+                  try {
+                    await api.setQuestionState(q.id, 'pass');
+                  } catch (err) {
+                    throw edited ? new WordsSavedNotPassed(err) : err;
+                  }
                 }, `Question ${label} fixed and passed.`, paperLive ? 'none-live' : Object.keys(changes).length > 0 ? 'reopen-words-stay' : 'reopen')
               }
               secondary={{
@@ -269,7 +291,7 @@ function QuestionCard({
       ) : null}
       {panel === null && q.ai_redo_state === 'approved' ? (
         <p className="mt-3 rounded-2xl bg-card px-4 py-3 text-[13px] text-warm-secondary" data-testid="ai-redo-waiting">
-          Waiting for the AI to read this again. You can still set it aside if you want to publish the paper without it.
+          Waiting for the AI to read this again. You can still leave it out if you want to publish the paper without it.
         </p>
       ) : null}
 
@@ -297,7 +319,7 @@ function QuestionCard({
             ) : null}
             {paperLive ? null : (
               <button type="button" className={quietButton} disabled={busy} onClick={() => setPanel('aside')}>
-                Set aside
+                Leave out
               </button>
             )}
           </>
@@ -482,8 +504,10 @@ function PaperQuestions({
           {openCount === 0 ? (
             <div className="mb-3 space-y-2">
               <Notice tone="good">
-                {merged.length > 0 ? 'Nothing else on this paper needs you.' : 'Nothing on this paper needs you.'} If every question is settled it moves on to
-                Ready to go live.
+                {merged.length > 0 ? 'Nothing else on this paper needs you.' : 'Nothing on this paper needs you.'}{' '}
+                {stage === 'ready'
+                  ? 'It is on the Ready to go live list.'
+                  : 'When every question is settled, open the paper to put it on the Ready to go live list.'}
               </Notice>
               <div className="flex flex-wrap gap-2">
                 {nextPaper ? (
@@ -497,7 +521,7 @@ function PaperQuestions({
                   </Link>
                 ) : null}
                 <Link to={deskLink('ready', paperId)} className={nextPaper ? actionToneClass('dark') : cn(actionToneClass('brand'), 'h-[46.5px]')}>
-                  Open it in Ready to go live
+                  {stage === 'ready' ? 'Open it in Ready to go live' : 'Open it and put it on the Ready list'}
                 </Link>
                 <Link to={deskLink('needs-you')} className={quietButton}>
                   Back to the list
@@ -544,11 +568,13 @@ function PaperList({ api, scope, sort, onSort }: { api: HodApi; scope: string; s
   const q = useQuery({ queryKey: NEEDS_YOU_KEY(scope), queryFn: () => api.needsYouPapers(), staleTime: 0, refetchOnMount: true });
   const trailQ = useQuery({ queryKey: TRAIL_KEY(scope), queryFn: () => api.paperTrail(), staleTime: 30_000 });
   const trail = useMemo(() => trailByPaper(trailQ.data ?? []), [trailQ.data]);
+  const [search, setSearch] = useState('');
   // loadGate, not isLoading: offline pauses a read (isLoading stays false) and "Nothing is waiting for you" must not show.
   if (loadGate(q) === 'loading') return <ListSkeleton label="Loading the papers that need you" />;
   if (loadGate(q) === 'error') return <LoadError what="The papers that need you" onRetry={() => void q.refetch()} />;
-  const list = sortNeedsPapers(q.data ?? [], sort);
-  if (list.length === 0) {
+  const everyPaper = sortNeedsPapers(q.data ?? [], sort);
+  const list = everyPaper.filter((p) => matchesSearch(search, [p.title, p.school, p.cls]));
+  if (everyPaper.length === 0) {
     return (
       <EmptyNote>
         Nothing is waiting for you. When students send a question up, or the computer cannot settle one, its paper appears here.
@@ -578,6 +604,8 @@ function PaperList({ api, scope, sort, onSort }: { api: HodApi; scope: string; s
           </select>
         </label>
       </div>
+      {everyPaper.length > 4 ? <ListSearch value={search} onChange={setSearch} /> : null}
+      {list.length === 0 ? <EmptyNote>No paper matches. Clear the search.</EmptyNote> : null}
       <ul className="space-y-3">
         {list.map((p) => (
           <li key={p.audit_paper_id} className="rounded-[18px] bg-muted shadow-card p-4" data-testid="needs-paper">

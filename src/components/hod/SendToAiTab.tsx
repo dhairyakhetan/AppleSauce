@@ -99,7 +99,7 @@ function Card({ item, api, scope }: { item: HodAiRedoItem; api: HodApi; scope: s
     item.marks != null ? `${item.marks} ${item.marks === 1 ? 'mark' : 'marks'}` : null,
     item.state === 'requested' ? 'Waiting for an HOD' : item.state === 'approved' ? 'Waiting for the AI' : 'Redone by the AI',
     item.live_copy ? 'Live Maths copy' : null,
-    item.set_aside ? 'Set aside so the paper can go live' : null,
+    item.set_aside ? 'Left out so the paper can go live' : null,
   ].filter((x): x is string => Boolean(x));
 
   async function decide(approve: boolean) {

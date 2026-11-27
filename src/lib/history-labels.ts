@@ -253,7 +253,7 @@ export const STATUS_LABELS: Record<string, string> = {
   passed: 'passed',
   approved: 'approved',
   rejected: 'rejected',
-  set_aside: 'set aside',
+  set_aside: 'left out',
   held: 'held back',
 };
 

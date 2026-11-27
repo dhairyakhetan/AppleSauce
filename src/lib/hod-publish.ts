@@ -916,7 +916,38 @@ export function overrideProblemsText(failed: Pick<HodCheck, 'label'>[]): string 
 /** What to show when Publish anyway did not go through. Not switched on is said plainly; everything else is the server's words. */
 export function overrideErrorWords(err: unknown): string {
   if (isNotSwitchedOn(err)) return OVERRIDE_NOT_ON_WORDS;
-  return `Not published. The paper is still waiting for you. ${errorWords(err)}`;
+  return notPublishedWords(err);
+}
+
+/**
+ * "Not published" plus the server's sentence. The old line also said "The paper is still waiting for you", which
+ * contradicted the server when the answer was "This paper is not waiting to go live" (HOD audit, 27 Nov 2026).
+ */
+export function notPublishedWords(err: unknown): string {
+  return `Not published. Nothing was changed. ${errorWords(err)}`;
+}
+
+/** The line shown when "Put this paper on the Ready list" is not switched on in the database yet. */
+export const QUEUE_NOT_ON_WORDS =
+  'Putting a paper on the Ready list is not switched on yet. Nothing was changed. Tell the owner.';
+
+/** What to show when "Put this paper on the Ready list" did not go through. */
+export function queueErrorWords(err: unknown): string {
+  if (isNotSwitchedOn(err)) return QUEUE_NOT_ON_WORDS;
+  return errorWords(err);
+}
+
+/**
+ * Is the paper on the Ready to go live list? A paper that was never put there (approval_state null) can still be opened and
+ * edited in the preview, but it cannot be published until it is on the list: the server refuses with "not waiting to go live".
+ */
+export function paperIsQueued(approvalState: string | null | undefined): boolean {
+  return approvalState === 'awaiting';
+}
+
+/** A paper that can be opened here but is not on the Ready list yet. */
+export function paperNotOnList(paper: { approval_state: string | null; is_live: boolean; kind: string | null }): boolean {
+  return paper.approval_state === null && !paper.is_live && paper.kind !== 'retro';
 }
 
 /** One paper that was published anyway: the small marker in Live papers and the line under it. */
@@ -968,11 +999,33 @@ export function leftOutConfirmText(count: number): string {
 
 /** The banner above Ready to go live: papers whose questions are all checked but that no queue run has
  *  put on the desk yet. Says nothing when the count is 0 or could not be read. */
+export function unqueuedBannerListText(count: number): string | null {
+  if (!Number.isFinite(count) || count <= 0) return null;
+  return count === 1
+    ? '1 paper is fully checked but is not on this list yet. Open it below and put it on the list.'
+    : `${count} papers are fully checked but are not on this list yet. Open each one below and put it on the list.`;
+}
+
+/** The banner when the server cannot name the papers (the database file is not pasted yet): only the count, and who to tell. */
 export function unqueuedBannerText(count: number): string | null {
   if (!Number.isFinite(count) || count <= 0) return null;
   return count === 1
     ? '1 more paper is fully checked but is not on this list yet. The owner adds it here. Tell the owner if it is still missing tomorrow.'
     : `${count} more papers are fully checked but are not on this list yet. The owner adds them here. Tell the owner if they are still missing tomorrow.`;
+}
+
+/**
+ * Does a paper match what the HOD typed in the search box? Every word typed must appear in at least one of the fields
+ * (title, school, class, subject, exam, year...), ignoring case. An empty search matches everything.
+ */
+export function matchesSearch(query: string, fields: (string | number | null | undefined)[]): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const hay = fields
+    .filter((f): f is string | number => f !== null && f !== undefined)
+    .map((f) => String(f).toLowerCase())
+    .join(' | ');
+  return words.every((w) => hay.includes(w));
 }
 
 /** "3 questions left out", "1 question left out", or null when none are. */

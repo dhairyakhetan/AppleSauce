@@ -594,7 +594,7 @@ export default function StudentDashboard() {
                   />
                 ))}
               </div>
-              {!hasMoreSavedTeachers && <ListEnd count={likedCount} />}
+              {!hasMoreSavedTeachers && <ListEnd count={likedCount} what="saved teachers" />}
             </>
           ) : (
             <ListEmpty line="No saved teachers yet. Tap the mark on any card and they wait for you here." />

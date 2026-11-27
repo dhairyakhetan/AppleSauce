@@ -2276,7 +2276,7 @@ export default function Browse({ manageSeo = true, pageContext, seo, locality }:
                       )}
                     </div>
                   ) : (
-                    <ListEnd count={papers.length} />
+                    <ListEnd count={papers.length} what="papers" />
                   )}
                 </>
               ) : (

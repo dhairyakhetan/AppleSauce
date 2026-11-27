@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { classLabel } from '@/lib/class-label';
+import { diffSubjects } from '@/lib/subject-diff';
+import { ProfileLoadFailed } from '@/components/ProfileLoadFailed';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Settings, LogOut, ShieldCheck, X, Heart, UserRound, ChevronRight, Loader2 } from 'lucide-react';
@@ -160,7 +163,7 @@ export default function Account() {
   const { likedTeacherIds, likedCount, loading: likesLoading, toggleLike } = useLikes();
   const queryClient = useQueryClient();
 
-  useRequireRole();
+  const { profileFailed, retryProfile } = useRequireRole();
 
   // Handoff AC-007: this route renders its own eyes panel, replacing
   // AppShell's default pre-footer.
@@ -313,7 +316,7 @@ export default function Account() {
   const roleLabel = profile?.role === 'guardian' ? 'Guardian' : profile?.role === 'teacher' ? 'Teacher' : 'Student';
   const subLineParts = useMemo(() => {
     const grade = profile?.role === 'guardian' ? profile?.student_grade : profile?.grade;
-    return [roleLabel, grade ? `Class ${grade}` : null].filter(Boolean);
+    return [roleLabel, classLabel(grade)].filter(Boolean);
   }, [profile, roleLabel]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -440,15 +443,20 @@ export default function Account() {
         .eq('id', user.id);
       if (profileError) throw profileError;
 
-      // Same delete-then-insert as StudentDashboard: stop on a failed delete
-      // rather than inserting on top of whatever rows are already there.
-      const { error: deleteError } = await supabase.from('student_subjects').delete().eq('student_id', user.id);
-      if (deleteError) throw deleteError;
-      if (selectedSubjectIds.length > 0) {
+      // Add what is new FIRST, then remove only what was taken off. The old delete-everything-then-insert left the
+      // student with no subjects at all when the connection dropped between the two calls (site-wide audit B6).
+      const { data: existing, error: readError } = await supabase.from('student_subjects').select('subject_id').eq('student_id', user.id);
+      if (readError) throw readError;
+      const { toAdd, toRemove } = diffSubjects((existing ?? []).map((r) => r.subject_id as string), selectedSubjectIds);
+      if (toAdd.length > 0) {
         const { error: insertError } = await supabase
           .from('student_subjects')
-          .insert(selectedSubjectIds.map((subject_id) => ({ student_id: user.id, subject_id })));
+          .insert(toAdd.map((subject_id) => ({ student_id: user.id, subject_id })));
         if (insertError) throw insertError;
+      }
+      if (toRemove.length > 0) {
+        const { error: deleteError } = await supabase.from('student_subjects').delete().eq('student_id', user.id).in('subject_id', toRemove);
+        if (deleteError) throw deleteError;
       }
     },
     onSuccess: () => {
@@ -502,6 +510,8 @@ export default function Account() {
   };
 
   if (!user) return null;
+  // The account could not be read: say so with a retry, never the role chooser (site-wide audit B1).
+  if (profileFailed) return <ProfileLoadFailed onRetry={retryProfile} />;
 
   const counts: Record<TabKey, number> = {
     saved: likedCount,
@@ -615,7 +625,7 @@ export default function Account() {
                     </li>
                   ))}
                 </ul>
-                <ListEnd count={savedTeachers.length} />
+                <ListEnd count={savedTeachers.length} what="saved teachers" />
               </>
             ) : (
               /* Handoff AC-005: empty states are their own tinted panel —

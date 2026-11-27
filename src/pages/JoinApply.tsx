@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { stepProblems } from '@/lib/join-apply-steps';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -185,6 +186,12 @@ export default function JoinApply() {
   );
 
   const [step, setStep] = useState(() => readDraft()?.step ?? 0);
+  /** What is missing on the current step, after a press of Save and continue. Cleared when the step changes. */
+  const [stepErrors, setStepErrors] = useState<string[]>([]);
+  const stepErrorsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setStepErrors([]);
+  }, [step]);
   const [draftRestored] = useState(() => readDraft() !== null);
   const [formData, setFormData] = useState<FormData>(() => ({
     name: '',
@@ -622,87 +629,15 @@ export default function JoinApply() {
   const isLastStep = step === STEPS.length - 1;
 
   const validateStep = (stepIndex: number): boolean => {
-    if (stepIndex === 0) {
-      if (!formData.name.trim()) {
-        toast.error('Please enter your name');
-        return false;
-      }
-      if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-        toast.error('Please enter a valid email address');
-        return false;
-      }
-      if (!formData.sir_maam) {
-        toast.error("Please select Sir or Ma'am");
-        return false;
-      }
-      if (formData.phone_number.replace(/\D/g, '').length !== 10) {
-        toast.error('WhatsApp number must be exactly 10 digits');
-        return false;
-      }
-      // Photo is encouraged (copy: "doubles replies"), not required — pages.md
-      // §13 J1 lists it as a field but the spec's validation column only
-      // requires name + phone. It used to hard-block here; it no longer does.
-      return true;
+    // Every problem on the step at once, kept on screen in an alert (a toast alone disappears and marks nothing).
+    const problems = stepProblems(stepIndex, formData);
+    setStepErrors(problems);
+    if (problems.length > 0) {
+      window.setTimeout(() => stepErrorsRef.current?.focus(), 0);
+      return false;
     }
-    if (stepIndex === 1) {
-      if (!formData.subjects.trim()) {
-        toast.error('Please select at least one subject');
-        return false;
-      }
-      if (!formData.school_boards_catered.trim()) {
-        toast.error('Please select at least one school board');
-        return false;
-      }
-      if (!formData.classes_taught_for_backend.trim()) {
-        toast.error('Please select at least one class');
-        return false;
-      }
-      if (!formData.class_size.trim()) {
-        toast.error('Please select at least one structure of classes option');
-        return false;
-      }
-      return true;
-    }
-    if (stepIndex === 2) {
-      if (!formData.location_v2) {
-        toast.error('Please select a location option');
-        return false;
-      }
-      if (formData.location_v2 === "STUDENT'S HOME TUTORING ONLY" && !formData.students_home_areas.trim()) {
-        toast.error("Please select at least one area for Student's Home Tutoring");
-        return false;
-      }
-      if (formData.location_v2 === "TEACHER'S HOME TUTORING" && !formData.tutors_home_areas.trim()) {
-        toast.error("Please select at least one area for Teacher's Home Tutoring");
-        return false;
-      }
-      if (formData.location_v2 === 'BOTH OPTIONS LISTED') {
-        if (!formData.students_home_areas.trim()) {
-          toast.error("Please select at least one area for Student's Home Tutoring");
-          return false;
-        }
-        if (!formData.tutors_home_areas.trim()) {
-          toast.error("Please select at least one area for Teacher's Home Tutoring");
-          return false;
-        }
-      }
-      if (!formData.mode_of_teaching.trim()) {
-        toast.error('Please select at least one mode of teaching');
-        return false;
-      }
-      return true;
-    }
-    if (stepIndex === 3) {
-      const monthlyFee = parseInt(formData.min_fees.replace(/\D/g, ''), 10);
-      if (!formData.min_fees.trim() || Number.isNaN(monthlyFee) || monthlyFee <= 0) {
-        toast.error('Please enter a monthly fee greater than ₹0');
-        return false;
-      }
-      if (!formData.mou_consent) {
-        // MOU lives on the final step, but fee/terms is where we ask them to read it isn't blocking here.
-      }
-      return true;
-    }
+    // Photo is encouraged (copy: "doubles replies"), not required — pages.md §13 J1 lists it as a field but the
+    // spec's validation column only requires name + phone.
     return true;
   };
 
@@ -777,6 +712,22 @@ export default function JoinApply() {
           }}
         >
           <div ref={stepScrollRef}>
+            {stepErrors.length > 0 ? (
+              <div
+                ref={stepErrorsRef}
+                role="alert"
+                tabIndex={-1}
+                data-testid="step-errors"
+                className="mb-4 rounded-2xl bg-destructive/10 p-4 text-[14px] text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <p className="font-bold">{stepErrors.length === 1 ? 'One thing is missing on this step:' : `${stepErrors.length} things are missing on this step:`}</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {stepErrors.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {/* J1 — who you are */}
             {step === 0 && (
               <div className="animate-fade-slide-up">

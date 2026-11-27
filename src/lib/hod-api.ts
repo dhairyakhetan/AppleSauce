@@ -483,6 +483,36 @@ export function normaliseUnassigned(raw: unknown): UnassignedPaper[] {
   return out;
 }
 
+/** A paper that is fully checked but not on the Ready to go live list yet (hod_unqueued_papers, 20261127110000). */
+export interface UnqueuedPaper {
+  audit_paper_id: string;
+  title: string;
+  school: string | null;
+  cls: string | null;
+  subject: string | null;
+  passed_count: number;
+  left_out: number;
+}
+
+export function normaliseUnqueued(raw: unknown): UnqueuedPaper[] {
+  const out: UnqueuedPaper[] = [];
+  for (const x of rows(raw)) {
+    const r = obj(x);
+    const id = str(r.audit_paper_id);
+    if (!id) continue;
+    out.push({
+      audit_paper_id: id,
+      title: str(r.title) ?? 'A paper',
+      school: str(r.school),
+      cls: str(r.cls),
+      subject: str(r.subject),
+      passed_count: num(r.passed_count),
+      left_out: num(r.left_out),
+    });
+  }
+  return out;
+}
+
 /** A paper with questions waiting for verifiers that cannot be given out yet: some pictures or printed pages are not stored
  *  (hod_held_back_papers, 20261106400000). Shown in its own list, never offered for assigning. */
 export interface HeldBackPaper {
@@ -520,6 +550,44 @@ export function normaliseHeldBack(raw: unknown): HeldBackPaper[] {
   return out;
 }
 
+/** Why a paper with work for a checker is on no other list (hod_held_other_papers, 20261127110000). */
+export type HeldOtherReason = 'wrong_pdf' | 'english_reread' | 'reference_pages' | 'text' | 'other';
+
+/** A paper with questions waiting for a checker that is held for a reason other than missing pictures. */
+export interface HeldOtherPaper {
+  paper_id: string;
+  subject: string | null;
+  school: string | null;
+  cls: string | null;
+  exam: string | null;
+  year: string | null;
+  open_count: number;
+  reason: HeldOtherReason;
+}
+
+const HELD_OTHER_REASONS: HeldOtherReason[] = ['wrong_pdf', 'english_reread', 'reference_pages', 'text', 'other'];
+
+export function normaliseHeldOther(raw: unknown): HeldOtherPaper[] {
+  const out: HeldOtherPaper[] = [];
+  for (const x of rows(raw)) {
+    const r = obj(x);
+    const id = str(r.paper_id);
+    if (!id) continue;
+    const reason = HELD_OTHER_REASONS.find((k) => k === r.reason) ?? 'other';
+    out.push({
+      paper_id: id,
+      subject: str(r.subject),
+      school: str(r.school),
+      cls: str(r.cls),
+      exam: str(r.exam),
+      year: str(r.year),
+      open_count: num(r.open_count),
+      reason,
+    });
+  }
+  return out;
+}
+
 /** What is missing from a held-back paper, in plain words, for example "3 questions have no picture. 2 of 7 printed pages are missing." */
 export function heldBackWhy(p: Pick<HeldBackPaper, 'missing_snips' | 'pages_total' | 'pages_missing'>): string {
   const parts: string[] = [];
@@ -528,6 +596,22 @@ export function heldBackWhy(p: Pick<HeldBackPaper, 'missing_snips' | 'pages_tota
     parts.push(p.pages_total > 0 ? `${p.pages_missing} of ${p.pages_total} printed ${p.pages_total === 1 ? 'page is' : 'pages are'} missing.` : 'Its printed pages are missing.');
   }
   return parts.join(' ') || 'Some pictures are missing.';
+}
+
+/** Why a paper is held for a reason other than missing pictures, in plain words, with what the HOD can do about it. */
+export function heldOtherWhy(reason: HeldOtherReason): string {
+  switch (reason) {
+    case 'wrong_pdf':
+      return 'The scanned file does not match this paper (wrong PDF). The owner has to load the right file before checkers can have it.';
+    case 'english_reread':
+      return 'This English paper is held for the AI re-read step, so it is not given to checkers yet.';
+    case 'reference_pages':
+      return 'The printed pages that its questions point to are not stored yet.';
+    case 'text':
+      return 'The words of its questions are not usable yet, so a checker could not read them.';
+    default:
+      return 'Held back by a rule of the hand-out. Ask the owner if it is still here tomorrow.';
+  }
 }
 
 /** What one verifier holds, grouped from the flat assignment list. A paper goes whole to one verifier, so there is no queue. */
@@ -612,6 +696,11 @@ export interface HodApi {
   unassignedPapers(limit?: number): Promise<UnassignedPaper[]>;
   /** hod_held_back_papers(): papers waiting for verifiers that lack pictures or printed pages, so cannot be given out yet. */
   heldBackPapers(limit?: number): Promise<HeldBackPaper[]>;
+  /**
+   * hod_held_other_papers() (20261127110000): papers with work for a checker that are held for another reason (wrong PDF,
+   * reference pages, unusable text...). null when the server does not have the function yet.
+   */
+  heldOtherPapers(limit?: number): Promise<HeldOtherPaper[] | null>;
   assignPaper(paperId: string, userId: string): Promise<void>;
   unassign(assignmentId: number): Promise<void>;
   /** distribute_unassigned_papers(): hands out what it can by the rules; returns how many papers were given. */
@@ -659,10 +748,17 @@ export interface HodApi {
   setQuestionState(questionId: string, state: 'pass' | 'set_aside' | 'reopen', note?: string): Promise<string>;
   /** hod_edit_question(): a versioned edit; returns the new version. Only the changed keys are sent. */
   editQuestion(questionId: string, version: number, changes: Record<string, unknown>, note?: string): Promise<number>;
+  /**
+   * hod_queue_paper() (20261127110000): puts a finished paper on the Ready to go live list. Throws the server's own sentence
+   * when the paper is not ready for it; throws a "not switched on yet" error when the server does not have the function.
+   */
+  queuePaper(auditPaperId: string): Promise<void>;
   /** hod_ready_papers(): papers waiting for a yes, with the four checks. */
   readyPapers(): Promise<HodReadyPaper[]>;
   /** hod_unqueued_papers_count(): papers fully checked but not yet queued for the desk. A server without it answers 0. */
   unqueuedCount(): Promise<number>;
+  /** hod_unqueued_papers() (20261127110000): which papers the banner counts. null when the server does not have it yet. */
+  unqueuedPapers(): Promise<UnqueuedPaper[] | null>;
   /** hod_paper_preview(): the paper, its questions, counts, pages and the four checks. */
   paperPreview(auditPaperId: string): Promise<HodPreview>;
   /** hod_update_publish_meta(): one header field before the paper goes live. */
@@ -765,6 +861,15 @@ export const realHodApi: HodApi = {
   async heldBackPapers(limit = 200) {
     return normaliseHeldBack(await call('hod_held_back_papers', { p_limit: limit }));
   },
+  async heldOtherPapers(limit = 200) {
+    try {
+      return normaliseHeldOther(await call('hod_held_other_papers', { p_limit: limit }));
+    } catch (err) {
+      // Until the owner pastes the file there is no such function: show nothing, never an error.
+      if (isMissingFunctionError(err)) return null;
+      throw err;
+    }
+  },
   async assignPaper(paperId, userId) {
     await call('hod_assign_paper', { p_paper_id: paperId, p_user_id: userId });
   },
@@ -852,6 +957,9 @@ export const realHodApi: HodApi = {
       await call('hod_edit_question', { p_question_id: questionId, p_version: version, p_changes: changes, p_note: note ?? null }),
     );
   },
+  async queuePaper(auditPaperId) {
+    await call('hod_queue_paper', { p_audit_paper_id: auditPaperId });
+  },
   async readyPapers() {
     return normaliseReadyPapers(await call('hod_ready_papers'));
   },
@@ -861,6 +969,13 @@ export const realHodApi: HodApi = {
       return Math.max(0, num(await call('hod_unqueued_papers_count')));
     } catch {
       return 0;
+    }
+  },
+  async unqueuedPapers() {
+    try {
+      return normaliseUnqueued(await call('hod_unqueued_papers'));
+    } catch {
+      return null;
     }
   },
   async paperPreview(auditPaperId) {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ProfileLoadFailed } from '@/components/ProfileLoadFailed';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,6 +42,9 @@ export default function SelectRole() {
   const [loading, setLoading] = useState(false);
   const [checkingRole, setCheckingRole] = useState(true);
   const [hasRole, setHasRole] = useState(false);
+  // The check itself failed (a bad connection): never show the role form then (site-wide audit B1).
+  const [checkFailed, setCheckFailed] = useState(false);
+  const [checkTry, setCheckTry] = useState(0);
 
   // Check once on mount if user already has a role - only run once
   useEffect(() => {
@@ -58,6 +62,7 @@ export default function SelectRole() {
         return;
       }
 
+      setCheckFailed(false);
       try {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
@@ -95,6 +100,7 @@ export default function SelectRole() {
         }
         reportLoadError('select-role.profile', error, { what: 'your account details' });
         if (isMounted) {
+          setCheckFailed(true);
           setCheckingRole(false);
         }
       }
@@ -105,7 +111,7 @@ export default function SelectRole() {
     return () => {
       isMounted = false;
     };
-  }, [user, authLoading, navigate, redirectTo]); // Only run when user or authLoading changes
+  }, [user, authLoading, navigate, redirectTo, checkTry]); // Only run when user or authLoading changes (or on Try again)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +184,18 @@ export default function SelectRole() {
   // If user already has a role, don't render (they should be redirected)
   if (hasRole) {
     return null;
+  }
+
+  // The check failed: say so and offer a retry. Showing the form here is how a teacher could lose their role.
+  if (user && checkFailed) {
+    return (
+      <ProfileLoadFailed
+        onRetry={() => {
+          setCheckingRole(true);
+          setCheckTry((n) => n + 1);
+        }}
+      />
+    );
   }
 
   // If no user, show sign-in prompt

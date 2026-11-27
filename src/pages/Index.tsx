@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { classLabel } from '@/lib/class-label';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -631,7 +632,7 @@ export default function Index() {
           ? []
           : profile?.role === 'guardian'
             ? ['Guardian']
-            : [profile?.school_college, profile?.grade ? `Class ${profile.grade}` : null].filter(Boolean);
+            : [profile?.school_college, classLabel(profile?.grade)].filter(Boolean);
         return {
           id: c.id,
           comment: c.comment,

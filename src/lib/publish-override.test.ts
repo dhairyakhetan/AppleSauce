@@ -186,7 +186,7 @@ describe('the screen rules', () => {
     expect(overrideErrorWords({ code: '42883', message: 'function does not exist' })).toBe(OVERRIDE_NOT_ON_WORDS);
     expect(OVERRIDE_NOT_ON_WORDS).toMatch(/not switched on yet\. Nothing was published and nothing was changed\./);
     expect(overrideErrorWords({ code: '55000', message: 'This paper is not waiting to go live.' })).toBe(
-      'Not published. The paper is still waiting for you. This paper is not waiting to go live.',
+      'Not published. Nothing was changed. This paper is not waiting to go live.',
     );
   });
 
