@@ -367,6 +367,8 @@ export interface HodNeedsQuestion {
   /** A student asked for the AI to redo this question (20261118100000): 'requested' waits for the HOD, 'approved' means "needs AI review", 'redone' means the AI has redone it. null for an ordinary help request. */
   ai_redo_state: AiRedoState | null;
   ai_redo_reason: string | null;
+  /** An HOD sent this question to the AI (hod_send_to_ai, 20261127140000), not a student's request an HOD agreed to. False before that file is pasted. */
+  ai_redo_by_hod: boolean;
   page: number | null;
   page_path: string | null;
   snippet_path: string | null;
@@ -412,6 +414,7 @@ export function normaliseNeedsQuestion(raw: unknown): HodNeedsQuestion | null {
     ai_review_reason: str(r.ai_review_reason),
     ai_redo_state: aiRedoState(r.ai_redo_state),
     ai_redo_reason: str(r.ai_redo_reason),
+    ai_redo_by_hod: r.ai_redo_by_hod === true,
     page: numOrNull(r.page) || null,
     page_path: str(r.page_path),
     snippet_path: str(r.snippet_path),
@@ -450,6 +453,12 @@ export function aiRedoStepWords(action: string): string {
       return 'A student asked for the AI to redo it';
     case 'hod_ai_redo_approve':
       return 'An HOD agreed: it needs AI review';
+    case 'hod_send_to_ai':
+      return 'An HOD sent it to the AI';
+    case 'hod_send_to_ai_with_paper':
+      return 'An HOD sent it to the AI with the whole paper';
+    case 'hod_undo_send_to_ai':
+      return 'The HOD took it back';
     case 'hod_ai_redo_decline':
       return 'An HOD said no: it stays with the HOD';
     case 'ai_redo_read':
@@ -482,11 +491,13 @@ export interface HodAiRedoItem {
   marks: number | null;
   /** 'requested' waits for the HOD's yes or no, 'approved' waits for the AI, 'redone' has been redone. */
   state: 'requested' | 'approved' | 'redone';
-  /** The student's reason. */
+  /** The reason given: a student's, or the HOD's when `asked_by_hod`. */
   reason: string | null;
   /** What the HOD typed when approving, if anything. */
   note: string | null;
   asked_by_name: string | null;
+  /** An HOD sent it straight to the AI (20261127140000); there was no student request. */
+  asked_by_hod: boolean;
   asked_at: string | null;
   decided_by_name: string | null;
   decided_at: string | null;
@@ -539,6 +550,7 @@ export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
       reason: str(r.ai_redo_reason),
       note: str(r.ai_redo_note),
       asked_by_name: str(r.asked_by_name),
+      asked_by_hod: r.asked_by_hod === true,
       asked_at: str(r.asked_at),
       decided_by_name: str(r.decided_by_name),
       decided_at: str(r.decided_at),
@@ -553,8 +565,12 @@ export function normaliseAiRedoList(raw: unknown): HodAiRedoItem[] {
 /** "Sent up by a student" for the escalated pile, "Flagged by the computer" for the other. */
 export function whyItNeedsYou(
   q: Pick<HodNeedsQuestion, 'review_bucket' | 'escalated_by_name' | 'reason' | 'ai_review_reason'> &
-    Partial<Pick<HodNeedsQuestion, 'ai_redo_state' | 'ai_redo_reason'>>,
+    Partial<Pick<HodNeedsQuestion, 'ai_redo_state' | 'ai_redo_reason' | 'ai_redo_by_hod'>>,
 ): string {
+  // An HOD sent it to the AI themselves: the reason is the HOD's, whatever pile the question sits in.
+  if (q.ai_redo_by_hod && q.ai_redo_state === 'approved') {
+    return q.ai_redo_reason ? `An HOD sent this to the AI to be read again: ${q.ai_redo_reason}` : 'An HOD sent this to the AI to be read again.';
+  }
   if (q.review_bucket === 'escalated') {
     const who = q.escalated_by_name ?? 'A student';
     const why = q.ai_redo_reason ?? q.reason;

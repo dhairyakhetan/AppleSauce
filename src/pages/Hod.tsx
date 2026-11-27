@@ -25,6 +25,7 @@ import { CHIP } from '@/lib/checker-button-styles';
 import { realHodApi, type HodApi } from '@/lib/hod-api';
 import { resolveTabKey, tabBadge, tabBadgeLabel, tabBadgeText } from '@/lib/hod-tabs';
 import { UNASSIGNED_SHOWN } from '@/lib/hod-desk';
+import { sendToAiBadgeLabel } from '@/lib/hod-send-to-ai';
 import type { TeacherReviewerAdminApi } from '@/lib/teacher-review-api';
 import { realFixRequestsApi, type FixRequestsApi } from '@/lib/fix-requests-api';
 import type { PaperAsksApi } from '@/lib/paper-asks-api';
@@ -87,7 +88,7 @@ export interface HodTabDef {
 
 export const TABS: HodTabDef[] = [
   { key: 'needs-you', label: 'Needs you', hint: 'Questions only you can settle: pass, fix, send back to students or set aside.', Component: NeedsYouTab },
-  { key: 'send-to-ai', label: 'Send to AI', hint: 'Questions you agreed the AI should read again, with the reason a student gave.', Component: SendToAiTab },
+  { key: 'send-to-ai', label: 'Send to AI', hint: 'Questions waiting for the AI to read them again, with the reason a student or an HOD gave.', Component: SendToAiTab },
   { key: 'ready', label: 'Ready to go live', hint: 'Papers with every question settled. Read one, run the four checks and publish it.', Component: ReadyTab },
   { key: 'uploads', label: 'Uploads', hint: 'Papers students sent in. Approve or reject them.', Component: UploadsTab },
   { key: 'requests', label: 'Requests', hint: 'Problems and changes people have asked for. Say yes or no to what checkers send in, or send your own.', Component: RequestsTab },
@@ -198,6 +199,15 @@ export function HodPage({
     staleTime: 10_000,
   });
   const freePapers = freeQ.data?.length ?? 0;
+  // Questions waiting for an HOD's yes or no, or for the AI, for the number on Send to AI. If the database file is not
+  // pasted yet (or the call fails) the tab just shows no number.
+  const aiCountQ = useQuery({
+    queryKey: ['hod', scope, 'ai-redo-count'],
+    queryFn: () => api.aiRedoCount(),
+    enabled: allowed === true,
+    staleTime: 15_000,
+  });
+  const aiWaiting = aiCountQ.data ?? 0;
 
   // On a narrow screen the tabs scroll as one row. If the selected tab is cut off, bring it
   // into view (horizontally only, so the page does not jump). It re-runs when the badge
@@ -213,7 +223,7 @@ export function HodPage({
     if (left >= row.scrollLeft && right <= row.scrollLeft + view) return;
     const target = left - (view - el.offsetWidth) / 2;
     row.scrollTo({ left: Math.max(0, Math.min(target, row.scrollWidth - view)), behavior: 'auto' });
-  }, [active.key, allowed, countsQ.data, requestsWaiting, freePapers]);
+  }, [active.key, allowed, countsQ.data, requestsWaiting, freePapers, aiWaiting]);
 
   // Eleven tabs do not fit on a phone or a 1366 px laptop. The row still scrolls, but it now says so: a fade and an
   // arrow button at each edge that has tabs beyond it (owner, 26 Nov 2026: the last tabs were hidden with no sign).
@@ -233,7 +243,7 @@ export function HodPage({
       row?.removeEventListener('scroll', measureTabs);
       window.removeEventListener('resize', measureTabs);
     };
-  }, [measureTabs, allowed, countsQ.data, requestsWaiting, freePapers, active.key]);
+  }, [measureTabs, allowed, countsQ.data, requestsWaiting, freePapers, aiWaiting, active.key]);
   const scrollTabs = (dir: -1 | 1) => {
     const row = tabRowRef.current;
     if (!row) return;
@@ -323,6 +333,7 @@ export function HodPage({
           {TABS.map((t) => {
             // Assignments counts the papers waiting to be handed out (its own read); every other tab keeps its badge as before.
             const badge = t.key === 'assignments' ? freePapers : tabBadge(t.key, countsQ.data, requestsWaiting);
+            const shown = t.key === 'send-to-ai' ? aiWaiting : badge;
             return (
             <button
               key={t.key}
@@ -344,10 +355,10 @@ export function HodPage({
               )}
             >
               {t.label}
-              {badge > 0 ? (
+              {shown > 0 ? (
                 <span className="inline-flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-brand px-[5px] text-[11px] font-bold tabular-nums text-foreground">
-                  <span aria-hidden>{tabBadgeText(t.key, badge)}</span>
-                  <span className="sr-only">{`: ${tabBadgeLabel(t.key, countsQ.data, requestsWaiting, freePapers)}`}</span>
+                  <span aria-hidden>{tabBadgeText(t.key, shown)}</span>
+                  <span className="sr-only">{`: ${t.key === 'send-to-ai' ? sendToAiBadgeLabel(aiWaiting) : tabBadgeLabel(t.key, countsQ.data, requestsWaiting, freePapers)}`}</span>
                 </span>
               ) : null}
             </button>

@@ -5,6 +5,7 @@ import { AttentionGroup, PaperStatusPill, PaperTimelineDisclosure } from '@/comp
 import { EmptyNote, ListSearch, ListSkeleton, LoadError, ago, deskLink } from '@/components/hod/HodShared';
 import { EMPTY_MOMENTS, stageOfReady, waitingReason, type AttentionItem } from '@/lib/paper-status';
 import { PublishFlow } from '@/components/hod/PublishFlow';
+import { SendBackToChecking } from '@/components/hod/SendBackToChecking';
 import { CheckChips, RouteTrail } from '@/components/hod/RouteTrail';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import type { HodApi } from '@/lib/hod-api';
@@ -63,6 +64,11 @@ function ReadyRow({ p, api, scope, stage }: { p: HodReadyPaper; api: HodApi; sco
         ) : null}
         {p.kind === 'retro' ? <span className="rounded-full bg-card px-2.5 py-1 text-[12px] text-warm-secondary">Already live: approving records it</span> : null}
       </div>
+      {p.kind === 'retro' ? null : (
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="ready-row-actions">
+          <SendBackToChecking api={api} scope={scope} paperId={p.audit_paper_id} title={p.title} passedCount={p.passed_count} />
+        </div>
+      )}
       <RouteTrail stage={stage} className="mt-3" />
       <PaperTimelineDisclosure
         className="mt-3"

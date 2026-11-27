@@ -37,6 +37,12 @@ export interface MyPaper {
   exam: string | null;
   year: string | null;
   given_by_hod: boolean;
+  /**
+   * The first name of the HOD who handed the paper out (verifier_my_papers_given_by, 20261127140000). undefined = the
+   * server did not say (the database file is not pasted yet), so the old wording is used; null = it said, but there is no
+   * name on file ("Given by an HOD").
+   */
+  given_by_name?: string | null;
   assigned_at: string | null;
   /** Questions on the paper that are the verifier's to settle. */
   total: number;
@@ -93,6 +99,25 @@ export function normalisePapersExtra(raw: unknown): {
     }
   }
   return { held, returned };
+}
+
+/** assignment id -> the first name of the HOD who handed it out (null when that HOD has no name on file). */
+export function normaliseGivenBy(raw: unknown): Map<number, string | null> {
+  const out = new Map<number, string | null>();
+  for (const x of Array.isArray(raw) ? raw : []) {
+    const r = obj(x);
+    const id = Number(r.assignment_id);
+    if (!Number.isFinite(id)) continue;
+    const name = str(r.first_name);
+    out.set(id, name ? name.trim().split(/\s+/)[0] : null);
+  }
+  return out;
+}
+
+/** Add the HOD's first name to the papers it knows about. A paper it did not mention keeps no name field (old wording). */
+export function withGivenBy(rows: MyPaper[], names: Map<number, string | null>): MyPaper[] {
+  if (names.size === 0) return rows;
+  return rows.map((p) => (names.has(p.assignment_id) ? { ...p, given_by_name: names.get(p.assignment_id) ?? null } : p));
 }
 
 /** Add what verifier_my_papers_extra said to the rows of verifier_my_papers. Rows it did not mention stay as they are. */

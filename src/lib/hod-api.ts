@@ -11,6 +11,7 @@ import type { StagePictureItem } from '@/lib/stage-pictures';
 import { normaliseHandoutReasons, REASONS_MAX, type HandoutReasons } from '@/lib/hod-bulk-assign';
 import type { RawOption } from '@/lib/checker-options';
 import { paperLabel } from '@/lib/checker-progress';
+import { normalisePaperAiCounts, type PaperAiCounts } from '@/lib/hod-send-to-ai';
 import { isVerifierGrade } from '@/lib/verifier-papers';
 import { normaliseActivity, normaliseMoments, type PaperActivity, type PaperMoments } from '@/lib/paper-status';
 import type { PaperPage } from '@/lib/paper-pages';
@@ -689,6 +690,13 @@ export function normaliseSubjects(raw: unknown): HodSubject[] {
   return out;
 }
 
+/** What hod_send_paper_to_ai() answers. */
+export interface PaperSendResult {
+  request_id: string;
+  sent: number;
+  moved_from_students: number;
+}
+
 export interface HodApi {
   isHod(): Promise<boolean>;
   team(): Promise<HodTeamMember[]>;
@@ -723,6 +731,27 @@ export interface HodApi {
   aiRedoDecide(questionId: string, approve: boolean, note: string): Promise<void>;
   /** hod_ai_redo_list() (20261119100000): every question approved for the AI to redo (and those already redone), across papers. */
   aiRedoList(): Promise<HodAiRedoItem[]>;
+  /**
+   * hod_send_to_ai() (20261127140000): the HOD sends ONE question that is waiting for them to the AI re-read queue, with a
+   * reason (5 to 500 characters). Same mark as a student's request after a yes. Throws the server's own sentence; a server
+   * without the function throws a "not switched on" error (sendFailureWords words it).
+   */
+  sendToAi(questionId: string, reason: string): Promise<void>;
+  /** hod_undo_send_to_ai(): takes it back, only while the AI has not picked it up. */
+  undoSendToAi(questionId: string): Promise<void>;
+  /** hod_paper_ai_counts(): read only, how many questions a whole-paper send would take. null when the server does not have it yet. */
+  paperAiCounts(auditPaperId: string): Promise<PaperAiCounts | null>;
+  /** hod_send_paper_to_ai(): ONE request for the whole paper; every open question waiting on the HOD (and, if asked, the ones with the students) goes with the one reason. */
+  sendPaperToAi(auditPaperId: string, reason: string, includeOther: boolean): Promise<PaperSendResult>;
+  /** hod_undo_send_paper_to_ai(): takes the whole request back (all or nothing), only while the AI has not picked anything up. */
+  undoSendPaperToAi(requestId: string): Promise<void>;
+  /** hod_ai_redo_count(): the number on the Send to AI tab. null when the server does not have it yet. */
+  aiRedoCount(): Promise<number | null>;
+  /**
+   * hod_send_paper_back_to_checking() (20261127140000): a paper on the Ready list leaves it and its passed questions go back to
+   * the student checkers, with a reason that is logged. Returns how many questions were reopened.
+   */
+  sendPaperBackToChecking(auditPaperId: string, reason: string): Promise<number>;
   pictureUrl(path: string): Promise<string | null>;
   /** The stored diagram(s) of one question and of the shared stem above it (verifier_question_diagrams lets an HOD in). Never throws: empty when there is none. */
   questionDiagrams(questionId: string): Promise<QuestionDiagram[]>;
@@ -922,6 +951,39 @@ export const realHodApi: HodApi = {
   },
   async aiRedoList() {
     return normaliseAiRedoList(await call('hod_ai_redo_list'));
+  },
+  async sendToAi(questionId, reason) {
+    await call('hod_send_to_ai', { p_question_id: questionId, p_reason: reason.trim() });
+  },
+  async undoSendToAi(questionId) {
+    await call('hod_undo_send_to_ai', { p_question_id: questionId });
+  },
+  async paperAiCounts(auditPaperId) {
+    try {
+      return normalisePaperAiCounts(await call('hod_paper_ai_counts', { p_audit_paper_id: auditPaperId }));
+    } catch (err) {
+      if (isMissingFunctionError(err as { code?: string })) return null;
+      throw err;
+    }
+  },
+  async sendPaperToAi(auditPaperId, reason, includeOther) {
+    const out = obj(await call('hod_send_paper_to_ai', { p_audit_paper_id: auditPaperId, p_reason: reason.trim(), p_include_other: includeOther }));
+    return { request_id: str(out.request_id) ?? '', sent: num(out.sent), moved_from_students: num(out.moved_from_students) };
+  },
+  async undoSendPaperToAi(requestId) {
+    await call('hod_undo_send_paper_to_ai', { p_request_id: requestId });
+  },
+  async aiRedoCount() {
+    try {
+      return Math.max(0, num(await call('hod_ai_redo_count')));
+    } catch {
+      // A courtesy number: until the file is pasted, or if the call fails, the tab simply shows none.
+      return null;
+    }
+  },
+  async sendPaperBackToChecking(auditPaperId, reason) {
+    const out = obj(await call('hod_send_paper_back_to_checking', { p_audit_paper_id: auditPaperId, p_reason: reason.trim() }));
+    return num(out.reopened);
   },
   pictureUrl: checkerPictureUrl,
   questionDiagrams: verifierQuestionDiagrams,

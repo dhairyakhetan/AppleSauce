@@ -18,6 +18,10 @@ export type HodChange =
   | 'needs-you'
   /** Say yes or no to a student's "send back to the AI" request, from the Send to AI tab. */
   | 'ai-redo'
+  /** Send a question, or a whole paper, to the AI from Needs you, or take that send back. */
+  | 'send-to-ai'
+  /** Send a paper back from Ready to the student checkers. */
+  | 'send-back-checking'
   /** Approve a paper, edit its details or pictures on the approval sheet. */
   | 'publish'
   /** Hide, restore or edit a paper that is live. */
@@ -53,8 +57,20 @@ export function hodRefreshPlan(scope: string, change: HodChange): HodRefreshPlan
     case 'ai-redo':
       // A yes or no changes the Send to AI list (on screen) and the question's mark in Needs you; the counts move too.
       return {
-        now: [k('ai-redo'), k('counts')],
+        now: [k('ai-redo'), k('ai-redo-count'), k('counts')],
         later: [k('needs-you'), k('trail'), k('timeline')],
+      };
+    case 'send-to-ai':
+      // The questions stay on the Needs you list (marked "needs AI review"); the Send to AI list and its number change.
+      return {
+        now: [k('needs-you'), k('ai-redo'), k('ai-redo-count'), k('counts')],
+        later: [k('trail'), k('timeline')],
+      };
+    case 'send-back-checking':
+      // The paper leaves Ready; its questions are open for the students, and it waits to be handed out.
+      return {
+        now: [k('ready'), k('trail'), k('counts'), k('preview'), k('timeline'), k('needs-you')],
+        later: [k('assignments'), k('unassigned'), k('held-back'), k('unqueued'), k('live')],
       };
     case 'publish':
       return {

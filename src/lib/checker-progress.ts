@@ -92,3 +92,15 @@ export function paperLabel(p: {
 }
 
 export const GIVEN_BY_HOD = 'Given by your HOD';
+
+/**
+ * The badge on a paper card in My papers, or null when the paper was not handed out by an HOD.
+ * "Given by Asha" when the first name is known; "Given by an HOD" when the hand-out is recorded but that HOD has no name on
+ * file; the old "Given by your HOD" while the server does not say who (the database file is not pasted yet).
+ */
+export function givenByLabel(p: { given_by_hod: boolean; given_by_name?: string | null }): string | null {
+  if (!p.given_by_hod) return null;
+  if (p.given_by_name === undefined) return GIVEN_BY_HOD;
+  const name = (p.given_by_name ?? '').trim();
+  return name ? `Given by ${name}` : 'Given by an HOD';
+}

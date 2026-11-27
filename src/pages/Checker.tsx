@@ -27,7 +27,7 @@ import { isBlankBody } from '@/lib/checker-body';
 import { BOARDS } from '@/lib/hod-api';
 import { CHIP, actionToneClass } from '@/lib/checker-button-styles';
 import { CHECKER_HELP_PATH, CHECKER_PRACTICE_PATH } from '@/lib/checker-onboarding';
-import { GIVEN_BY_HOD, paperLabel } from '@/lib/checker-progress';
+import { givenByLabel, paperLabel } from '@/lib/checker-progress';
 import { PaperStatusPill } from '@/components/PaperStatus';
 import { checkerCardLine, stageOfCheckerCard } from '@/lib/paper-status';
 import { checkerErrorAdvice, listLoadFailure, requestSubjectsErrorMessage } from '@/lib/checker-errors';
@@ -640,8 +640,10 @@ function PaperList({
                     <h2 className="text-balance text-[15px] font-bold text-foreground">{paperLabel(p)}</h2>
                     <PaperStatusPill stage={stageOfCheckerCard(p)} className="mt-1.5" />
                   </div>
-                  {p.given_by_hod ? (
-                    <span className="shrink-0 rounded-full bg-brand-subtle px-2 py-0.5 text-[12px] font-semibold text-foreground">{GIVEN_BY_HOD}</span>
+                  {givenByLabel(p) ? (
+                    <span className="shrink-0 rounded-full bg-brand-subtle px-2 py-0.5 text-[12px] font-semibold text-foreground" data-testid="given-by">
+                      {givenByLabel(p)}
+                    </span>
                   ) : null}
                 </div>
                 <p className="mt-2 text-[13px] text-foreground" data-testid="card-status-line">

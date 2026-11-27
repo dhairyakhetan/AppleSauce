@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { classLabel } from '@/lib/class-label';
 import { diffSubjects } from '@/lib/subject-diff';
 import { ProfileLoadFailed } from '@/components/ProfileLoadFailed';
+import { GuardianProfileSheet } from '@/components/account/GuardianProfileSheet';
+import { GRADE_OPTIONS } from '@/lib/guardian-profile';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Settings, LogOut, ShieldCheck, X, Heart, UserRound, ChevronRight, Loader2 } from 'lucide-react';
@@ -42,11 +44,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'papers', label: 'Papers' },
 ];
 
-// Same lists StudentDashboard.tsx used for these two fields.
-const GRADE_OPTIONS = [
-  '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12',
-  'UG, First Year', 'UG, Second Year', 'UG, Third Year', 'UG, Fourth Year', 'Other',
-];
+// Same lists StudentDashboard.tsx used for these two fields (the class list now lives in lib/guardian-profile.ts, shared with the guardian's sheet).
 const SCHOOL_BOARDS = ['ICSE', 'CBSE', 'IGCSE', 'IB', 'State'];
 
 interface RowTeacher {
@@ -346,7 +344,7 @@ export default function Account() {
       if (error) throw error;
       return data;
     },
-    enabled: profileSheetOpen && !!user,
+    enabled: profileSheetOpen && !!user && profile?.role !== 'guardian',
   });
   // Shares a cache key with StudentDashboard.tsx's identical global lookup.
   const editSubjectsQuery = useQuery({
@@ -356,7 +354,7 @@ export default function Account() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: profileSheetOpen,
+    enabled: profileSheetOpen && profile?.role !== 'guardian',
   });
   const editStudentSubjectIdsQuery = useQuery({
     queryKey: ['studentSubjectIds', user?.id],
@@ -368,9 +366,9 @@ export default function Account() {
       if (error) throw error;
       return (data ?? []).map((s) => s.subject_id);
     },
-    enabled: profileSheetOpen && !!user,
+    enabled: profileSheetOpen && !!user && profile?.role !== 'guardian',
   });
-  const profileLoading = profileSheetOpen
+  const profileLoading = profileSheetOpen && profile?.role !== 'guardian'
     && (editFormQuery.isPending || editSubjectsQuery.isPending || editStudentSubjectIdsQuery.isPending);
   useEffect(() => {
     if (editFormQuery.isError || editSubjectsQuery.isError || editStudentSubjectIdsQuery.isError) {
@@ -737,7 +735,7 @@ export default function Account() {
       </BentoStack>
       </main>
 
-      {/* Settings sheet — sign-out, account links, and (students only) the
+      {/* Settings sheet — sign-out, account links, and (students and guardians) the
           profile-editing entry point below. */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent side="bottom" aria-describedby={undefined} className="rounded-t-[28px] border-0 pb-8 pt-6">
@@ -747,7 +745,7 @@ export default function Account() {
             </SheetTitle>
           </SheetHeader>
           <div className="mt-4 flex flex-col gap-1">
-            {profile?.role === 'student' && (
+            {(profile?.role === 'student' || profile?.role === 'guardian') && (
               <button
                 type="button"
                 onClick={() => {
@@ -780,12 +778,16 @@ export default function Account() {
         </SheetContent>
       </Sheet>
 
-      {/* Edit-profile sheet (students only) — phone/DOB/school/grade/board/
+      {/* Edit-profile sheet (students) — phone/DOB/school/grade/board/
           guardian email/address/subjects, the fields StudentDashboard.tsx
           (unrouted since /dashboard/student -> /account) used to own with
           no live replacement. Ported onto Field/Chip instead of that page's
           shadcn defaults. */}
-      <Sheet open={profileSheetOpen} onOpenChange={setProfileSheetOpen}>
+      {/* A guardian has their own sheet: their class is student_grade and their subjects are guardian_student_subjects (audit B7). */}
+      {profile?.role === 'guardian' ? (
+        <GuardianProfileSheet userId={user.id} open={profileSheetOpen} onOpenChange={setProfileSheetOpen} />
+      ) : null}
+      <Sheet open={profileSheetOpen && profile?.role !== 'guardian'} onOpenChange={setProfileSheetOpen}>
         <SheetContent side="bottom" className="flex max-h-[85vh] flex-col rounded-t-[28px] border-0 pb-6 pt-6">
           <SheetHeader className="items-start text-left">
             <SheetTitle className="font-display text-xl font-bold tracking-tight text-foreground">

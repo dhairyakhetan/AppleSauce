@@ -9,6 +9,8 @@ import { BackLink, EmptyNote, ListSearch, ListSkeleton, LoadError, Notice, Quest
 import { HodQuestionDiagrams, useHodDiagrams } from '@/components/hod/HodQuestionDiagrams';
 import { QuestionFixForm } from '@/components/hod/QuestionFixForm';
 import { RouteTrail } from '@/components/hod/RouteTrail';
+import { ReasonBox, UndoStrip, useUndoWindow } from '@/components/hod/HodReason';
+import { SendPaperToAi } from '@/components/hod/SendPaperToAi';
 import { actionToneClass } from '@/lib/checker-button-styles';
 import { withoutShownFigureFlag } from '@/lib/checker-diagrams';
 import { adminFlagLines } from '@/lib/paper-edit';
@@ -24,6 +26,7 @@ import {
   type HodNeedsYouPaper,
   matchesSearch,
 } from '@/lib/hod-publish';
+import { canSendToAi, reasonProblem, sendFailureWords, sentLine } from '@/lib/hod-send-to-ai';
 import { cn } from '@/lib/utils';
 import { loadGate } from '@/lib/verifier-papers';
 import { NEEDS_SORTS, nextNeedsPaper, sortNeedsPapers, type NeedsSort } from '@/lib/hod-desk';
@@ -45,7 +48,7 @@ export const NEEDS_YOU_KEY = (scope: string) => ['hod', scope, 'needs-you'] as c
 export const NEEDS_YOU_QUESTIONS_KEY = (scope: string, paperId: string) => ['hod', scope, 'needs-you', paperId] as const;
 export const TRAIL_KEY = (scope: string) => ['hod', scope, 'trail'] as const;
 
-type Panel = null | 'fix' | 'back' | 'aside' | 'golive';
+type Panel = null | 'fix' | 'back' | 'aside' | 'golive' | 'toai';
 
 /** What Undo can do for a settled question: put it back, put it back but keep the new words, or nothing. */
 export type UndoKind = 'reopen' | 'reopen-words-stay' | 'none-with-students' | 'none-live';
@@ -89,6 +92,7 @@ function QuestionCard({
   paperLive,
   onSettled,
   onChanged,
+  onAiChanged,
 }: {
   q: HodNeedsQuestion;
   api: HodApi;
@@ -96,12 +100,18 @@ function QuestionCard({
   paperLive: boolean;
   onSettled: (what: string, undo: UndoKind) => void;
   onChanged: () => void;
+  /** After a send to the AI or taking it back: re-read the lists and the number on the Send to AI tab. */
+  onAiChanged: () => void;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  // Send to AI (27 Nov 2026): a required reason, then a few seconds in which the send can be taken back for real.
+  const [aiReason, setAiReason] = useState('');
+  const [undoingSend, setUndoingSend] = useState(false);
+  const sendUndo = useUndoWindow();
   const label = labelOf(q);
   // The stored diagram of this question (owner, 13 Nov 2026: "diagram still missing"). Once one is on screen the
   // "figure missing" tip is no longer true, so it is left out, as on the checker's screen.
@@ -138,6 +148,41 @@ function QuestionCard({
     setPanel(null);
     setError(null);
     setNote('');
+    setAiReason('');
+  }
+
+  // The HOD sends this one question to the AI re-read queue. The card stays in the list, marked "needs AI review".
+  async function sendToAi() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.sendToAi(q.id, aiReason);
+      toast.success(sentLine(label));
+      setPanel(null);
+      setAiReason('');
+      sendUndo.start();
+      onAiChanged();
+    } catch (err) {
+      setError(sendFailureWords(err));
+      onAiChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function takeBackSend() {
+    setUndoingSend(true);
+    try {
+      await api.undoSendToAi(q.id);
+      toast.success(`Question ${label} is back with you.`);
+      sendUndo.stop();
+      onAiChanged();
+    } catch (err) {
+      toast.error(sendFailureWords(err));
+      sendUndo.stop();
+    } finally {
+      setUndoingSend(false);
+    }
   }
 
   // A student's "send back to the AI": yes marks it "needs AI review" (the reason stays), no keeps it with the HOD as an
@@ -150,7 +195,7 @@ function QuestionCard({
           ? `Question ${label} is marked: needs AI review.`
           : `Question ${label} stays with you as an ordinary help request.`,
       );
-      onChanged();
+      onAiChanged();
     });
   }
 
@@ -262,6 +307,22 @@ function QuestionCard({
         </div>
       ) : null}
 
+      {panel === 'toai' ? (
+        <div className="mt-3" data-testid="send-to-ai-panel">
+          <p className="mb-2 text-[13px] text-warm-secondary">
+            The AI reads this question again against the saved paper and only fixes what the scanner broke. It comes back to you to check.
+          </p>
+          <ReasonBox
+            id={`ai-reason-${q.id}`}
+            label="What is wrong with this question? (required)"
+            value={aiReason}
+            onChange={setAiReason}
+            disabled={busy}
+            placeholder="For example: the table did not come through."
+          />
+        </div>
+      ) : null}
+
       {saved ? (
         <p role="status" className="mt-2 text-[13px] text-foreground">
           {saved}
@@ -322,6 +383,11 @@ function QuestionCard({
                 Leave out
               </button>
             )}
+            {canSendToAi(q) ? (
+              <button type="button" className={quietButton} disabled={busy} onClick={() => { setSaved(null); setPanel('toai'); }} data-testid="send-to-ai-open">
+                Send to AI
+              </button>
+            ) : null}
           </>
         ) : panel === 'fix' ? null : panel === 'golive' ? (
           <>
@@ -332,6 +398,21 @@ function QuestionCard({
               onClick={() => void run(() => api.setQuestionState(q.id, 'pass'), `Question ${label} passed. It is on the site now.`, 'none-live')}
             >
               {busy ? 'Saving...' : 'Pass, put it on the site'}
+            </button>
+            <button type="button" className={quietButton} disabled={busy} onClick={cancel}>
+              Cancel
+            </button>
+          </>
+        ) : panel === 'toai' ? (
+          <>
+            <button
+              type="button"
+              className={cn(actionToneClass('brand'), 'h-[46.5px]')}
+              disabled={busy || reasonProblem(aiReason) !== null}
+              onClick={() => void sendToAi()}
+              data-testid="send-to-ai-go"
+            >
+              {busy ? 'Sending...' : 'Send to the AI'}
             </button>
             <button type="button" className={quietButton} disabled={busy} onClick={cancel}>
               Cancel
@@ -364,6 +445,9 @@ function QuestionCard({
           </>
         )}
       </div>
+      {sendUndo.left > 0 ? (
+        <UndoStrip text={sentLine(label)} left={sendUndo.left} busy={undoingSend} onUndo={() => void takeBackSend()} />
+      ) : null}
       {panel === 'golive' ? (
         <p role="status" className="mt-3 rounded-2xl bg-brand-subtle px-4 py-3 text-[14px] font-semibold text-foreground" data-testid="goes-live-warning">
           This goes on the site now. The paper is already live, so passing this question shows it to every visitor straight away, and it cannot
@@ -538,6 +622,7 @@ function PaperQuestions({
               {openCount === 1 ? '1 question is waiting for you.' : `${openCount} questions are waiting for you.`}
             </p>
           )}
+          {openCount > 0 || merged.length > 0 ? <SendPaperToAi api={api} scope={scope} paperId={paperId} /> : null}
           <ul className="space-y-3">
             {merged.map(({ q: item, settled: s }) =>
               s ? (
@@ -549,6 +634,7 @@ function PaperQuestions({
                   api={api}
                   paperLive={paperLive}
                   onChanged={refresh}
+                  onAiChanged={() => refreshHod(qc, scope, 'send-to-ai')}
                   onSettled={(what, undo) => {
                     setSettled((m) => ({ ...m, [item.id]: { q: item, what, undo } }));
                     toast.success(what);

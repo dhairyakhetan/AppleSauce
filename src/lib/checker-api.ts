@@ -19,7 +19,9 @@ import { normaliseAssignment, type MyAssignment } from '@/lib/checker-progress';
 import {
   normaliseMyPapers,
   normalisePaperQuestions,
+  normaliseGivenBy,
   normalisePapersExtra,
+  withGivenBy,
   normaliseProfile,
   withPapersExtra,
   type MyPaper,
@@ -375,9 +377,32 @@ export async function checkerPictureUrls(paths: string[]): Promise<Map<string, s
  *  available for them yet. */
 export async function verifierMyPapers(): Promise<MyPaper[]> {
   // Timed (audit CK-20), and read together with the extras (questions waiting, days before a paper goes back).
-  const [{ data, error }, extra] = await Promise.all([timedRpc('verifier_my_papers'), loadPapersExtra()]);
+  const [{ data, error }, extra, givenBy] = await Promise.all([timedRpc('verifier_my_papers'), loadPapersExtra(), loadGivenBy()]);
   if (error) throw error;
-  return withPapersExtra(normaliseMyPapers(data), extra.held);
+  return withGivenBy(withPapersExtra(normaliseMyPapers(data), extra.held), givenBy);
+}
+
+// verifier_my_papers_given_by (20261127140000) may not be applied yet: once the server says so, it is not asked again.
+let givenByMissing = false;
+
+/** For tests: forget that the given-by function was missing. */
+export function resetGivenBy(): void {
+  givenByMissing = false;
+}
+
+/** Who handed out each paper (first name). A hint only: it never fails the list, and is empty until the database file is applied. */
+async function loadGivenBy(): Promise<Map<number, string | null>> {
+  if (givenByMissing) return new Map();
+  try {
+    const { data, error } = await timedRpc('verifier_my_papers_given_by');
+    if (error) {
+      if (isNotSwitchedOn(error)) givenByMissing = true;
+      return new Map();
+    }
+    return normaliseGivenBy(data);
+  } catch {
+    return new Map();
+  }
 }
 
 type PapersExtra = ReturnType<typeof normalisePapersExtra>;

@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { HeaderEditor } from '@/components/hod/HeaderEditor';
 import { ListSkeleton, LoadError, Notice, deskLink, quietButton } from '@/components/hod/HodShared';
+import { SendBackToChecking } from '@/components/hod/SendBackToChecking';
 import { PaperPageFlip } from '@/components/checker/PaperPageFlip';
 import { PaperSheet, type PictureWork } from '@/components/hod/PaperSheet';
 import { STAGE_FAILED_WORDS, stagePictures, unstagedCount } from '@/lib/stage-pictures';
@@ -684,6 +685,18 @@ export function PublishFlow({ api, scope, paperId }: { api: HodApi; scope: strin
             <p className="mt-3 text-[14px] font-semibold text-foreground" data-testid="left-out-banner">
               {leftOut}
             </p>
+          ) : null}
+          {waiting && !alreadyLive ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="preview-send-back">
+              <SendBackToChecking
+                api={api}
+                scope={scope}
+                paperId={paper.audit_paper_id}
+                title={paper.title}
+                passedCount={data.counts.passed}
+                onDone={() => navigate(deskLink('ready'))}
+              />
+            </div>
           ) : null}
         </div>
 
