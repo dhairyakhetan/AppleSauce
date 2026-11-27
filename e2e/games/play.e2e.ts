@@ -93,3 +93,23 @@ test('word search: the highlight follows the pointer between letters, and settle
   // a word or not, nothing is left half-drawn
   await expect(cap).toHaveCount(0, { timeout: 2000 });
 });
+
+test('the crossword\'s clue list and grid stay put as the clue changes', async ({ page }) => {
+  const puzzle = await play(page, 'Crossword');
+  await puzzle.locator('.games-cw-cell:not(.is-block)').first().click();
+  const at = async () => {
+    const l = (await puzzle.locator('h4').first().boundingBox())!;
+    const g = (await puzzle.locator('.games-cw-grid').boundingBox())!;
+    return `${Math.round(l.x)},${Math.round(g.y)}`;
+  };
+  const first = await at();
+  for (let i = 0; i < 6; i++) { await page.keyboard.press('Enter'); expect(await at()).toBe(first); }
+});
+
+test('multiple choice: each question its own card, its options lettered choices', async ({ page }) => {
+  const puzzle = await play(page, 'Multiple choice');
+  const cards = puzzle.locator('ol > li');
+  const n = await cards.count();
+  await expect(cards.first()).toContainText(`1 of ${n}`);
+  await expect(cards.first().getByRole('group').getByRole('button', { name: /^A: / })).toBeVisible();
+});

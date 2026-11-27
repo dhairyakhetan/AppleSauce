@@ -211,31 +211,46 @@ function ChoiceGame({ g, onNext, compact }: { g: Choice } & Required<Props>) {
     <>
       <How compact={compact}>Tap the right answer.</How>
       <Progress done={done} total={g.rows.length} />
-      <ol className={cn('flex list-decimal flex-col pl-6 marker:text-warm-meta', compact ? 'gap-3 text-[14px]' : 'gap-5 text-[16px]')}>
-        {g.rows.map((r) => {
+      {/* each question its own card, its options a list of choices with a letter each, so one question never runs into
+          the next and the options read as options */}
+      <ol className={cn('flex flex-col', compact ? 'gap-2.5' : 'gap-3')}>
+        {g.rows.map((r, qi) => {
           const mine = tried[r.id] ?? [];
           const finished = isDone(r);
           return (
-            <li key={r.id} className="flex flex-col gap-2">
-              <p className="font-semibold text-foreground">{r.question}</p>
-              <div className={cn('grid gap-2', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2')} role="group" aria-label="Options">
-                {r.options.map((o) => {
+            <li key={r.id} className={cn('flex flex-col rounded-2xl ring-1 transition-colors duration-300',
+              compact ? 'gap-2 p-3' : 'gap-3 p-4 sm:p-5', finished ? 'bg-success-subtle-bg/40 ring-success/30' : 'bg-muted/50 ring-border')}>
+              <div className="flex items-start gap-2.5">
+                <span className={cn('mt-px shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums transition-colors duration-300',
+                  finished ? 'bg-success text-card' : 'bg-card text-warm-secondary ring-1 ring-border')}>
+                  {finished ? <Check className="inline size-3 align-[-1px]" aria-hidden /> : null} {qi + 1} of {g.rows.length}
+                </span>
+                <p className={cn('font-semibold text-foreground', compact ? 'text-[14px]' : 'text-[16px] leading-snug')}>{r.question}</p>
+              </div>
+              <div className={cn('grid gap-2', compact ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2')} role="group" aria-label={`Options for question ${qi + 1}`}>
+                {r.options.map((o, oi) => {
                   const chosen = mine.includes(o);
                   const right = o === r.answer;
+                  const letter = String.fromCharCode(65 + oi);
                   return (
                     <button key={o} type="button" disabled={finished || chosen} onClick={() => pick(r.id, o)}
-                      aria-pressed={chosen}
+                      aria-pressed={chosen} aria-label={`${letter}: ${o}${chosen ? (right ? ', right' : ', not this one') : ''}`}
                       className={cn(
-                        // a wrong pick fades to red and stays out; the right one fades to green
-                        'flex w-full items-center justify-between gap-2 rounded-2xl border-2 px-3 text-left font-semibold transition-[background-color,border-color,color,opacity,transform] duration-300 ease-out active:scale-press-card disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                        compact ? 'min-h-11 md:min-h-10 py-1.5 text-[13px]' : 'min-h-[52px] py-2.5 text-[15px]',
+                        // a choice: a lettered circle and the option, on a card with an edge; a wrong pick fades to red and
+                        // stays out, the right one to green, and the rest step back once it is found
+                        'group flex w-full items-center gap-3 rounded-xl border bg-card px-3 text-left font-semibold transition-[background-color,border-color,color,opacity,transform,box-shadow] duration-200 ease-out active:scale-press-card disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                        compact ? 'min-h-11 py-1.5 text-[13px]' : 'min-h-[52px] py-2.5 text-[15px]',
                         chosen && right ? 'border-success bg-success-subtle-bg text-success-subtle-text'
-                          : chosen ? 'border-destructive bg-destructive/10 text-foreground'
-                          : finished ? 'border-transparent bg-card text-warm-secondary opacity-60'
-                          : 'border-transparent bg-card text-foreground shadow-border hover:border-brand-blue',
+                          : chosen ? 'border-destructive/60 bg-destructive/10 text-foreground'
+                          : finished ? 'border-transparent text-warm-secondary opacity-50'
+                          : 'border-border text-foreground shadow-sm hover:border-brand-blue hover:shadow-md',
                       )}>
-                      <span>{o}</span>
-                      {chosen && right && <Check className="size-5 shrink-0 animate-pop text-success" aria-label="Right" />}
+                      <span aria-hidden className={cn('grid size-7 shrink-0 place-items-center rounded-full text-[12px] font-bold transition-colors duration-200',
+                        chosen && right ? 'bg-success text-card' : chosen ? 'bg-destructive text-destructive-foreground'
+                          : 'bg-muted text-warm-secondary group-hover:bg-brand-blue-subtle group-hover:text-brand-blue-deep')}>
+                        {chosen && right ? <Check className="size-4" /> : letter}
+                      </span>
+                      <span className="min-w-0 flex-1">{o}</span>
                       {chosen && !right && <span className="shrink-0 animate-pop text-[12px] font-bold text-destructive">Not this one</span>}
                     </button>
                   );
@@ -497,8 +512,10 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
       )}
       <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
         <div className="flex max-w-full flex-col gap-2">
-          {/* the clue being answered, just above the grid */}
-          <p className={cn('rounded-2xl bg-brand-blue-subtle px-3.5 py-2 text-brand-blue-deep', compact ? 'text-[13px]' : 'text-[15px]')} aria-live="polite">
+          {/* the clue being answered, just above the grid: as wide as the grid (w-0 min-w-full: it never widens the column,
+              so the clue list beside it stays put) and two lines tall at least, so the grid doesn't move as clues change */}
+          <p className={cn('w-0 min-w-full rounded-2xl bg-brand-blue-subtle px-3.5 py-2 text-brand-blue-deep',
+            compact ? 'min-h-[3.25rem] text-[13px] leading-[1.35]' : 'min-h-[3.75rem] text-[15px] leading-[1.4]')} aria-live="polite">
             <b className="mr-1.5 capitalize">{clue.n} {clue.dir}</b>{clue.clue} <span className="opacity-70">{clue.enumeration}</span>
           </p>
           <div className="relative max-w-full overflow-x-auto">

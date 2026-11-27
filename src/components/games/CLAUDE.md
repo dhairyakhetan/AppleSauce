@@ -136,6 +136,9 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   answered is a light line just above the grid. In the word search a rounded highlight follows the finger between
   letters along the nearest of the eight directions, settles on whole letters on letting go, stays round each word found
   in its colour, and fades out red on a miss. Matching and multiple choice still answer at once (a tap is the answer).
+  The crossword's clue line is `w-0 min-w-full` (as wide as the grid, never widening its column) and two lines tall at
+  least, so the clue list and the grid don't move as the clue changes. Multiple choice shows each question as its own
+  card ("3 of 10") with lettered options (A, B, C…) on cards of their own.
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options
