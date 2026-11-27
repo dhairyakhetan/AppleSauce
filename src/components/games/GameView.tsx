@@ -25,7 +25,7 @@ export function GameView({ game, onNext, compact = false }: { game: Game } & Pro
     : game.type === 'wordsearch' ? <WordSearchGame g={game} onNext={onNext} compact={compact} />
     : game.type === 'choice' ? <ChoiceGame g={game} onNext={onNext} compact={compact} />
     : <CrosswordGame g={game} onNext={onNext} compact={compact} />;
-  return <div className={cn('flex flex-col gap-3', compact && 'games-compact')}>{body}</div>;
+  return <div className={cn('games-fit flex flex-col gap-3', compact && 'games-compact')}>{body}</div>;
 }
 
 function How({ children, compact }: { children: ReactNode; compact: boolean }) {
@@ -122,7 +122,7 @@ function MatchingGame({ g, onNext, compact }: { g: Matching } & Required<Props>)
 
   return (
     <>
-      <How compact={compact}>Tap a question, then its answer (or an answer, then its question).</How>
+      <How compact={compact}>Tap a question, then its answer.</How>
       <Progress done={matched.length} total={g.left.length} />
       <div className={cn('grid gap-3', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-[3fr_2fr] sm:gap-5')}>
         {column('left')}
@@ -175,7 +175,7 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
 
   return (
     <>
-      <How compact={compact}>Type the missing word or words. Enter goes to the next gap; when every gap is filled, check your answers.</How>
+      <How compact={compact}>Type the missing words. Enter goes to the next gap; answers are checked once every gap is filled.</How>
       <Progress done={solved} total={g.rows.length}>
         <button type="button" className={chip(allIn && unchecked ? 'brand' : 'quiet')} disabled={!allIn || !unchecked} onClick={checkAll}
           title={allIn ? undefined : 'Fill every gap first'}>Check answers</button>
@@ -199,7 +199,9 @@ function FillGame({ g, onNext, compact }: { g: FillIn } & Required<Props>) {
                   st === 'right' ? 'border-success bg-success-subtle-bg text-success-subtle-text'
                     : st === 'almost' ? 'border-brand bg-brand-subtle text-brand-deep'
                     : st === 'wrong' ? 'border-destructive bg-destructive/10'
-                    : st === 'shown' ? 'border-border bg-muted text-warm-secondary' : 'border-border bg-card',
+                    : st === 'shown' ? 'border-border bg-muted text-warm-secondary'
+                    // an empty gap reads as a place to write: a filled field, its edge blue while typing
+                    : 'border-border bg-muted focus:border-brand-blue focus:bg-card',
                 )}
                 style={{ width: `${Math.min(26, Math.max(7, shown.length + 2))}ch` }}
                 value={st === 'shown' ? shown : typed[r.id] ?? ''} readOnly={locked}
@@ -365,7 +367,7 @@ function WordSearchGame({ g, onNext, compact }: { g: WordSearch } & Required<Pro
 
   return (
     <>
-      <How compact={compact}>Drag across a word, or tap its first and last letter. Words read forwards: across, down or diagonally.</How>
+      <How compact={compact}>Drag across a word, or tap its first and last letter. Words run across, down or diagonally.</How>
       <Progress done={found.length} total={g.words.length}>
         <label className="flex items-center gap-1.5 text-[13px] text-warm-secondary">
           <input type="checkbox" className="size-4 accent-brand" checked={showWords} onChange={(e) => setShowWords(e.target.checked)} /> Show the words
@@ -538,7 +540,7 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
 
   return (
     <>
-      <How compact={compact}>Tap a square and type; tap it again to switch between across and down. Enter goes to the next clue you haven't answered. Once every square is filled, your answers are checked.</How>
+      <How compact={compact}>Tap a square and type. Enter goes to the next clue; the grid is checked when it's full.</How>
       <Progress done={filled} total={g.clues.length}>
         <button type="button" className={chip('quiet')} onClick={() => { reveal(cellsOfClue(clue)); input.current?.focus({ preventScroll: true }); }}>Reveal word</button>
       </Progress>

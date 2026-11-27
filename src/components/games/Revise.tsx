@@ -152,7 +152,8 @@ export function Revise({ questions, compact = false, written = false, heading, e
   };
 
   const pickField = (name: string, value: string, options: { value: string; label: string; meta?: string }[], onPick: (v: string) => void) => (
-    <div className={cn('flex min-w-0 flex-col gap-1', name === 'Chapter' && 'col-span-2 sm:col-span-1')} key={name}>
+    // on a phone Board and Class share a row, Subject and Chapter get one each (their names are long)
+    <div className={cn('flex min-w-0 flex-col gap-1', (name === 'Subject' || name === 'Chapter') && 'col-span-2 sm:col-span-1')} key={name}>
       <label htmlFor={`${uid}-${name}`} className={label}>{name}</label>
       <Picker id={`${uid}-${name}`} look="field" label={name} value={value} options={options} onPick={onPick} />
     </div>
@@ -176,7 +177,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
         )}
         {!written ? (
           // Try the games: the same dropdowns as Write questions, listing only what has a game to play
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_1.3fr_2fr]">
             {pickField('Board', chapter.board, boards.map((b) => ({ value: b, label: b })), (b) => open(near({ board: b })))}
             {pickField('Class', String(chapter.cls ?? ''), classesOn.map((n) => ({ value: String(n), label: `Class ${n}` })), (v) => open(near({ board: chapter.board, cls: Number(v) })))}
             {pickField('Subject', chapter.subject, subjectsOn.map((x) => ({ value: x, label: x })), (v) => open(near({ board: chapter.board, cls: chapter.cls, subject: v })))}
@@ -246,20 +247,21 @@ export function Revise({ questions, compact = false, written = false, heading, e
       </section>
 
       <section aria-label="Puzzle" className={box}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div role="tablist" aria-label="Game" className="relative flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-card p-1 sm:rounded-full">
+        {/* one row: the games (scrolling sideways when they don't fit, on a phone) and New puzzle beside them */}
+        <div className="flex items-center justify-between gap-2">
+          <div role="tablist" aria-label="Game" className="relative flex min-w-0 shrink items-center gap-1 overflow-x-auto overscroll-x-contain rounded-full bg-card p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {type && <SlidingPill active={type} className="bg-muted" />}
             {GAME_TYPES.map((t) => (
               <button key={t} type="button" role="tab" data-pill={t} aria-selected={t === type} aria-disabled={!games[t] || undefined} onClick={() => { if (games[t]) { setWant(t); setAsked(null); } else setAsked(t); }}
                 title={whyNot(t, items, !!games[t]) ?? undefined}
-                className={cn('relative z-[1] flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-disabled:cursor-not-allowed aria-disabled:text-warm-label aria-disabled:line-through',
+                className={cn('relative z-[1] flex shrink-0 items-center whitespace-nowrap rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-disabled:cursor-not-allowed aria-disabled:text-warm-label aria-disabled:line-through',
                   compact ? 'h-8 px-2.5 text-[12px]' : 'h-9 px-3 text-[13px]',
                   t === type ? 'text-foreground' : 'text-warm-secondary hover:text-foreground')}>
                 {GAME_NAMES[t]}
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
             {extra?.({ chapterId: chapter.id, topics: chosen })}
             <button type="button" className={chip('card')} onClick={() => setRound((r) => r + 1)}><Shuffle aria-hidden /> New puzzle</button>
           </div>

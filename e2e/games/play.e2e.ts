@@ -133,3 +133,16 @@ test('matching: a matched pair shows its partner on both sides; a wrong pair doe
   await expect(answer).toHaveAttribute('aria-label', /matched with 1$/);
   await expect(puzzle.locator('[role="progressbar"]')).toHaveAttribute('aria-valuenow', '1');
 });
+
+test('on a phone the crossword and word search fit inside the card, and the game tabs stay on one row', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [game, grid] of [['Crossword', '.games-cw-cell'], ['Word search', '.games-ws-cell']] as const) {
+    const puzzle = await play(page, game);
+    const card = (await puzzle.boundingBox())!;
+    const right = await puzzle.locator(grid).evaluateAll((cells) => Math.max(...cells.map((c) => c.getBoundingClientRect().right)));
+    expect(right).toBeLessThanOrEqual(card.x + card.width);
+    const tops = await page.getByRole('tab', { name: /Crossword|Word search|Matching|Fill in the blank|Multiple choice/ })
+      .evaluateAll((tabs) => new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top))).size);
+    expect(tops).toBe(1);
+  }
+});

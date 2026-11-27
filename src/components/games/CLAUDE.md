@@ -142,6 +142,13 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   1, 2… and Answers lettered A, B…; either side can be picked first, the other side then waits (dashed edges); a
   matched pair takes one colour on both sides (any but the bright blue of a picked card, `PAIR_COLOURS`) and each shows
   its partner's label ("→ G", "← 1"); a wrong pair flashes red with a small shake.
+  The layout pass (unslop, 27 November 2026): the crossword and word search grids size their squares to the card's
+  width (`.games-fit`, a container in `games.css`, and `100cqw` in `--cell`), so on a phone they fit inside the card
+  instead of running off it; the crossword's clue numbers are at least 9px. The four dropdowns sit two a row on a
+  phone (Subject and Chapter full width) and four a row from `sm`. The five game tabs are one row that scrolls sideways
+  on a narrow screen, with New puzzle beside it. Each game's instruction is one short sentence or two. An empty Fill
+  gap is a grey box that turns white with a blue edge when typed in. `play.e2e.ts` checks the fit and the one row at
+  390px.
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options

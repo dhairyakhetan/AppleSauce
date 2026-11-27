@@ -86,9 +86,13 @@
 .games-shake { animation: games-shake 320ms var(--ease-out-strong); }
 @media (prefers-reduced-motion: reduce) { .games-shake { animation: none; } }
 
+/* The games' grids size their squares from the width of the game they are in (100cqw: `games-fit`, GameView's root),
+   not from the screen, so a grid always fits its card, on a phone too. */
+.games-fit { container-type: inline-size; }
+
 /* Word search: one square per letter, as big as fits (smaller in the preview). */
 .games-ws-grid {
-  --cell: min(36px, calc((100vw - 72px) / var(--n)));
+  --cell: min(36px, calc((100cqw - 2px) / var(--n)));
   display: grid;
   grid-template-columns: repeat(var(--n), var(--cell));
   width: max-content;
@@ -100,7 +104,7 @@
   user-select: none;
   -webkit-user-select: none;
 }
-.games-compact .games-ws-grid { --cell: min(24px, calc((100vw - 96px) / var(--n))); }
+.games-compact .games-ws-grid { --cell: min(24px, calc((100cqw - 2px) / var(--n))); }
 .games-ws-cell {
   position: relative;
   z-index: 1;
@@ -142,13 +146,13 @@
 
 /* Crossword: squares share their borders. */
 .games-cw-grid {
-  --cell: min(38px, calc((100vw - 72px) / var(--cols)));
+  --cell: min(38px, calc((100cqw - 2px) / var(--cols)));
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--cell));
   width: max-content;
   padding: 1px 0 0 1px;
 }
-.games-compact .games-cw-grid { --cell: min(26px, calc((100vw - 96px) / var(--cols))); }
+.games-compact .games-cw-grid { --cell: min(26px, calc((100cqw - 2px) / var(--cols))); }
 .games-cw-cell {
   position: relative;
   display: grid;
@@ -172,7 +176,7 @@
   position: absolute;
   top: 1px;
   left: 2px;
-  font: 500 calc(var(--cell) * 0.27) / 1 Geist, system-ui, sans-serif;
+  font: 500 max(9px, calc(var(--cell) * 0.27)) / 1 Geist, system-ui, sans-serif; /* never too small to read */
   color: hsl(var(--muted-foreground));
 }
 .games-cw-input { position: absolute; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; pointer-events: none; }
