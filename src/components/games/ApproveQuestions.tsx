@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, ChevronDown, Copy, Download } from 'lucide-react';
 import { nextTabKey } from '@/components/admin/AdminTabs';
 import { APPROVED_PAGE, type GamesApi, type SaveResult } from '@/lib/games/api';
 import { counts, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Batch, type Status } from '@/lib/games/rows';
 import { cn } from '@/lib/utils';
-import { btn, chip, copyText, download, FIELD, offerUndo, plural, useLatch, when } from './helpers';
-import { Empty, Loading, LoadFailed, Morph, RowsTable } from './shared';
+import { btn, chip, copyText, download, FIELD, offerUndo, plural, useEnter, useLatch, when } from './helpers';
+import { Empty, Loading, LoadFailed, Morph, Reveal, RowsTable, SlidingPill } from './shared';
 import { asText, doubts } from '@/lib/games/format';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
@@ -61,6 +61,8 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
    * steps change in place (`Morph`), so nothing closes and opens again in between. */
   const [review, setReview] = useState<Review | null>(null);
   const shownReview = useLatch(review);
+  const panel = useRef<HTMLDivElement>(null);
+  useEnter(panel, tab);
   const [reviewWhy, setReviewWhy] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -181,7 +183,8 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
   const rowClass = (q: BankQuestion) => (leaving.has(q.id) ? 'opacity-0' : '');
 
   /** The "why are these going back?" box, under a row or a batch. */
-  const whyBox = (where: string, ids: string[]) => (back?.where === where ? (
+  const whyBox = (where: string, ids: string[]) => (
+    <Reveal open={back?.where === where}>
     <form className="mt-2 flex flex-col gap-2 rounded-2xl bg-muted p-3" onSubmit={(e) => { e.preventDefault(); if (reason.trim()) act(ids, 'rejected', reason); }}>
       <label htmlFor={`why-${where}`} className="text-[13px] font-semibold text-foreground">Why {ids.length > 1 ? 'are these' : 'is this'} going back? The teacher will see this.</label>
       <textarea id={`why-${where}`} rows={2} maxLength={500} value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
@@ -191,15 +194,22 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
         <button type="button" className={chip('card')} onClick={() => setBack(null)}>Cancel</button>
       </div>
     </form>
-  ) : null);
+    </Reveal>
+  );
 
   const rowActions = (q: BankQuestion) => {
     if (q.status === 'pending') {
-      return back?.where === q.id ? whyBox(q.id, [q.id]) : (
-        <div className="flex flex-wrap gap-2 pb-1">
-          <button type="button" className={chip('mint')} onClick={() => act([q.id], 'approved')}><Check aria-hidden /> Approve</button>
-          <button type="button" className={chip('quiet')} onClick={() => { setBack({ where: q.id, ids: [q.id] }); setReason(''); }}>Send back</button>
-        </div>
+      const asking = back?.where === q.id;
+      return (
+        <>
+          <Reveal open={!asking}>
+            <div className="flex flex-wrap gap-2 pb-1">
+              <button type="button" className={chip('mint')} onClick={() => act([q.id], 'approved')}><Check aria-hidden /> Approve</button>
+              <button type="button" className={chip('quiet')} onClick={() => { setBack({ where: q.id, ids: [q.id] }); setReason(''); }}>Send back</button>
+            </div>
+          </Reveal>
+          {whyBox(q.id, [q.id])}
+        </>
       );
     }
     return (
@@ -219,12 +229,13 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
     <div className="flex flex-col gap-4">
       {saveError && <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-[14px] text-foreground" role="alert">{saveError}</p>}
 
-      <div role="tablist" aria-label="Questions" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-muted p-1 sm:w-fit sm:rounded-full">
+      <div role="tablist" aria-label="Questions" className="relative flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-muted p-1 sm:w-fit sm:rounded-full">
+        <SlidingPill active={tab} className="bg-card shadow-sm" />
         {TABS.map((t) => (
           <button key={t.key} id={`games-tab-${t.key}`} type="button" role="tab" aria-selected={tab === t.key} aria-controls="games-approve-panel" tabIndex={tab === t.key ? 0 : -1}
-            onClick={() => selectTab(t.key)} onKeyDown={onTabKeyDown}
-            className={cn('flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              tab === t.key ? 'bg-card text-foreground' : 'text-warm-secondary hover:text-foreground')}>
+            onClick={() => selectTab(t.key)} onKeyDown={onTabKeyDown} data-pill={t.key}
+            className={cn('relative z-[1] flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              tab === t.key ? 'text-foreground' : 'text-warm-secondary hover:text-foreground')}>
             {t.label}
             <span className={cn('inline-flex h-[19px] min-w-[19px] items-center justify-center rounded-full px-[5px] text-[11px] font-bold tabular-nums',
               t.key === 'pending' && c.pending > 0 ? 'bg-brand text-foreground' : 'bg-card text-warm-secondary')}>{c[t.key]}</span>
@@ -232,7 +243,7 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
         ))}
       </div>
 
-      <div role="tabpanel" id="games-approve-panel" aria-labelledby={`games-tab-${tab}`} className="flex flex-col gap-3">
+      <div ref={panel} role="tabpanel" id="games-approve-panel" aria-labelledby={`games-tab-${tab}`} className="flex flex-col gap-3">
         {tab === 'pending' && (byBatch.length ? byBatch.map(({ b, qs }) => (
           <section key={b.id} aria-label={`Batch from ${b.by}`} className="animate-fade-slide-up flex flex-col gap-2 rounded-[24px] bg-muted p-4 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -417,7 +428,7 @@ function ChapterList({ questions, batches, rowActions, rowClass, download: dl }:
                 <span className="text-[13px] text-warm-secondary">{plural(qs.length, 'question')}{at ? ` · ${when(at)}` : ''}</span>
                 <ChevronDown className={cn('size-4 shrink-0 text-warm-secondary transition-transform duration-200', isOpen && 'rotate-180')} aria-hidden />
               </button>
-              {isOpen && (
+              <Reveal open={isOpen}>
                 <div className="flex flex-col gap-3 border-t border-border px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
                   {dl && q0.chapter_id && (
                     <div className="flex flex-wrap gap-2">
@@ -427,7 +438,7 @@ function ChapterList({ questions, batches, rowActions, rowClass, download: dl }:
                   )}
                   <RowsTable rows={[...qs].sort((x, y) => (x.topic_no ?? 0) - (y.topic_no ?? 0) || x.question_no - y.question_no)} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} oneChapter />
                 </div>
-              )}
+              </Reveal>
             </li>
           );
         })}

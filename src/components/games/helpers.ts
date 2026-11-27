@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { toast } from 'sonner';
 import { usableIn, type GameType, type Item } from '@/lib/games/engine';
 import { CROSSWORD } from '@/lib/games/engine/crossword';
@@ -115,4 +115,23 @@ export function useLatch<T>(value: T | null | undefined): T | null | undefined {
   const last = useRef(value);
   if (value !== null && value !== undefined) last.current = value;
   return value ?? last.current;
+}
+
+/** The site's easing for things that settle (no bounce): quick to start, gentle to land. */
+export const EASE_SETTLE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+/** True when the person asked for less motion: things then appear and change at once. */
+export const lessMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * New content in place (another part, tab or puzzle): it fades and rises in a little each time `key` changes, without
+ * being mounted again (so nothing in it loses its state). Not on the first showing, and not with reduced motion.
+ */
+export function useEnter(ref: RefObject<HTMLElement>, key: string) {
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const el = ref.current;
+    if (!el || lessMotion() || typeof el.animate !== 'function') return;
+    el.animate([{ opacity: 0, translate: '0 8px' }, { opacity: 1, translate: '0 0' }], { duration: 260, easing: EASE_SETTLE });
+  }, [ref, key]);
 }

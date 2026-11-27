@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
 import { GAME_TYPES, makeGame, poolFor, seedOf, type Game, type GameType, type Item } from '@/lib/games/engine';
 
@@ -6,7 +6,8 @@ import type { BankQuestion } from '@/lib/games/rows';
 import { bySubject } from '@/lib/games/details';
 import { cn } from '@/lib/utils';
 import { GameView } from './GameView';
-import { chip, GAME_NAMES, plural, whyNot } from './helpers';
+import { chip, GAME_NAMES, plural, useEnter, whyNot } from './helpers';
+import { SlidingPill } from './shared';
 
 /** The most answers the small preview's crossword uses. */
 const COMPACT_CROSSWORD = 8;
@@ -108,6 +109,9 @@ export function Revise({ questions, compact = false, written = false, heading, e
   }, [items, seed, compact]);
   const type = want && games[want] ? want : GAME_TYPES.find((t) => games[t]);
   const game = type && games[type];
+  // the highlight glides to the game chosen, and a new game or puzzle fades and rises in
+  const gameBox = useRef<HTMLDivElement>(null);
+  useEnter(gameBox, `${type}|${seed}`);
 
   const toggle = (k: string) => {
     const out = pick.chapter === chapter!.id ? pick.out.filter((t) => known.includes(t)) : [];
@@ -188,13 +192,14 @@ export function Revise({ questions, compact = false, written = false, heading, e
 
       <section aria-label="Puzzle" className={box}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div role="tablist" aria-label="Game" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-card p-1 sm:rounded-full">
+          <div role="tablist" aria-label="Game" className="relative flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-card p-1 sm:rounded-full">
+            {type && <SlidingPill active={type} className="bg-muted" />}
             {GAME_TYPES.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={t === type} aria-disabled={!games[t] || undefined} onClick={() => { if (games[t]) { setWant(t); setAsked(null); } else setAsked(t); }}
+              <button key={t} type="button" role="tab" data-pill={t} aria-selected={t === type} aria-disabled={!games[t] || undefined} onClick={() => { if (games[t]) { setWant(t); setAsked(null); } else setAsked(t); }}
                 title={whyNot(t, items, !!games[t]) ?? undefined}
-                className={cn('flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-disabled:cursor-not-allowed aria-disabled:text-warm-label aria-disabled:line-through',
+                className={cn('relative z-[1] flex items-center rounded-full font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-disabled:cursor-not-allowed aria-disabled:text-warm-label aria-disabled:line-through',
                   compact ? 'h-8 px-2.5 text-[12px]' : 'h-9 px-3 text-[13px]',
-                  t === type ? 'bg-muted text-foreground' : 'text-warm-secondary hover:text-foreground')}>
+                  t === type ? 'text-foreground' : 'text-warm-secondary hover:text-foreground')}>
                 {GAME_NAMES[t]}
               </button>
             ))}
@@ -207,7 +212,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
         <p role="status" className={cn('text-warm-secondary', compact ? 'text-[12px]' : 'text-[13px]', !(asked && !games[asked]) && 'sr-only')}>
           {asked && !games[asked] ? `${GAME_NAMES[asked]}: ${whyNot(asked, items, false)}` : ''}
         </p>
-        <div className={cn('rounded-2xl', compact ? '' : 'bg-card p-4 sm:p-6')}>
+        <div ref={gameBox} className={cn('rounded-2xl', compact ? '' : 'bg-card p-4 sm:p-6')}>
           {game ? <GameView key={`${type}|${seed}|${made}`} game={game} compact={compact} onNext={() => setRound((r) => r + 1)} />
             : <p className="py-6 text-center text-[14px] text-warm-secondary">These topics don't have enough questions for a puzzle yet. {written ? 'Add a few more.' : 'Pick more topics.'}</p>}
         </div>

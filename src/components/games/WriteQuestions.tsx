@@ -1,6 +1,6 @@
 import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDown, Check, Copy, Send, Trash2, X } from 'lucide-react';
+import { ArrowDown, Check, ChevronDown, Copy, Send, Trash2, X } from 'lucide-react';
 import type { GamesApi, SendResult } from '@/lib/games/api';
 import { bySubject, checkBoard, checkClass, checkDetail, checkSubject, DETAIL_KEYS, detailLine, LABEL, parseNumbered, readDetails, readMeta, standardDetail, writeDetail, type DetailKey } from '@/lib/games/details';
 import { chaptersFor, checkList, isOpen, sameName } from '@/lib/games/catalog';
@@ -15,7 +15,7 @@ import { GamePreview } from './GamePreview';
 import { Guide } from './Guide';
 import { btn, chip, copyText, day, FIELD, GAME_NAMES, lineKind, LINKISH, offerUndo, plural, useLatch } from './helpers';
 import { Picker } from './Picker';
-import { ActionIcon, Labelled, RowsTable } from './shared';
+import { ActionIcon, Labelled, Reveal, RowsTable } from './shared';
 import './games.css';
 
 /* Write questions: people on the games team write questions in one format (a block per question: Q:, A:, Also:, Fill:,
@@ -178,7 +178,10 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     return () => io.disconnect();
   }, []);
 
-  const text = useDeferredValue(raw);
+  // while a pick is typing its line in, everything that reads the text (the checks, the dropdowns, the problem list)
+  // reads the finished text, so a half-typed "Board: CB" never shows an error for a moment
+  const settledText = animating && typing.current ? typing.current.final : raw;
+  const text = useDeferredValue(settledText);
   const { rows, issues: formatIssues } = useMemo(() => format(text), [text]);
   /** Moving the cursor to another line ends "still typing" there; arriving on a line shows its problems. */
   const moveCaret = (line: number) => {
@@ -189,7 +192,7 @@ export function WriteQuestions({ api, canApprove, alerts, onSeen, onDismiss, onR
     if (line !== null) setCaret(line);
     setTypingLine(line);
   };
-  const details = readDetails(raw);
+  const details = readDetails(settledText);
   /**
    * The chapter lines the text last had: the autocorrect puts one back at the top if it is deleted (once the writer has
    * moved below the top lines). A pick, Clear or Try an example sets them; typing a new one replaces it.
@@ -815,6 +818,8 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismi
   }, [open, unseenIds, onSeen]);
   useEffect(() => { if (!open) setFresh(new Set()); }, [open]);
   const pointAt = new Set(focus);
+  /** The batches whose questions are shown ("Show the N questions"). */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   if (alerts.error && !alerts.list) {
     return (
@@ -843,7 +848,7 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismi
             : `${waitingFix} of ${list.length} ${waitingFix === 1 ? 'needs' : 'need'} fixing.`}
         </p>
       )}
-      {open && (
+      <Reveal open={open}>
         <ul id="back-list" className="mt-3 flex flex-col gap-2">
           {sentTogether(list).map((g) => {
             const a = g[0];
@@ -872,12 +877,18 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismi
                 )}
                 <p className="rounded-xl bg-brand-subtle px-3 py-2 text-foreground"><b>Why:</b> {a.note}</p>
                 {g.length > 1 && (
-                  <details className="group text-[13px]">
-                    <summary className="w-fit cursor-pointer rounded font-semibold text-brand-blue underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">Show the {g.length} questions</summary>
-                    <ol className="mt-1 flex list-decimal flex-col gap-0.5 pl-5 text-warm-prose">
-                      {g.map((x) => <li key={x.id}>{x.question} <b className="text-foreground">{x.answer}</b>{x.now && <span className="text-warm-meta"> (sent again)</span>}</li>)}
-                    </ol>
-                  </details>
+                  <div className="text-[13px]">
+                    <button type="button" className={cn(LINKISH, 'flex items-center gap-1')} aria-expanded={expanded.has(ids[0])}
+                      onClick={() => setExpanded((e) => { const n = new Set(e); if (n.has(ids[0])) n.delete(ids[0]); else n.add(ids[0]); return n; })}>
+                      <ChevronDown aria-hidden className={cn('size-3.5 transition-transform duration-200', expanded.has(ids[0]) && 'rotate-180')} />
+                      {expanded.has(ids[0]) ? 'Hide' : 'Show'} the {g.length} questions
+                    </button>
+                    <Reveal open={expanded.has(ids[0])}>
+                      <ol className="mt-1 flex list-decimal flex-col gap-0.5 pl-5 text-warm-prose">
+                        {g.map((x) => <li key={x.id}>{x.question} <b className="text-foreground">{x.answer}</b>{x.now && <span className="text-warm-meta"> (sent again)</span>}</li>)}
+                      </ol>
+                    </Reveal>
+                  </div>
                 )}
                 <p className="text-[12px] text-warm-meta">
                   Sent back by {a.reviewer}{a.reviewedAt && `, ${day(a.reviewedAt)}`}.
@@ -893,7 +904,7 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismi
             );
           })}
         </ul>
-      )}
+      </Reveal>
     </section>
   );
 }

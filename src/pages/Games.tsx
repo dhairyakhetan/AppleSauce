@@ -3,8 +3,8 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
 import { ApproveQuestions } from '@/components/games/ApproveQuestions';
 import { Chapters } from '@/components/games/Chapters';
-import { btn } from '@/components/games/helpers';
-import { LoadFailed } from '@/components/games/shared';
+import { btn, useEnter } from '@/components/games/helpers';
+import { LoadFailed, SlidingPill } from '@/components/games/shared';
 import { Team } from '@/components/games/Team';
 import { TryGames } from '@/components/games/TryGames';
 import { WriteQuestions, type Alerts } from '@/components/games/WriteQuestions';
@@ -186,6 +186,9 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   const [opened, setOpened] = useState<Set<Part>>(new Set());
   const here = part && r && GAMES_PARTS.find((x) => x.key === part)!.may(r) ? part : null;
   useEffect(() => { if (here) setOpened((o) => (o.has(here) ? o : new Set(o).add(here))); }, [here]);
+  // the tabs' highlight glides to the part chosen, and the part fades and rises in (kept mounted, so nothing in it is lost)
+  const partBox = useRef<HTMLDivElement>(null);
+  useEnter(partBox, here ?? '');
 
   const label = GAMES_PARTS.find((x) => x.key === part)?.label ?? 'Games team';
   usePageMeta(`${label} | Games team | Shikshaq`, 'The games team writes, checks and approves questions for the revision games.');
@@ -249,13 +252,14 @@ export function GamesPage({ api, dummy = false, banner, me }: {
     <Shell banner={banner}>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-lg font-bold text-foreground">{label}</h1>
-        <nav aria-label="Games team" className="flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-muted p-1 sm:rounded-full">
+        <nav aria-label="Games team" className="relative flex max-w-full flex-wrap items-center gap-1 rounded-[20px] bg-muted p-1 sm:rounded-full">
+          {here && <SlidingPill active={here} className="bg-card shadow-sm" />}
           {GAMES_PARTS.filter((x) => x.may(r)).map((x) => {
             const count = x.key === 'approve' ? waiting : x.key === 'write' ? unseen : 0;
             return (
-              <Link key={x.key} to={x.path} aria-current={x.key === here ? 'page' : undefined}
-                className={cn('flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                  x.key === here ? 'bg-card text-foreground' : 'text-warm-secondary hover:text-foreground')}>
+              <Link key={x.key} to={x.path} aria-current={x.key === here ? 'page' : undefined} data-pill={x.key}
+                className={cn('relative z-[1] flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  x.key === here ? 'text-foreground' : 'text-warm-secondary hover:text-foreground')}>
                 {x.label}
                 {count > 0 && (
                   <>
@@ -270,7 +274,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
       </div>
 
       {[...opened].map((k) => (
-        <div key={k} hidden={k !== here}>{parts[k]()}</div>
+        <div key={k} ref={k === here ? partBox : undefined} hidden={k !== here}>{parts[k]()}</div>
       ))}
     </Shell>
   );

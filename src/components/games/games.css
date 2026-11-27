@@ -157,3 +157,7 @@
   .games-morph { transition: none; }
   .games-morph-in { animation: none; }
 }
+/* The highlight behind the chosen tab glides to the next one (SlidingPill in shared.tsx): critically damped, no
+   bounce, and a new click redirects it from where it is. */
+.games-pill { transition: transform 320ms var(--ease-out-strong), width 320ms var(--ease-out-strong), height 320ms var(--ease-out-strong); }
+@media (prefers-reduced-motion: reduce) { .games-pill { transition: none; } }

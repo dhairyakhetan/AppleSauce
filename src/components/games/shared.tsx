@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Row } from '@/lib/games/rows';
-import { GAME_NAMES, LINKISH, lineKind, type LineKind } from './helpers';
+import { EASE_SETTLE, GAME_NAMES, LINKISH, lessMotion, lineKind, type LineKind } from './helpers';
 
 /* What the games pages share on screen: the grouped table of rows, loading, failure and empty states, and the icon that
    becomes a check mark. The plain helpers (button looks, dates, saving a file, "Undo") are in helpers.ts. */
@@ -186,4 +186,67 @@ export function Morph({ step, children, className }: { step: string; children: R
       </div>
     </div>
   );
+}
+
+/**
+ * The highlight behind the chosen tab of a row of tabs: it glides from the last one to `active` (the tab with
+ * `data-pill={active}`). It goes inside the row, which is `relative`; the tabs sit above it (`relative z-[1]`) with no
+ * background of their own when chosen. It follows the row as it wraps or resizes, and doesn't slide in on the first
+ * showing. (It finds the row as its own parent, so it is right from the first showing.)
+ */
+export function SlidingPill({ active, className }: { active: string; className?: string }) {
+  const self = useRef<HTMLSpanElement>(null);
+  const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const placed = useRef(false);
+  useLayoutEffect(() => {
+    const r = self.current?.parentElement;
+    if (!r) return;
+    const place = () => {
+      const el = r.querySelector<HTMLElement>(`[data-pill="${active}"]`);
+      setBox(el ? { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight } : null);
+    };
+    place();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(place);
+    ro.observe(r);
+    for (const c of r.children) ro.observe(c);
+    return () => ro.disconnect();
+  }, [active]);
+  useEffect(() => { if (box) placed.current = true; }, [box]);
+  return (
+    <span ref={self} aria-hidden className={cn('pointer-events-none absolute left-0 top-0 rounded-full', placed.current && 'games-pill', !box && 'invisible', className)}
+      style={box ? { transform: `translate(${box.x}px, ${box.y}px)`, width: box.w, height: box.h } : undefined} />
+  );
+}
+
+/**
+ * A part that opens and closes in place (a list, a reason box): it grows to its height as it opens and shrinks away as
+ * it closes, starting from wherever it is, so a second click mid-way turns it around without a jump. Not on the first
+ * showing, and at once with reduced motion.
+ */
+export function Reveal({ open, children, className }: { open: boolean; children: ReactNode; className?: string }) {
+  // on the page while open, and while closing (until it has shrunk away)
+  const [present, setPresent] = useState(open);
+  if (open && !present) setPresent(true);
+  const ref = useRef<HTMLDivElement>(null);
+  const was = useRef(open);
+  const moving = useRef(false);
+  useLayoutEffect(() => {
+    const before = was.current;
+    was.current = open;
+    if (before === open) return; // the first showing, or nothing changed
+    const el = ref.current;
+    if (!el) return;
+    if (lessMotion() || typeof el.animate !== 'function') { if (!open) setPresent(false); return; }
+    // from where it is now: its height mid-way through the last move, its full height if open, nothing if just put back
+    const from = moving.current || before ? el.getBoundingClientRect().height : 0;
+    for (const a of el.getAnimations()) a.cancel();
+    const to = open ? el.scrollHeight : 0;
+    el.style.overflow = 'hidden';
+    moving.current = true;
+    const a = el.animate([{ height: `${from}px`, opacity: open && !from ? 0 : 1 }, { height: `${to}px`, opacity: open ? 1 : 0 }],
+      { duration: open ? 280 : 220, easing: EASE_SETTLE, fill: open ? 'none' : 'forwards' });
+    a.onfinish = () => { moving.current = false; el.style.overflow = ''; if (!open) setPresent(false); };
+  }, [open]);
+  return present ? <div ref={ref} className={className}>{children}</div> : null;
 }

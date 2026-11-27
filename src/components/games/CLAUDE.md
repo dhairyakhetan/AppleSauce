@@ -175,6 +175,13 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   problem list, flagged batches on Approve questions (`flagged.e2e.ts`), sent-back questions, the preview's greyed-out games, Bulk add and
   Bulk remove. No database or keys needed. `@playwright/test` is pinned to the Playwright version whose browser is
   installed. Not in `npm test` or CI (vitest runs in node with no browser); run it after changing these pages.
+- **Motion (Apple's fluid-interface rules: settle with no bounce, start from where things are, turn around mid-way):**
+  the tab rows (the parts, Approve's Waiting/Approved/Sent back, the games) have one highlight that glides to the tab
+  chosen (`SlidingPill` in `shared.tsx`, inside a `relative` row; tabs carry `data-pill`); a new part, tab or puzzle
+  fades and rises in without being mounted again (`useEnter` in `helpers.ts`); parts that open and close (the sent-back
+  list, "Show the N questions", Approve's chapter rows and "Why is this going back?") grow and shrink from their
+  current height (`Reveal` in `shared.tsx`). While a pick types its line in, the page checks the finished text, so no
+  error shows for a half-typed line. All of it is still with reduced motion. `e2e/games/motion.e2e.ts` measures it.
 - **Popups open and close smoothly:** every games popup stays mounted and is opened with `open`, so Radix plays the
   site's open and close animations (`overlay-modal`); a popup's words are kept as they were while it closes (`useLatch`
   in `helpers.ts`), as clearing or replacing changes them at once. Reduced motion turns the movement off.
