@@ -219,7 +219,7 @@ function ChoiceGame({ g, onNext, compact }: { g: Choice } & Required<Props>) {
           const finished = isDone(r);
           return (
             <li key={r.id} className={cn('flex flex-col rounded-2xl ring-1 transition-colors duration-300',
-              compact ? 'gap-2 p-3' : 'gap-3 p-4 sm:p-5', finished ? 'bg-success-subtle-bg/40 ring-success/30' : 'bg-muted/50 ring-border')}>
+              compact ? 'gap-2 p-3' : 'gap-3 p-4 sm:p-5', finished ? 'bg-success-subtle-bg ring-transparent' : 'bg-muted/50 ring-border')}>
               <div className="flex items-start gap-2.5">
                 <span className={cn('mt-px shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums transition-colors duration-300',
                   finished ? 'bg-success text-card' : 'bg-card text-warm-secondary ring-1 ring-border')}>
