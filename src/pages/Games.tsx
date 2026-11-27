@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { BentoPanel, BentoStack } from '@/components/layout/PageContainer';
 import { ApproveQuestions } from '@/components/games/ApproveQuestions';
 import { Chapters } from '@/components/games/Chapters';
-import { btn, useEnter } from '@/components/games/helpers';
+import { btn, useEnter, useSmoothLayout } from '@/components/games/helpers';
 import { LoadFailed, SlidingPill } from '@/components/games/shared';
 import { Team } from '@/components/games/Team';
 import { TryGames } from '@/components/games/TryGames';
@@ -189,6 +189,11 @@ export function GamesPage({ api, dummy = false, banner, me }: {
   // the tabs' highlight glides to the part chosen, and the part fades and rises in (kept mounted, so nothing in it is lost)
   const partBox = useRef<HTMLDivElement>(null);
   useEnter(partBox, here ?? '');
+  // and when its height changes, what is below the change slides to its new place instead of jumping (the part's own
+  // element, set once it is on the page: a part opened for the first time appears a moment after `here` changes)
+  const [partEl, setPartEl] = useState<HTMLDivElement | null>(null);
+  useSmoothLayout(partEl);
+  const attachPart = useCallback((el: HTMLDivElement | null) => { partBox.current = el; setPartEl(el); }, []);
 
   const label = GAMES_PARTS.find((x) => x.key === part)?.label ?? 'Games team';
   usePageMeta(`${label} | Games team | Shikshaq`, 'The games team writes, checks and approves questions for the revision games.');
@@ -274,7 +279,7 @@ export function GamesPage({ api, dummy = false, banner, me }: {
       </div>
 
       {[...opened].map((k) => (
-        <div key={k} ref={k === here ? partBox : undefined} hidden={k !== here}>{parts[k]()}</div>
+        <div key={k} ref={k === here ? attachPart : undefined} hidden={k !== here}>{parts[k]()}</div>
       ))}
     </Shell>
   );

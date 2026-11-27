@@ -81,3 +81,43 @@ test('the sent-back list grows open, and turns around mid-way without a jump', a
   expect(Math.abs(turned - closing)).toBeLessThan(open * 0.25); // no jump back to the top or bottom
   await expect.poll(() => list.evaluate((n) => Math.round(n.getBoundingClientRect().height)), { timeout: 2000 }).toBe(Math.round(open));
 });
+
+/** Every frame's top, from the frame before `act` to when it settles, measured in the page. */
+const framesOf = (page: Page, sel: string, act: string) => page.evaluate(async ([sel, act]) => {
+  const el = document.querySelector(sel)!;
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+  const tops = [Math.round(el.getBoundingClientRect().top)];
+  new Function(act)();
+  for (let i = 0; i < 45; i++) { await frame(); tops.push(Math.round(el.getBoundingClientRect().top)); }
+  return tops;
+}, [sel, act] as const);
+/** Moves one way only, in steps, with no frame jumping more than `most` px (a jump is one big step). */
+const smooth = (tops: number[], most: number) => {
+  const steps = tops.slice(1).map((t, i) => t - tops[i]).filter((d) => d !== 0);
+  expect(steps.length, `tops ${tops.join(' ')}`).toBeGreaterThan(3);
+  expect(steps.every((d) => Math.sign(d) === Math.sign(steps[0])), `tops ${tops.join(' ')}`).toBe(true);
+  expect(Math.max(...steps.map(Math.abs)), `tops ${tops.join(' ')}`).toBeLessThan(most);
+};
+/** A press as a person makes it (pointer down, then click) on the button whose words start with `label`, in `within`. */
+const press = (label: string, within = 'document') =>
+  `const b = [...${within}.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith(${JSON.stringify(label)})); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); b.click();`;
+
+test('opening and closing "See why" moves what is below it smoothly, with no jump at the start or end', async ({ page }) => {
+  await writePage(page);
+  await page.waitForTimeout(400);
+  const below = 'section[aria-labelledby="back-h"] + *';
+  const open = await framesOf(page, below, press('See why'));
+  smooth(open, 260);
+  await page.waitForTimeout(300);
+  smooth(await framesOf(page, below, press('Hide')), 260);
+});
+
+test('approving a batch slides the batches below it up, instead of a jump', async ({ page }) => {
+  await writePage(page);
+  await page.getByRole('link', { name: 'Approve questions' }).first().click();
+  await expect(page.locator('section[aria-label="Batch from Rohan Mehta"]')).toBeVisible();
+  await page.waitForTimeout(500);
+  const tops = await framesOf(page, 'section[aria-label="Batch from Rohan Mehta"]',
+    press('Approve all', 'document.querySelector(\'section[aria-label="Batch from Priya Das"]\')'));
+  smooth(tops, 400);
+});

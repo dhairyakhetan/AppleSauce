@@ -135,3 +135,80 @@ export function useEnter(ref: RefObject<HTMLElement>, key: string) {
     el.animate([{ opacity: 0, translate: '0 8px' }, { opacity: 1, translate: '0 0' }], { duration: 260, easing: EASE_SETTLE });
   }, [ref, key]);
 }
+
+/** What `useSmoothLayout` slides: page blocks and list rows, or anything marked `data-flip`. */
+const BLOCKS = 'section, li, [data-flip]';
+/** The y of an element's own `translate` (the part a slide adds), so its place in the layout can be read mid-slide. */
+const ownShift = (el: Element) => { const t = getComputedStyle(el).translate; return t && t !== 'none' ? parseFloat(t.split(' ')[1] ?? '0') || 0 : 0; };
+
+/**
+ * When the page's height changes (a list appears, a part opens, a batch leaves), the blocks below the change slide to
+ * their new place instead of jumping (a FLIP: each block remembers where it was on screen, and on a change starts from
+ * there and eases to where it now is). A change above what is on screen moves nothing there: the browser keeps the view
+ * steady, and so does this. A block inside another moves only by its own change, so nothing moves twice. A new change
+ * mid-slide carries on from where things are. Nothing moves with reduced motion or on resizing the window. `root` is
+ * the element itself (not a ref), so it starts watching once the element is on the page, and again for another one.
+ */
+export function useSmoothLayout(root: HTMLElement | null) {
+  useEffect(() => {
+    if (!root || typeof ResizeObserver === 'undefined') return;
+    /** Where each block was: its top in its tracked parent, or in the part (at the top level). */
+    const last = new Map<Element, number>();
+    /** How far the page was scrolled then: the browser scrolls to keep the view steady when something above it
+     * changes, and a block that moved by exactly that amount hasn't moved on screen. */
+    let lastScroll = scrollY;
+    const parentOf = (el: Element) => { const p = el.parentElement?.closest(BLOCKS); return p && root.contains(p) ? p : null; };
+    const blocks = () => [...root.querySelectorAll(BLOCKS)].filter((el) => (el as HTMLElement).offsetParent !== null);
+    // its place now, without its own slide: in its parent block (which may itself be sliding), or in the part
+    const placeOf = (el: Element) => (el.getBoundingClientRect().top - ownShift(el)) - (parentOf(el) ?? root).getBoundingClientRect().top;
+    const record = () => { last.clear(); for (const el of blocks()) last.set(el, placeOf(el)); lastScroll = scrollY; };
+    record();
+
+    let still = false; // a window resize: take note, don't slide
+    // a part opening or closing in place (Reveal) already moves what is below it smoothly, a frame at a time: take note,
+    // don't slide it again
+    const growing = () => root.getAnimations({ subtree: true }).some((a) => a.id === 'reveal');
+    const flip = () => {
+      if (growing()) { record(); return; }
+      const now = blocks();
+      const moves: [Element, number][] = [];
+      for (const el of now) {
+        const was = last.get(el);
+        const at = placeOf(el);
+        last.set(el, at);
+        if (was === undefined || still || lessMotion()) continue;
+        const shift = ownShift(el);
+        const steadied = parentOf(el) ? 0 : scrollY - lastScroll; // the browser's own scroll to keep the view steady
+        const from = was - at + steadied + shift; // where it showed, from where it now is (its slide so far included)
+        if (Math.abs(from) > 1) moves.push([el, from]);
+      }
+      still = false;
+      lastScroll = scrollY;
+      for (const [el, from] of moves) {
+        for (const a of el.getAnimations()) if (a.id === 'flip') a.cancel();
+        (el as HTMLElement).animate([{ translate: `0 ${from}px` }, { translate: '0 0' }], { duration: 340, easing: EASE_SETTLE, id: 'flip' });
+      }
+    };
+    const ro = new ResizeObserver(flip);
+    const watch = () => { ro.observe(root); for (const el of blocks()) ro.observe(el); };
+    watch();
+    // blocks that arrive or leave (a batch approved, a list opened): watch the new ones too
+    const mo = new MutationObserver(() => { watch(); flip(); });
+    mo.observe(root, { childList: true, subtree: true });
+    // scrolling moves nothing in the layout: only take note of how far
+    const onScroll = () => { lastScroll = scrollY; };
+    const onResize = () => { still = true; };
+    // a press or a key may change the page: take a fresh note of where everything is just before it does, so the slide
+    // starts from exactly where things were on screen (not from a note taken before the page last settled)
+    const beforeInput = () => { if (!root.getAnimations({ subtree: true }).some((a) => a.id === 'reveal')) record(); };
+    addEventListener('scroll', onScroll, { passive: true });
+    addEventListener('resize', onResize);
+    addEventListener('pointerdown', beforeInput, true);
+    addEventListener('keydown', beforeInput, true);
+    return () => {
+      ro.disconnect(); mo.disconnect();
+      removeEventListener('scroll', onScroll); removeEventListener('resize', onResize);
+      removeEventListener('pointerdown', beforeInput, true); removeEventListener('keydown', beforeInput, true);
+    };
+  }, [root]);
+}

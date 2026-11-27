@@ -245,8 +245,10 @@ export function Reveal({ open, children, className }: { open: boolean; children:
     el.style.overflow = 'hidden';
     moving.current = true;
     const a = el.animate([{ height: `${from}px`, opacity: open && !from ? 0 : 1 }, { height: `${to}px`, opacity: open ? 1 : 0 }],
-      { duration: open ? 280 : 220, easing: EASE_SETTLE, fill: open ? 'none' : 'forwards' });
+      { duration: open ? 280 : 220, easing: EASE_SETTLE, fill: open ? 'none' : 'forwards', id: 'reveal' });
     a.onfinish = () => { moving.current = false; el.style.overflow = ''; if (!open) setPresent(false); };
   }, [open]);
-  return present ? <div ref={ref} className={className}>{children}</div> : null;
+  // flow-root: the margins inside it stay inside it, while it moves and after, so its height is the same either way and
+  // nothing shifts when it settles
+  return present ? <div ref={ref} className={cn('flow-root', className)}>{children}</div> : null;
 }

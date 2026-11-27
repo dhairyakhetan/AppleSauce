@@ -841,13 +841,14 @@ function SentBackPanel({ panelRef, alerts, open, setOpen, focus, onSeen, onDismi
         </h2>
         <button type="button" className={btn('card')} aria-expanded={open} aria-controls="back-list" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'See why'}</button>
       </div>
-      {!open && (
+      {/* the summary shrinks away as the list grows, so nothing below jumps */}
+      <Reveal open={!open}>
         <p className="mt-1 text-[14px] text-warm-prose">
           {!waitingFix ? (list.length === 1 ? 'It has been sent again.' : 'All of them have been sent again.')
             : waitingFix === list.length ? (list.length === 1 ? 'It needs fixing.' : list.length === 2 ? 'Both need fixing.' : `All ${list.length} need fixing.`)
             : `${waitingFix} of ${list.length} ${waitingFix === 1 ? 'needs' : 'need'} fixing.`}
         </p>
-      )}
+      </Reveal>
       <Reveal open={open}>
         <ul id="back-list" className="mt-3 flex flex-col gap-2">
           {sentTogether(list).map((g) => {

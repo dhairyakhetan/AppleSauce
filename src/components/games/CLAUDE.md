@@ -180,7 +180,12 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   chosen (`SlidingPill` in `shared.tsx`, inside a `relative` row; tabs carry `data-pill`); a new part, tab or puzzle
   fades and rises in without being mounted again (`useEnter` in `helpers.ts`); parts that open and close (the sent-back
   list, "Show the N questions", Approve's chapter rows and "Why is this going back?") grow and shrink from their
-  current height (`Reveal` in `shared.tsx`). While a pick types its line in, the page checks the finished text, so no
+  current height (`Reveal` in `shared.tsx`; a `flow-root`, so its margins are counted the same while it moves and after,
+  and nothing shifts when it settles). When a part's height changes, the blocks below the change (sections, list rows,
+  anything `data-flip`) slide to their new place instead of jumping (`useSmoothLayout` in `helpers.ts`, on the part's
+  element in `pages/Games.tsx`): each block's place is noted in its part or parent block, again just before each press
+  or key, and the browser's own scroll to keep the view steady is allowed for, so a change above the view moves
+  nothing on screen; it leaves what a `Reveal` is already moving alone. While a pick types its line in, the page checks the finished text, so no
   error shows for a half-typed line. All of it is still with reduced motion. `e2e/games/motion.e2e.ts` measures it.
 - **Popups open and close smoothly:** every games popup stays mounted and is opened with `open`, so Radix plays the
   site's open and close animations (`overlay-modal`); a popup's words are kept as they were while it closes (`useLatch`
