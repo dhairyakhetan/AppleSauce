@@ -552,7 +552,7 @@ export function normaliseHeldBack(raw: unknown): HeldBackPaper[] {
 }
 
 /** Why a paper with work for a checker is on no other list (hod_held_other_papers, 20261127110000). */
-export type HeldOtherReason = 'wrong_pdf' | 'english_reread' | 'reference_pages' | 'text' | 'other';
+export type HeldOtherReason = 'set_aside' | 'wrong_pdf' | 'english_reread' | 'reference_pages' | 'text' | 'other';
 
 /** A paper with questions waiting for a checker that is held for a reason other than missing pictures. */
 export interface HeldOtherPaper {
@@ -566,7 +566,7 @@ export interface HeldOtherPaper {
   reason: HeldOtherReason;
 }
 
-const HELD_OTHER_REASONS: HeldOtherReason[] = ['wrong_pdf', 'english_reread', 'reference_pages', 'text', 'other'];
+const HELD_OTHER_REASONS: HeldOtherReason[] = ['set_aside', 'wrong_pdf', 'english_reread', 'reference_pages', 'text', 'other'];
 
 export function normaliseHeldOther(raw: unknown): HeldOtherPaper[] {
   const out: HeldOtherPaper[] = [];
@@ -602,6 +602,8 @@ export function heldBackWhy(p: Pick<HeldBackPaper, 'missing_snips' | 'pages_tota
 /** Why a paper is held for a reason other than missing pictures, in plain words, with what the HOD can do about it. */
 export function heldOtherWhy(reason: HeldOtherReason): string {
   switch (reason) {
+    case 'set_aside':
+      return 'This paper has been set aside (marked red) because of a problem, so it is not given to checkers until the problem is fixed.';
     case 'wrong_pdf':
       return 'The scanned file does not match this paper (wrong PDF). The owner has to load the right file before checkers can have it.';
     case 'english_reread':
