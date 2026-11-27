@@ -723,6 +723,8 @@ describe('what the page is unsure of goes to the HoD, without stopping the quest
   it('a True/False statement with "always" or "never" in it', () => {
     const { rows } = format(`${head}Q: Like charges always repel each other\nA: True\nLevel: easy`);
     expect(doubts(rows[0])).toEqual(['A True/False statement with "always" in it is often true only sometimes: check that it holds every time.']);
+    // "all" and "only" are in plainly true statements far too often to flag
+    expect(doubts(format(`${head}Q: All living things are made of cells\nA: True\nLevel: easy`).rows[0])).toEqual([]);
   });
 
   it('two questions in one topic with the same answer', () => {

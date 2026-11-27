@@ -56,6 +56,21 @@ test('clearing one and sending the other back, then Approve all the rest', async
   await expect(batch).toHaveCount(0); // nothing of it is waiting any more
 });
 
+test('closing the box after sending back still offers Undo', async ({ page }) => {
+  const batch = await sendAndApprove(page);
+  await batch.getByRole('button', { name: /^Approve all 3/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'View them' }).click();
+  const box = page.getByRole('dialog');
+  await box.getByRole('button', { name: 'Send all back' }).click();
+  await box.getByLabel(/going back/).fill('Both need another look.');
+  await box.getByRole('button', { name: 'Send 2 back' }).click();
+  await expect(box).toContainText('2 questions sent back');
+  await page.keyboard.press('Escape');
+  await expect(page.getByText('2 questions sent back').last()).toBeVisible();
+  await page.getByRole('button', { name: 'Undo' }).last().click();
+  await expect(batch.getByText('Please check:')).toHaveCount(2); // back, with their notes
+});
+
 test('Undo in the summary puts the questions and their notes back', async ({ page }) => {
   const batch = await sendAndApprove(page);
   await batch.getByRole('button', { name: /^Approve all 3/ }).click();

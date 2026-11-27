@@ -51,6 +51,10 @@ test('the crossword marks nothing until every square is filled, and Enter goes t
   for (let i = 0; i < 30 && Number(await progress.getAttribute('aria-valuenow')) < clues; i++) await page.keyboard.type('Q');
   await expect(puzzle.getByText(/letters? (is|are) wrong/)).toBeVisible();
   await expect(puzzle.locator('.games-cw-cell.bad')).not.toHaveCount(0);
+  // every square filled: Enter goes to a word with a wrong letter, onto its first wrong square
+  await puzzle.locator('button[data-n]').first().click();
+  await page.keyboard.press('Enter');
+  await expect(puzzle.locator('.games-cw-cell.cur.bad')).toHaveCount(1);
   // put it right: complete
   await puzzle.getByRole('button', { name: 'Reveal word' }).click();
   await expect(page.getByText('Crossword complete!')).toBeVisible();

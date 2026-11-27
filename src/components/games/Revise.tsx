@@ -58,7 +58,10 @@ function chaptersOf(questions: ReviseQuestion[]): Chapter[] {
 /** A chapter with enough questions for at least one of the games. */
 function playable(c: Chapter): boolean {
   const items = c.questions.map(itemOf);
-  return GAME_TYPES.some((t) => poolFor(t, items).length >= GAME_MIN[t]);
+  // fill in the blank, multiple choice and matching are made whenever there are enough questions for them; a crossword
+  // or word search can still fail (answers that don't cross or fit), so with only those, one is made to be sure
+  if ((['fill', 'choice', 'matching'] as const).some((t) => poolFor(t, items).length >= GAME_MIN[t])) return true;
+  return (['crossword', 'wordsearch'] as const).some((t) => poolFor(t, items).length >= GAME_MIN[t] && !!makeGame(t, items, 1));
 }
 const GAME_MIN: Record<GameType, number> = { crossword: CROSSWORD.min, wordsearch: WORDSEARCH.min, matching: MATCHING.min, fill: FILL.min, choice: CHOICE.min };
 const itemOf = (q: ReviseQuestion): Item => ({ id: q.id, question: q.question, answer: q.answer, also: q.also ?? [], fill: q.fill ?? null, wrong: q.wrong_options ?? [], level: q.difficulty });
@@ -168,7 +171,7 @@ export function Revise({ questions, compact = false, written = false, heading, e
         {!written && (
           <div className="flex flex-col gap-0.5">
             <h2 className="text-[15px] font-bold text-foreground">What are you revising?{demo && <span className="ml-1.5 font-semibold text-warm-secondary">(demo mode)</span>}</h2>
-            {demo && <p className="text-[13px] text-warm-secondary">No questions are approved yet, so these are sample questions. Approved ones show here instead.</p>}
+            {demo && <p className="text-[13px] text-warm-secondary">{questions.length ? "None of the approved questions make a game yet" : 'No questions are approved yet'}, so these are sample questions. Approved ones show here instead.</p>}
           </div>
         )}
         {!written ? (

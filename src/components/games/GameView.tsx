@@ -440,9 +440,17 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
     for (let k = 1; k <= n; k++) { const cl = g.clues[(i + by * k + n * n) % n]; if (!isFull(cl, L)) return cl; }
     return null;
   };
-  /** A clue's first empty square (or its first square). */
+  /** With every square filled and some wrong: the next clue with a wrong letter (`by` -1: the one before), or null. */
+  const nextWrong = (from: Clue, by: 1 | -1, L = letters) => {
+    const n = g.clues.length;
+    const i = g.clues.indexOf(from);
+    for (let k = 1; k <= n; k++) { const cl = g.clues[(i + by * k + n * n) % n]; if (cellsOfClue(cl).some(([y, x]) => L[y][x] !== g.grid[y][x])) return cl; }
+    return null;
+  };
+  /** A clue's first empty square, else its first wrong one once all is filled (or its first square). */
   const goTo = (cl: Clue, L = letters) => {
-    const [r, c] = cellsOfClue(cl).find(([y, x]) => !L[y][x]) ?? [cl.row, cl.col];
+    const full = g.grid.every((row, r) => [...row].every((ch, c) => ch === '#' || L[r][c]));
+    const [r, c] = cellsOfClue(cl).find(([y, x]) => !L[y][x]) ?? (full ? cellsOfClue(cl).find(([y, x]) => L[y][x] !== g.grid[y][x]) : undefined) ?? [cl.row, cl.col];
     setActive(true);
     setCur({ r, c, dir: cl.dir });
   };
@@ -463,7 +471,8 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
     const i = cells.findIndex(([y, x]) => y === cur.r && x === cur.c);
     const empty = cells.slice(i + 1).find(([y, x]) => !L[y][x]);
     if (empty) { setCur({ r: empty[0], c: empty[1], dir: clue.dir }); return; }
-    if (isFull(clue, L)) { const nc = nextOpen(clue, 1, L); if (nc) goTo(nc, L); return; }
+    // (with every square now filled: on to the next word with a wrong letter)
+    if (isFull(clue, L)) { const nc = nextOpen(clue, 1, L) ?? nextWrong(clue, 1, L); if (nc && nc !== clue) goTo(nc, L); return; }
     const next = cells[i + 1];
     if (next) setCur({ r: next[0], c: next[1], dir: clue.dir });
   };
@@ -481,9 +490,10 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
       const r = cur.r + dr, c = cur.c + dc;
       if (g.grid[r]?.[c] && g.grid[r][c] !== '#') setCur({ r, c, dir: dr ? 'down' : 'across' });
     } else if (e.key === 'Enter') {
-      // the next clue not yet answered (Shift: the one before). Tab is left alone, so the keyboard can leave the crossword
+      // the next clue not yet answered, or once all is filled the next with a wrong letter (Shift: the one before). Tab is
+      // left alone, so the keyboard can leave the crossword
       e.preventDefault();
-      const nc = nextOpen(clue, e.shiftKey ? -1 : 1);
+      const nc = allIn ? nextWrong(clue, e.shiftKey ? -1 : 1) : nextOpen(clue, e.shiftKey ? -1 : 1);
       if (nc) goTo(nc);
     }
   };
@@ -514,9 +524,12 @@ function CrosswordGame({ g, onNext, compact }: { g: Crossword } & Required<Props
         <div className="flex max-w-full flex-col gap-2">
           {/* the clue being answered, just above the grid: as wide as the grid (w-0 min-w-full: it never widens the column,
               so the clue list beside it stays put) and two lines tall at least, so the grid doesn't move as clues change */}
-          <p className={cn('w-0 min-w-full rounded-2xl bg-brand-blue-subtle px-3.5 py-2 text-brand-blue-deep',
-            compact ? 'min-h-[3.25rem] text-[13px] leading-[1.35]' : 'min-h-[3.75rem] text-[15px] leading-[1.4]')} aria-live="polite">
+          <p title={clue.clue} className={cn('w-0 min-w-full rounded-2xl bg-brand-blue-subtle px-3.5 py-2 text-brand-blue-deep',
+            // two lines, never more (a longer clue is cut short here; the list beside the grid has it whole)
+            compact ? 'h-[3.25rem] text-[13px] leading-[1.35]' : 'h-[3.75rem] text-[15px] leading-[1.4]')} aria-live="polite">
+            <span className="line-clamp-2">
             <b className="mr-1.5 capitalize">{clue.n} {clue.dir}</b>{clue.clue} <span className="opacity-70">{clue.enumeration}</span>
+            </span>
           </p>
           <div className="relative max-w-full overflow-x-auto">
             <div className="games-cw-grid" style={{ ['--cols' as string]: g.cols }} onClick={() => { setActive(true); input.current?.focus({ preventScroll: true }); }}>

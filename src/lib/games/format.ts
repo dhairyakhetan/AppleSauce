@@ -644,8 +644,9 @@ const styleOf = (s: string) => ({
   times: /×/.test(s) ? '×' : /[\d)]\s*[x*]\s*[\d(]/i.test(s) ? 'x' : null,
   power: /[²³⁴⁵⁶⁷⁸⁹⁰¹⁻]/.test(s) ? '²' : /\^/.test(s) ? '^' : null,
 });
-/** Words that make a True/False statement true only sometimes, more often than not. */
-const ABSOLUTE = /\b(always|never|all|none|every|only|no one|nothing)\b/i;
+/** Words that make a True/False statement true only sometimes, more often than not ("all" and "only" are left out:
+ * they are in plainly true statements far more often, "All living things are made of cells"). */
+const ABSOLUTE = /\b(always|never|none|every|no one|nothing)\b/i;
 const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
 export function doubts(

@@ -190,14 +190,22 @@ export function useSmoothLayout(root: HTMLElement | null) {
       }
     };
     const ro = new ResizeObserver(flip);
-    const watch = () => { ro.observe(root); for (const el of blocks()) ro.observe(el); };
+    // the blocks watched; a block that has left the page is let go, so nothing holds on to it
+    const watched = new Set<Element>();
+    const watch = () => {
+      ro.observe(root);
+      for (const el of watched) if (!root.contains(el)) { ro.unobserve(el); watched.delete(el); last.delete(el); }
+      for (const el of blocks()) if (!watched.has(el)) { ro.observe(el); watched.add(el); }
+    };
     watch();
     // blocks that arrive or leave (a batch approved, a list opened): watch the new ones too
     const mo = new MutationObserver(() => { watch(); flip(); });
     mo.observe(root, { childList: true, subtree: true });
     // scrolling moves nothing in the layout: only take note of how far
     const onScroll = () => { lastScroll = scrollY; };
-    const onResize = () => { still = true; };
+    // a resize: what it moves isn't slid; two frames on (after this frame's ResizeObserver), sliding is back on, even if
+    // the part itself didn't change size (a phone keyboard opening)
+    const onResize = () => { still = true; requestAnimationFrame(() => requestAnimationFrame(() => { still = false; })); };
     // a press or a key may change the page: take a fresh note of where everything is just before it does, so the slide
     // starts from exactly where things were on screen (not from a note taken before the page last settled)
     const beforeInput = () => { if (!root.getAnimations({ subtree: true }).some((a) => a.id === 'reveal')) record(); };

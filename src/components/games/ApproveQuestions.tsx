@@ -290,7 +290,12 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
             : <Empty><button type="button" className={btn('dark')} onClick={loadOlder}>Try again</button></Empty>
         ))}
       </div>
-      <Dialog open={!!review} onOpenChange={(o) => { if (!o) setReview(null); }}>
+      {/* closed with questions just sent back: the box's own Undo goes with it, so the usual toast offers it instead */}
+      <Dialog open={!!review} onOpenChange={(o) => {
+        if (o) return;
+        if (review?.undoSend && review.sent.length) offerUndo(`${plural(review.sent.length, 'question')} sent back`, review.undoSend);
+        setReview(null);
+      }}>
         {shownReview && (() => {
           const rv = shownReview;
           const batch = bank.batches.find((x) => x.id === rv.batch);
@@ -298,7 +303,10 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
           const flagged = flaggedIn(rv.batch).filter((q) => !rv.sent.includes(q.id));
           const phase = rv.phase === 'list' && !flagged.length && (rv.sent.length || rv.cleared.length) ? 'done' : rv.phase;
           const rest = all.filter((q) => !rv.sent.includes(q.id));
-          const close = () => setReview(null);
+          const close = () => {
+            if (rv.undoSend && rv.sent.length) offerUndo(`${plural(rv.sent.length, 'question')} sent back`, rv.undoSend);
+            setReview(null);
+          };
           const go = (more: Partial<Review>) => setReview((r) => r && { ...r, ...more });
           const undo = () => {
             clearNotes(rv.cleared, false);
@@ -333,7 +341,7 @@ export function ApproveQuestions({ api, onWaiting, canDownload }: { api: GamesAp
                     </DialogDescription>
                     <div className="flex flex-wrap gap-2">
                       {rest.length > 0
-                        ? <button type="button" className={btn('mint')} onClick={() => { act(rest.map((q) => q.id), 'approved'); close(); }}><Check aria-hidden /> Approve all {rest.length}</button>
+                        ? <button type="button" className={btn('mint')} onClick={() => { act(rest.map((q) => q.id), 'approved'); setReview(null); }}><Check aria-hidden /> Approve all {rest.length}</button>
                         : <button type="button" className={btn('dark')} onClick={close}>Done</button>}
                       <button type="button" className={btn('card')} onClick={undo}>Undo</button>
                     </div>
