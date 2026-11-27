@@ -77,7 +77,14 @@
 .games-c3 { --pair: hsl(var(--brand-deep)); }
 .games-c4 { --pair: hsl(var(--mosaic-blue-text)); }
 .games-c5 { --pair: hsl(var(--mosaic-mint-text)); }
-.games-matched { background: var(--pair); color: hsl(var(--card)); }
+/* Matching: a matched pair, on both sides, in its colour; its badge solid, and the partner's label beside it */
+.games-pair { background: color-mix(in srgb, var(--pair) 10%, hsl(var(--card))); border-color: color-mix(in srgb, var(--pair) 55%, transparent); }
+.games-pair-badge { background: var(--pair); color: hsl(var(--card)); }
+.games-pair-link { background: color-mix(in srgb, var(--pair) 16%, transparent); color: var(--pair); }
+/* a wrong pair: a small shake, side to side */
+@keyframes games-shake { 0%, 100% { translate: 0 0; } 25% { translate: -4px 0; } 50% { translate: 3px 0; } 75% { translate: -2px 0; } }
+.games-shake { animation: games-shake 320ms var(--ease-out-strong); }
+@media (prefers-reduced-motion: reduce) { .games-shake { animation: none; } }
 
 /* Word search: one square per letter, as big as fits (smaller in the preview). */
 .games-ws-grid {

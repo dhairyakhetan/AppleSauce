@@ -138,7 +138,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   in its colour, and fades out red on a miss. Matching and multiple choice still answer at once (a tap is the answer).
   The crossword's clue line is `w-0 min-w-full` (as wide as the grid, never widening its column) and two lines tall at
   least, so the clue list and the grid don't move as the clue changes. Multiple choice shows each question as its own
-  card ("3 of 10") with lettered options (A, B, C…) on cards of their own.
+  card ("3 of 10") with lettered options (A, B, C…) on cards of their own. Matching shows two headed columns, Questions numbered
+  1, 2… and Answers lettered A, B…; either side can be picked first, the other side then waits (dashed edges); a
+  matched pair takes one colour on both sides (any but the bright blue of a picked card, `PAIR_COLOURS`) and each shows
+  its partner's label ("→ G", "← 1"); a wrong pair flashes red with a small shake.
 - **Nothing is guessed from a question.** Each game uses only what was written
   for it: `Also` lines are the only other answers that count, `Fill` is the
   only fill-in sentence, `Wrong` the only multiple-choice options

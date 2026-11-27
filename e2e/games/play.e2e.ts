@@ -117,3 +117,19 @@ test('multiple choice: each question its own card, its options lettered choices'
   await expect(cards.first()).toContainText(`1 of ${n}`);
   await expect(cards.first().getByRole('group').getByRole('button', { name: /^A: / })).toBeVisible();
 });
+
+test('matching: a matched pair shows its partner on both sides; a wrong pair doesn\'t match', async ({ page }) => {
+  const puzzle = await play(page, 'Matching');
+  const qs = puzzle.getByRole('list', { name: 'Questions' }).getByRole('button');
+  const id = await qs.first().getAttribute('data-id');
+  const answer = puzzle.locator(`ul[aria-label="Answers"] button[data-id="${id}"]`);
+  const other = puzzle.locator(`ul[aria-label="Answers"] button:not([data-id="${id}"])`).first();
+  await qs.first().click();
+  await other.click();
+  await expect(qs.first()).toBeEnabled(); // not matched
+  await qs.first().click();
+  await answer.click();
+  await expect(qs.first()).toHaveAttribute('aria-label', /matched with [A-Z]$/);
+  await expect(answer).toHaveAttribute('aria-label', /matched with 1$/);
+  await expect(puzzle.locator('[role="progressbar"]')).toHaveAttribute('aria-valuenow', '1');
+});

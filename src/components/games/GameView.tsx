@@ -56,6 +56,9 @@ function Solved({ text, onNext, compact }: { text: string; onNext: () => void; c
 
 // ---------------------------------------------------------------- matching
 
+/** The colours a matched pair takes: every pair colour but the bright blue, which is what a picked card looks like. */
+const PAIR_COLOURS = [0, 3, 2, 5, 4];
+
 function MatchingGame({ g, onNext, compact }: { g: Matching } & Required<Props>) {
   const [sel, setSel] = useState<{ side: 'left' | 'right'; id: string } | null>(null);
   const [matched, setMatched] = useState<string[]>([]);
@@ -63,7 +66,7 @@ function MatchingGame({ g, onNext, compact }: { g: Matching } & Required<Props>)
   const [mistakes, setMistakes] = useState(0);
 
   const pick = (side: 'left' | 'right', id: string) => {
-    if (matched.includes(id) && side === 'left') return;
+    if (matched.includes(id)) return;
     if (!sel || sel.side === side) { setSel(sel?.side === side && sel.id === id ? null : { side, id }); return; }
     if (sel.id === id) setMatched([...matched, id]);
     else {
@@ -73,33 +76,57 @@ function MatchingGame({ g, onNext, compact }: { g: Matching } & Required<Props>)
     }
     setSel(null);
   };
-  const tile = (side: 'left' | 'right', id: string) => {
-    const n = matched.indexOf(id);
-    return cn(
-      'w-full rounded-2xl border-2 border-transparent bg-card px-3 text-left text-foreground shadow-border transition-[background-color,border-color,transform] duration-150 active:scale-press-card disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-      compact ? 'min-h-11 md:min-h-10 py-1.5 text-[13px]' : 'min-h-[52px] py-2.5 text-[15px]',
-      side === 'right' && 'font-bold',
-      n >= 0 && `games-matched games-c${n % 6} shadow-none`,
-      sel?.side === side && sel.id === id && 'border-brand-blue bg-brand-blue-subtle',
-      wrong.includes(`${side}:${id}`) && 'border-destructive bg-destructive/10',
-    );
-  };
+  /** Each question's number and each answer's letter, so a matched pair can show its partner. */
+  const numberOf = (id: string) => g.left.findIndex((x) => x.id === id) + 1;
+  const letterOf = (id: string) => String.fromCharCode(65 + g.right.findIndex((x) => x.id === id));
   const done = matched.length === g.left.length;
+  // the other side waits for a pick once one side has one
+  const waiting = (side: 'left' | 'right') => !!sel && sel.side !== side;
+
+  const column = (side: 'left' | 'right') => (
+    <div className="flex min-w-0 flex-col gap-2">
+      <h4 className="text-[12px] font-bold uppercase tracking-[0.06em] text-warm-secondary">{side === 'left' ? 'Questions' : 'Answers'}</h4>
+      <ul aria-label={side === 'left' ? 'Questions' : 'Answers'} className="flex flex-col gap-2">
+        {g[side].map((x) => {
+          const n = matched.indexOf(x.id);
+          const on = sel?.side === side && sel.id === x.id;
+          const bad = wrong.includes(`${side}:${x.id}`);
+          // its own label (1, 2… or A, B…), and once matched its partner's beside it
+          const own = side === 'left' ? String(numberOf(x.id)) : letterOf(x.id);
+          const partner = side === 'left' ? letterOf(x.id) : String(numberOf(x.id));
+          return (
+            <li key={x.id}>
+              <button type="button" data-id={x.id} disabled={n >= 0} onClick={() => pick(side, x.id)} aria-pressed={on}
+                aria-label={`${own}: ${x.text}${n >= 0 ? `, matched with ${partner}` : ''}`}
+                className={cn(
+                  'group flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 text-left text-foreground transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out active:scale-press-card disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  compact ? 'min-h-11 py-1.5 text-[13px]' : 'min-h-[52px] py-2.5 text-[15px]',
+                  side === 'right' && 'font-semibold',
+                  n >= 0 ? `games-pair games-c${PAIR_COLOURS[n % PAIR_COLOURS.length]}`
+                    : on ? 'border-brand-blue bg-brand-blue-subtle shadow-md'
+                    : bad ? 'games-shake border-destructive bg-destructive/10'
+                    : waiting(side) ? 'border-dashed border-brand-blue text-foreground hover:bg-brand-blue-subtle'
+                    : 'border-border shadow-sm hover:border-brand-blue hover:shadow-md',
+                )}>
+                <span aria-hidden className={cn('grid size-7 shrink-0 place-items-center rounded-full text-[12px] font-bold transition-colors duration-200',
+                  n >= 0 ? 'games-pair-badge' : on ? 'bg-brand-blue text-brand-blue-foreground' : 'bg-muted text-warm-secondary')}>{own}</span>
+                <span className="min-w-0 flex-1">{x.text}</span>
+                {n >= 0 && <span aria-hidden className="games-pair-link shrink-0 animate-pop rounded-full px-2 py-0.5 text-[11px] font-bold">{side === 'left' ? '→' : '←'} {partner}</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 
   return (
     <>
-      <How compact={compact}>Tap a question, then its answer.</How>
+      <How compact={compact}>Tap a question, then its answer (or an answer, then its question).</How>
       <Progress done={matched.length} total={g.left.length} />
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
-        {(['left', 'right'] as const).map((side) => (
-          <ul key={side} aria-label={side === 'left' ? 'Questions' : 'Answers'} className="flex flex-col gap-2">
-            {g[side].map((x) => (
-              <li key={x.id}>
-                <button type="button" data-id={x.id} className={tile(side, x.id)} disabled={matched.includes(x.id)} onClick={() => pick(side, x.id)}>{x.text}</button>
-              </li>
-            ))}
-          </ul>
-        ))}
+      <div className={cn('grid gap-3', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-[3fr_2fr] sm:gap-5')}>
+        {column('left')}
+        {column('right')}
       </div>
       {done && <Solved compact={compact} text={mistakes ? `All matched, with ${plural(mistakes, 'wrong try', 'wrong tries')}.` : 'All matched, first time!'} onNext={onNext} />}
     </>
