@@ -639,11 +639,15 @@ export function fillGap(fill: string, answer: string): string | null {
   return `With the answer in the gap, the Fill sentence reads "${read}", so "${twice}" comes twice. Take "${twice}" out of the answer or out of the sentence.`;
 }
 
-/** How an answer or option writes "times" and powers: × or x, ^ or ², so a different style can be spotted. */
+/** How an answer or option writes "times" and powers (×, x or *; ² or ^), so a different style can be spotted. */
 const styleOf = (s: string) => ({
-  times: /×/.test(s) ? '×' : /[\d)]\s*[x*]\s*[\d(]/i.test(s) ? 'x' : null,
+  times: /×/.test(s) ? '×' : (s.match(/[\d)]\s*([x*])\s*[\d(]/i)?.[1].toLowerCase() ?? null),
   power: /[²³⁴⁵⁶⁷⁸⁹⁰¹⁻]/.test(s) ? '²' : /\^/.test(s) ? '^' : null,
 });
+/** Each style in words: on screen the letter x and the times sign × look almost the same. */
+const STYLE_NAME: Record<string, string> = {
+  '×': 'the times sign "×"', x: 'the letter "x"', '*': 'a star "*"', '²': 'a raised power ("²")', '^': 'a "^" for the power',
+};
 /** Words that make a True/False statement true only sometimes, more often than not ("all" and "only" are left out:
  * they are in plainly true statements far more often, "All living things are made of cells"). */
 const ABSOLUTE = /\b(always|never|none|every|no one|nothing)\b/i;
@@ -675,15 +679,22 @@ export function doubts(
   if (wrong.length && n >= 3 && wrong.every((o) => wordCount(o) <= n - 2)) {
     out.push(`The answer "${r.answer}" is much longer than every wrong option. In multiple choice the longest choice is easy to guess, so make them about the same length.`);
   }
-  // ... or by how it writes "times" or a power (× among x, ² among ^)
+  // ... or by how it writes "times" or a power. Only when the answer is the odd one out does it give the answer away;
+  // a wrong option written differently is only easy to rule out (and the letter x looks like × on screen, so say which)
   const mine = styleOf(r.answer);
   for (const k of ['times', 'power'] as const) {
-    const odd = wrong.find((o) => { const x = styleOf(o)[k]; return x && mine[k] && x !== mine[k]; });
-    if (odd) {
-      const sign = k === 'times' ? 'times sign' : 'power';
-      out.push(`The answer "${r.answer}" writes the ${sign} as "${mine[k]}", but the wrong option "${odd}" writes it as "${styleOf(odd)[k]}". In multiple choice the odd one out is easy to guess, so write it the same way in all of them.`);
-      break;
+    if (!mine[k]) continue;
+    const styled = wrong.filter((o) => styleOf(o)[k]);
+    const odd = styled.filter((o) => styleOf(o)[k] !== mine[k]);
+    if (!odd.length) continue;
+    const theirs = [...new Set(odd.map((o) => STYLE_NAME[styleOf(o)[k]!]))].join(' and ');
+    if (odd.length === styled.length) {
+      out.push(`The answer "${r.answer}" uses ${STYLE_NAME[mine[k]!]}, but the wrong options use ${theirs}. In multiple choice the one that looks different is easy to pick, so write them all the same way.`);
+    } else {
+      const list = odd.map((o) => `"${o}"`).join(', ');
+      out.push(`The wrong option${odd.length > 1 ? 's' : ''} ${list} ${odd.length > 1 ? 'use' : 'uses'} ${theirs}, while the answer and the other options use ${STYLE_NAME[mine[k]!]}. In multiple choice ${odd.length > 1 ? 'they are' : 'it is'} easy to rule out, so write them all the same way.`);
     }
+    break;
   }
   for (const o of wrong) {
     // only for answers made of words: a formula option ("kq/r^2") holding the answer's formula ("kq/r") is plainly wrong

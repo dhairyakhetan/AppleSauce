@@ -715,9 +715,18 @@ describe('what the page is unsure of goes to the HoD, without stopping the quest
   it('an answer that stands out among the options: much longer, or written another way', () => {
     expect(read(block('Force when the distance is doubled', 'It becomes one quarter', 'Twice; Half; Four times', 'When the distance is doubled the force is ___ as large.')).doubts)
       .toContain('The answer "It becomes one quarter" is much longer than every wrong option. In multiple choice the longest choice is easy to guess, so make them about the same length.');
+    // a wrong option is the odd one out: it is only easy to rule out, and the note names the letter x in words
     expect(read(block('Charge on an electron in coulombs', '-1.6 × 10^-19', '+1.6 × 10^-19; -1.6 × 10^-18; +1.6 x 10^-18', 'The charge on an electron is ___ C.')).doubts)
-      .toEqual(['The answer "-1.6 × 10^-19" writes the times sign as "×", but the wrong option "+1.6 x 10^-18" writes it as "x". In multiple choice the odd one out is easy to guess, so write it the same way in all of them.']);
-    expect(read(block('Area of a square of side 3 m', '9 m²', '6 m^2; 12 m²; 3 m²', 'A square of side 3 m has an area of ___.')).doubts[0]).toMatch(/writes the power as "²", but the wrong option "6 m\^2" writes it as "\^"/);
+      .toEqual(['The wrong option "+1.6 x 10^-18" uses the letter "x", while the answer and the other options use the times sign "×". In multiple choice it is easy to rule out, so write them all the same way.']);
+    // the answer is the odd one out: that gives it away
+    expect(read(block('Charge on an electron in coulombs', '-1.6 × 10^-19', '+1.6 x 10^-19; -1.6 x 10^-18; +1.6 * 10^-18', 'The charge on an electron is ___ C.')).doubts)
+      .toEqual(['The answer "-1.6 × 10^-19" uses the times sign "×", but the wrong options use the letter "x" and a star "*". In multiple choice the one that looks different is easy to pick, so write them all the same way.']);
+    expect(read(block('Area of a square of side 3 m', '9 m²', '6 m^2; 12 m^2; 3 m^2', 'A square of side 3 m has an area of ___.')).doubts[0])
+      .toMatch(/^The answer "9 m²" uses a raised power \("²"\), but the wrong options use a "\^" for the power/);
+    expect(read(block('Area of a square of side 3 m', '9 m²', '6 m^2; 12 m²; 3 m^2', 'A square of side 3 m has an area of ___.')).doubts[0])
+      .toMatch(/^The wrong options "6 m\^2", "3 m\^2" use a "\^" for the power, while the answer and the other options use a raised power/);
+    // all written the same way, or no sign in the answer: nothing to say
+    expect(read(block('Charge on an electron in coulombs', '-1.6 x 10^-19', '+1.6 x 10^-19; -1.6 x 10^-18; +1.6 x 10^-18', 'The charge on an electron is ___ C.')).doubts).toEqual([]);
   });
 
   it('a True/False statement with "always" or "never" in it', () => {

@@ -119,8 +119,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   answer (`doubts(r, others)`, with the batch or the Questions box as `others`). These don't stop a question: Write questions shows "Sent with
   a note for the HoD", and Approve questions works out the same notes from the question and shows "Please check".
   Each note says, in plain words, what it found (quoting the answer or option), why it matters and what to do ("The
-  answer "-1.6 × 10^-19" writes the times sign as "×", but the wrong option "-1.6 x 10^-20" writes it as "x". In multiple
-  choice the odd one out is easy to guess, so write it the same way in all of them."); a question with two or more
+  wrong option "-1.6 x 10^-20" uses the letter "x", while the answer and the other options use the times sign "×". In
+  multiple choice it is easy to rule out, so write them all the same way."). The × and x (or ² and ^) note says which is
+  the odd one out: only an answer written differently from every wrong option gives the answer away; a wrong option
+  written differently is only easy to rule out. It names each in words, as the letter x and × look the same at 12px. a question with two or more
   notes shows them as a numbered list (`RowsTable` in `shared.tsx`).
   Nothing is stored, so it needs no database change. Clear mistakes stay errors. On Approve questions a cross clears a
   question's notes until the page is opened again (`cleared`, in memory only); "Approve all" on a batch with flagged
