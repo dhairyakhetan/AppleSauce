@@ -118,6 +118,10 @@ ones on the device, with no AI. Brought in from the games site (`main` of
   differently, a True/False statement with "always", "never" or "only", and two questions in one topic with the same
   answer (`doubts(r, others)`, with the batch or the Questions box as `others`). These don't stop a question: Write questions shows "Sent with
   a note for the HoD", and Approve questions works out the same notes from the question and shows "Please check".
+  Each note says, in plain words, what it found (quoting the answer or option), why it matters and what to do ("The
+  answer "-1.6 × 10^-19" writes the times sign as "×", but the wrong option "-1.6 x 10^-20" writes it as "x". In multiple
+  choice the odd one out is easy to guess, so write it the same way in all of them."); a question with two or more
+  notes shows them as a numbered list (`RowsTable` in `shared.tsx`).
   Nothing is stored, so it needs no database change. Clear mistakes stay errors. On Approve questions a cross clears a
   question's notes until the page is opened again (`cleared`, in memory only); "Approve all" on a batch with flagged
   questions asks first (View them, Approve all anyway); the flagged box shows only those, with Clear all and Send all

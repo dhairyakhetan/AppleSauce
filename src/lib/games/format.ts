@@ -636,7 +636,7 @@ export function fillGap(fill: string, answer: string): string | null {
     : after && (words[words.length - 1] === after || (words.length > 1 && words.includes(after))) ? after : null;
   if (!twice) return null;
   const read = fill.replace(/_{3,}/, answer);
-  return `The Fill sentence says "${twice}" twice with the answer in the gap ("${read}"): check that the answer fits the gap.`;
+  return `With the answer in the gap, the Fill sentence reads "${read}", so "${twice}" comes twice. Take "${twice}" out of the answer or out of the sentence.`;
 }
 
 /** How an answer or option writes "times" and powers: × or x, ^ or ², so a different style can be spotted. */
@@ -657,41 +657,47 @@ export function doubts(
   const out: string[] = [];
   const picture = [r.question, r.fill ?? ''].map((t) => t.match(MAYBE_PICTURE)?.[0]).find(Boolean);
   if (picture && !NEEDS_PICTURE.test(r.question) && !NEEDS_PICTURE.test(r.fill ?? '')) {
-    out.push(`It says "${picture}": check that it doesn't need a picture, map or table the games can't show.`);
+    out.push(`The question says "${picture}", but the games show text only, with no pictures, maps or tables. Check that it can be answered without one.`);
   }
   // (a formula such as "dV/dr" or "kq/r" isn't two answers: words on both sides of the "/" are at least 3 letters)
   const two = r.answer.match(/\S+\s+or\s+\S+/i)?.[0] ?? r.answer.match(/\p{L}{3,}\/\p{L}{3,}/u)?.[0];
-  if (two && !/\s\/\s/.test(r.answer)) out.push(`The answer may be two answers ("${two}"). If so, the second belongs on an Also line.`);
+  if (two && !/\s\/\s/.test(r.answer)) out.push(`The answer "${r.answer}" looks like two answers in one. If both are right, keep one on the A: line and put the other on an Also: line.`);
   const wrong = r.wrong_options ?? [];
   const all = [r.answer, ...wrong];
   const stops = all.filter((x) => /\p{L}\.$/u.test(x) && !/\..+\.$/.test(x));
-  if (stops.length && stops.length < all.length) out.push('Only some of the answer and wrong options end with a full stop, which can give the answer away in multiple choice.');
+  if (stops.length && stops.length < all.length) {
+    out.push(`Some choices end with a full stop (${stops.map((x) => `"${x}"`).join(', ')}) and others don't. In multiple choice the odd one out is easy to guess, so end them all the same way.`);
+  }
   const gap = r.fill ? fillGap(r.fill, r.answer) : null;
   if (gap) out.push(gap);
   // the answer stands out among the options by its length ("Becomes one-fourth" among "Twice", "Half")
   const n = wordCount(r.answer);
   if (wrong.length && n >= 3 && wrong.every((o) => wordCount(o) <= n - 2)) {
-    out.push('The answer is much longer than every wrong option, which gives it away in multiple choice.');
+    out.push(`The answer "${r.answer}" is much longer than every wrong option. In multiple choice the longest choice is easy to guess, so make them about the same length.`);
   }
   // ... or by how it writes "times" or a power (× among x, ² among ^)
   const mine = styleOf(r.answer);
   for (const k of ['times', 'power'] as const) {
-    const other = wrong.map((o) => styleOf(o)[k]).find((x) => x && mine[k] && x !== mine[k]);
-    if (other) { out.push(`The answer writes ${mine[k]} and a wrong option writes ${other}, which can give the answer away in multiple choice: write them the same way.`); break; }
+    const odd = wrong.find((o) => { const x = styleOf(o)[k]; return x && mine[k] && x !== mine[k]; });
+    if (odd) {
+      const sign = k === 'times' ? 'times sign' : 'power';
+      out.push(`The answer "${r.answer}" writes the ${sign} as "${mine[k]}", but the wrong option "${odd}" writes it as "${styleOf(odd)[k]}". In multiple choice the odd one out is easy to guess, so write it the same way in all of them.`);
+      break;
+    }
   }
   for (const o of wrong) {
     // only for answers made of words: a formula option ("kq/r^2") holding the answer's formula ("kq/r") is plainly wrong
     const x = [r.answer, ...(r.also ?? [])].find((a) => WORDY.test(a) && shows(o, { answer: a }));
-    if (x) out.push(`The wrong option "${o}" contains the answer "${x}": check that it isn't partly right.`);
+    if (x) out.push(`The wrong option "${o}" has the answer "${x}" inside it, so it may count as right too. Check that it is really wrong, or change it.`);
   }
   // a True/False statement with "always" or "never" is often true only sometimes
   if (isTrueFalse(r.answer)) {
     const word = r.question.match(ABSOLUTE)?.[0];
-    if (word) out.push(`A True/False statement with "${word}" in it is often true only sometimes: check that it holds every time.`);
+    if (word) out.push(`This True/False statement says "${word}". Statements with that word are often true only sometimes, so check that the answer holds every time.`);
   }
   // two questions under one topic with the same answer: often the same fact asked twice, and matching can't use both
   const where = (q: Partial<Pick<Row, 'chapter_id' | 'chapter' | 'topic_no'>>) => `${q.chapter_id ?? q.chapter ?? ''}\u0000${q.topic_no ?? ''}`;
   const twin = !isTrueFalse(r.answer) && others.find((o) => o !== (r as object) && where(o) === where(r) && loose(o.answer) === loose(r.answer) && loose(o.question) !== loose(r.question));
-  if (twin) out.push(`"${twin.question}" in the same topic has the same answer ("${twin.answer}"): check that they don't test the same fact.`);
+  if (twin) out.push(`Another question in this topic, "${twin.question}", has the same answer ("${twin.answer}"). Check that the two don't ask the same thing.`);
   return out;
 }

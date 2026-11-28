@@ -673,7 +673,7 @@ describe('what the page is unsure of goes to the HoD, without stopping the quest
     for (const a of ['Kolkata or Calcutta', 'Kolkata/Calcutta']) {
       const r = read(block('Capital of West Bengal', a));
       expect(r.issues, a).toEqual([]);
-      expect(r.doubts[0], a).toMatch(/may be two answers/);
+      expect(r.doubts[0], a).toMatch(/looks like two answers in one\. If both are right, keep one on the A: line and put the other on an Also: line/);
     }
     expect(read(block('Speed is measured in', 'km/h', '1/2; m/s; kg/m')).doubts).toEqual([]);
   });
@@ -686,43 +686,43 @@ describe('what the page is unsure of goes to the HoD, without stopping the quest
   });
 
   it('a full stop on only some of the answer and options', () => {
-    expect(read(block('Lightest gas', 'Hydrogen.', 'Oxygen; Nitrogen; Helium')).doubts[0]).toMatch(/full stop/);
+    expect(read(block('Lightest gas', 'Hydrogen.', 'Oxygen; Nitrogen; Helium')).doubts[0]).toMatch(/Some choices end with a full stop \("Hydrogen\."\) and others don't/);
     expect(read(block('Lightest gas', 'Hydrogen', 'Oxygen; Nitrogen; Helium')).doubts).toEqual([]);
   });
 
   it('a wrong option that contains the answer', () => {
     const r = read(block('Lightest gas', 'Hydrogen', 'Hydrogen gas; Nitrogen; Helium'));
     expect(r.issues).toEqual([]);
-    expect(r.doubts).toEqual(['The wrong option "Hydrogen gas" contains the answer "Hydrogen": check that it isn\'t partly right.']);
+    expect(r.doubts).toEqual(['The wrong option "Hydrogen gas" has the answer "Hydrogen" inside it, so it may count as right too. Check that it is really wrong, or change it.']);
   });
 
   it('an answer that repeats a word next to the ___ (it doesn\'t fit the gap)', () => {
     const doubled = read(block('Force when the distance is doubled', 'Becomes one-fourth', 'Twice; Half; Four times', 'The electrostatic force becomes ___ of its original value.'));
     expect(doubled.issues).toEqual([]);
-    expect(doubled.doubts).toEqual(['The Fill sentence says "becomes" twice with the answer in the gap ("The electrostatic force becomes Becomes one-fourth of its original value."): check that the answer fits the gap.']);
+    expect(doubled.doubts).toEqual(['With the answer in the gap, the Fill sentence reads "The electrostatic force becomes Becomes one-fourth of its original value.", so "becomes" comes twice. Take "becomes" out of the answer or out of the sentence.']);
     expect(read(block('Equivalent resistance in series', 'Sum of resistances', 'Product; Difference; Reciprocal sum', 'Equivalent resistance in series is the ___ of individual resistances.')).doubts[0])
-      .toMatch(/says "of" twice/);
+      .toMatch(/so "of" comes twice/);
     // the fixed ones, and answers that only share a word with the sentence further away, read cleanly
     expect(read(block('Force when the distance is doubled', 'One-fourth', 'Twice; Half; Four times', 'The electrostatic force becomes ___ of its original value.')).doubts).toEqual([]);
     expect(read(block('Rate of flow of charge', 'Electric current', 'Electric potential; Resistance; Conductance', 'The rate of flow of electric charge is called ___.')).doubts).toEqual([]);
   });
 
   it('a one-word answer that repeats the word after the ___', () => {
-    expect(read(block('Force on a charge', 'Electrostatic force', 'Gravity; Friction; Tension', 'A charge feels an ___ force.')).doubts[0]).toMatch(/says "force" twice/);
+    expect(read(block('Force on a charge', 'Electrostatic force', 'Gravity; Friction; Tension', 'A charge feels an ___ force.')).doubts[0]).toMatch(/so "force" comes twice/);
     expect(read(block('Force on a charge', 'Force', 'Mass; Speed; Heat', 'Every push or pull is a ___ acting on a body.')).doubts).toEqual([]);
   });
 
   it('an answer that stands out among the options: much longer, or written another way', () => {
     expect(read(block('Force when the distance is doubled', 'It becomes one quarter', 'Twice; Half; Four times', 'When the distance is doubled the force is ___ as large.')).doubts)
-      .toContain('The answer is much longer than every wrong option, which gives it away in multiple choice.');
+      .toContain('The answer "It becomes one quarter" is much longer than every wrong option. In multiple choice the longest choice is easy to guess, so make them about the same length.');
     expect(read(block('Charge on an electron in coulombs', '-1.6 × 10^-19', '+1.6 × 10^-19; -1.6 × 10^-18; +1.6 x 10^-18', 'The charge on an electron is ___ C.')).doubts)
-      .toEqual(['The answer writes × and a wrong option writes x, which can give the answer away in multiple choice: write them the same way.']);
-    expect(read(block('Area of a square of side 3 m', '9 m²', '6 m^2; 12 m²; 3 m²', 'A square of side 3 m has an area of ___.')).doubts[0]).toMatch(/writes ² and a wrong option writes \^/);
+      .toEqual(['The answer "-1.6 × 10^-19" writes the times sign as "×", but the wrong option "+1.6 x 10^-18" writes it as "x". In multiple choice the odd one out is easy to guess, so write it the same way in all of them.']);
+    expect(read(block('Area of a square of side 3 m', '9 m²', '6 m^2; 12 m²; 3 m²', 'A square of side 3 m has an area of ___.')).doubts[0]).toMatch(/writes the power as "²", but the wrong option "6 m\^2" writes it as "\^"/);
   });
 
   it('a True/False statement with "always" or "never" in it', () => {
     const { rows } = format(`${head}Q: Like charges always repel each other\nA: True\nLevel: easy`);
-    expect(doubts(rows[0])).toEqual(['A True/False statement with "always" in it is often true only sometimes: check that it holds every time.']);
+    expect(doubts(rows[0])).toEqual(['This True/False statement says "always". Statements with that word are often true only sometimes, so check that the answer holds every time.']);
     // "all" and "only" are in plainly true statements far too often to flag
     expect(doubts(format(`${head}Q: All living things are made of cells\nA: True\nLevel: easy`).rows[0])).toEqual([]);
   });
@@ -730,7 +730,7 @@ describe('what the page is unsure of goes to the HoD, without stopping the quest
   it('two questions in one topic with the same answer', () => {
     const two = `${head}Q: SI unit of electric charge\nA: Coulomb\nFill: The SI unit of charge is the ___ here.\nWrong: Ampere; Volt; Ohm\nLevel: easy\n\nQ: Unit named after a French physicist\nA: coulomb\nFill: Charge is measured in the ___ unit.\nWrong: Ampere; Volt; Ohm\nLevel: easy`;
     const { rows } = format(two);
-    expect(doubts(rows[0], rows)).toEqual(['"Unit named after a French physicist" in the same topic has the same answer ("coulomb"): check that they don\'t test the same fact.']);
+    expect(doubts(rows[0], rows)).toEqual(['Another question in this topic, "Unit named after a French physicist", has the same answer ("coulomb"). Check that the two don\'t ask the same thing.']);
     expect(doubts(rows[0])).toEqual([]); // with no other questions given, nothing to compare
     const other = format(two.replace('Level: easy\n\nQ: Unit named', 'Level: easy\n\nTopic 2: Transfer of Heat\n\nQ: Unit named')).rows;
     expect(doubts(other[0], other)).toEqual([]); // another topic

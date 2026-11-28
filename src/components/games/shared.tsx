@@ -110,7 +110,14 @@ export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, ro
         )}
         {unsure.length > 0 && (
           <div className="col-span-full ml-9 flex items-start gap-1 rounded-lg bg-brand-blue-subtle py-1 pl-2 pr-1 text-[12px] text-brand-blue-deep sm:col-start-2 sm:ml-0">
-            <p className="min-w-0 flex-1 py-0.5"><b>{doubtsLabel}:</b> {unsure.join(' ')}</p>
+            {unsure.length === 1
+              ? <p className="min-w-0 flex-1 py-0.5"><b>{doubtsLabel}:</b> {unsure[0]}</p>
+              : (
+                <div className="min-w-0 flex-1 space-y-1 py-0.5">
+                  <p><b>{doubtsLabel}:</b></p>
+                  {unsure.map((u, i) => <p key={i} className="flex gap-1.5"><span aria-hidden>{i + 1}.</span><span>{u}</span></p>)}
+                </div>
+              )}
             {onClearDoubts && (
               <button type="button" aria-label={`Clear: ${doubtsLabel.toLowerCase()}`} title="Clear this note (it comes back when the page is opened again)"
                 onClick={() => onClearDoubts(r)}
